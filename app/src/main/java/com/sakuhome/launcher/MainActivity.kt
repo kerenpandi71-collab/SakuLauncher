@@ -116,7 +116,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(18), dp(2), dp(10))
         }
         sectionTitle = TextView(this).apply {
-            text = "Favorit"
+            text = "Aplikasi"
             textSize = 18f
             setTextColor(ink)
             setTypeface(null, android.graphics.Typeface.BOLD)
@@ -169,9 +169,9 @@ class MainActivity : Activity() {
 
     private fun toggleDrawer() {
         showingDrawer = !showingDrawer
-        sectionTitle.text = if (showingDrawer) "Semua aplikasi" else "Favorit"
+        sectionTitle.text = if (showingDrawer) "Semua aplikasi" else "Aplikasi"
         drawerButton.text = if (showingDrawer) "Beranda  ‹" else "Semua aplikasi  ›"
-        drawerButton.contentDescription = if (showingDrawer) "Kembali ke favorit" else "Buka semua aplikasi"
+        drawerButton.contentDescription = if (showingDrawer) "Kembali ke beranda" else "Buka semua aplikasi"
         adapter.notifyDataSetChanged()
         grid.smoothScrollToPosition(0)
     }

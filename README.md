@@ -7,7 +7,7 @@ Launcher Android native yang ringan, dengan tata letak lapang dan sudut lembut y
 - Dapat dipilih sebagai aplikasi **Home** default Android.
 - Jam dan tanggal berbahasa Indonesia.
 - Pencarian aplikasi terpasang dan grid aplikasi dengan ikon asli.
-- Beranda ringkas menampilkan hingga delapan aplikasi; tombol **Semua aplikasi** membuka seluruh daftar.
+- Beranda ringkas menampilkan hingga delapan aplikasi pertama berdasarkan nama; tombol **Semua aplikasi** membuka seluruh daftar.
 - Implementasi native Kotlin + Android Views, tanpa framework UI tambahan.
 - Kueri paket dibatasi pada aplikasi yang memang mendaftarkan kategori launcher.
 
