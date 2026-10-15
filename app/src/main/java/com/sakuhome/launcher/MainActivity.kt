@@ -11,6 +11,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
 import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.GridView
@@ -98,7 +99,7 @@ class MainActivity : Activity() {
         search = EditText(this).apply {
             hint = "Cari aplikasi"
             textSize = 15f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(18), 0, dp(18), 0)
@@ -232,7 +233,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER
                 setPadding(dp(4), dp(8), dp(4), dp(8))
                 background = rounded(surface, 22)
-                layoutParams = GridView.LayoutParams(-1, dp(104))
+                layoutParams = AbsListView.LayoutParams(-1, dp(104))
                 val icon = ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
