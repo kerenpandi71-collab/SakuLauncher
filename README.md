@@ -6,10 +6,17 @@ Launcher Android native yang ringan, dengan tata letak lapang dan sudut lembut y
 
 - Dapat dipilih sebagai aplikasi **Home** default Android.
 - Jam dan tanggal berbahasa Indonesia.
-- Pencarian aplikasi terpasang dan grid aplikasi dengan ikon asli.
-- Beranda ringkas menampilkan hingga delapan aplikasi pertama berdasarkan nama; tombol **Semua aplikasi** membuka seluruh daftar.
+- Dua mode: **Normal** (beranda ringkas) dan **Desktop** dengan taskbar, pintasan favorit, serta grid aplikasi.
+- Pencarian aplikasi terpasang dan grid ikon aplikasi.
+- Personalisasi jumlah kolom (3–6), ukuran ikon, label aplikasi, tema terang/gelap, dan warna aksen.
+- Tekan lama ikon untuk menambah atau menghapus favorit; favorit tampil di Desktop/taskbar.
+- Opsi meminta Android membuka aplikasi dengan batas jendela bebas saat mode Desktop aktif.
 - Implementasi native Kotlin + Android Views, tanpa framework UI tambahan.
 - Kueri paket dibatasi pada aplikasi yang memang mendaftarkan kategori launcher.
+
+## Jendela bebas dan mode Desktop
+
+Saku mengirim `launchBounds` Android saat opsi **Jendela bebas** aktif di mode Desktop. Jendela mengambang sesungguhnya dikendalikan sistem: perlu perangkat/ROM yang mendukung freeform multi-window atau lingkungan desktop seperti Samsung DeX. Jika sistem tidak mendukungnya, aplikasi tujuan tetap terbuka dengan mode jendela standarnya. Mode Desktop Saku tetap menampilkan taskbar dan pintasan walau dijalankan di ponsel biasa.
 
 ## Persyaratan dan build
 
@@ -25,4 +32,4 @@ APK debug akan berada di `app/build/outputs/apk/debug/app-debug.apk`. Instal di 
 
 ## Status
 
-MVP awal, versi `0.1.0`. Belum mencakup widget Android, gesture khusus, folder, atau pengaturan dock. Silakan uji pada perangkat sebelum dipakai sebagai launcher utama.
+Versi `0.2.0`. Widget Android, folder, icon pack, gesture khusus, dan pengaturan dock lanjutan belum termasuk.
