@@ -575,25 +575,47 @@ class MainActivity : Activity() {
         val overlayState = if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Aktif" else "Nonaktif"
         val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
+        val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
+        val labelState = if (hideLabels) "Sembunyi" else "Tampil"
+        val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
         val options = arrayOf(
+            "Taskbar bawah — $hideTaskbarState",
+            "Ukuran ikon — ${iconSizeDp} dp",
+            "Label aplikasi — $labelState",
+            "Liquid Glass — $glassState",
             "Dock mengambang di atas aplikasi — $overlayState",
             "Kelola pin aplikasi — $pinnedState",
             "Mode tampilan — $themeState",
             "Warna aksen",
             "Pilih wallpaper beranda",
             "Reset wallpaper",
+            "Widget Android (info dukungan)",
             "Tentang izin & mode jendela"
         )
         AlertDialog.Builder(this).setTitle("Pengaturan Saku Dock")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> toggleOverlay()
-                    1 -> managePins()
-                    2 -> toggleTheme()
-                    3 -> chooseAccent()
-                    4 -> chooseWallpaper()
-                    5 -> resetWallpaper()
-                    6 -> showPermissionInfo()
+                    0 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_TASKBAR, !preferences.getBoolean(KEY_HIDE_TASKBAR, false)).apply()
+                        buildScreen()
+                    }
+                    1 -> chooseIconSize()
+                    2 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
+                        buildScreen()
+                    }
+                    3 -> {
+                        preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
+                        buildScreen()
+                    }
+                    4 -> toggleOverlay()
+                    5 -> managePins()
+                    6 -> toggleTheme()
+                    7 -> chooseAccent()
+                    8 -> chooseWallpaper()
+                    9 -> resetWallpaper()
+                    10 -> showWidgetInfo()
+                    11 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
