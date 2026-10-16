@@ -112,11 +112,11 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_WIDGET_PICK) {
-            val widgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetHost.INVALID_APPWIDGET_ID) ?: AppWidgetHost.INVALID_APPWIDGET_ID
-            if (resultCode == RESULT_OK && widgetId != AppWidgetHost.INVALID_APPWIDGET_ID) {
+            val widgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+            if (resultCode == RESULT_OK && widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(widgetId)
                 if (info != null) addWidgetView(widgetId, info) else appWidgetHost.deleteAppWidgetId(widgetId)
-            } else if (widgetId != AppWidgetHost.INVALID_APPWIDGET_ID) {
+            } else if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 appWidgetHost.deleteAppWidgetId(widgetId)
             }
             return
