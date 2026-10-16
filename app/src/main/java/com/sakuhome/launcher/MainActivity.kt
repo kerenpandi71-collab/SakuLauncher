@@ -318,9 +318,9 @@ class MainActivity : Activity() {
         }
         scroll.addView(icons)
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
-        dock.addView(chipButton("⋯", cardSurface, secondaryText, 16).apply {
-            contentDescription = "Kelola dock"
-            setOnClickListener { showSettings() }
+        dock.addView(chipButton("∿", cardSurface, accent, 20).apply {
+            contentDescription = "Layanan dan proses aplikasi"
+            setOnClickListener { showProcessManager() }
         }, LinearLayout.LayoutParams(dp(43), -1))
         return dock
     }
@@ -822,6 +822,39 @@ class MainActivity : Activity() {
                     setTextColor(accent)
                     setPadding(0, 0, 0, dp(10))
                 })
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
+                val totalRamMb = memoryInfo.totalMem / (1024L * 1024L)
+                val availableRamMb = memoryInfo.availMem / (1024L * 1024L)
+                val usedRamMb = (totalRamMb - availableRamMb).coerceAtLeast(0L)
+                val usedPercent = if (totalRamMb > 0) (usedRamMb * 100 / totalRamMb).toInt() else 0
+                val memoryCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(14), dp(12), dp(14), dp(12))
+                    background = GradientDrawable().apply {
+                        setColor(cardSurface)
+                        cornerRadius = dp(18).toFloat()
+                    }
+                }
+                memoryCard.addView(TextView(this).apply {
+                    text = "RAM SISTEM  ·  $usedPercent%"
+                    textSize = 12f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(primaryText)
+                })
+                memoryCard.addView(TextView(this).apply {
+                    text = "${usedRamMb / 1024.0.let { String.format(Locale.getDefault(), "%.1f", it) }} GB digunakan dari ${totalRamMb / 1024.0.let { String.format(Locale.getDefault(), "%.1f", it) }} GB"
+                    textSize = 12f
+                    setTextColor(secondaryText)
+                    setPadding(0, dp(4), 0, dp(8))
+                })
+                memoryCard.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 100
+                    progress = usedPercent.coerceIn(0, 100)
+                    progressTintList = android.content.res.ColorStateList.valueOf(accent)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.argb(65, 150, 170, 205))
+                }, LinearLayout.LayoutParams(-1, dp(6)))
+                panel.addView(memoryCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
                 val scroll = android.widget.ScrollView(this)
                 val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 if (visibleRows.isEmpty()) {
@@ -891,7 +924,7 @@ class MainActivity : Activity() {
                 scroll.addView(list)
                 panel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(390)))
                 AlertDialog.Builder(this)
-                    .setTitle("Layanan & proses berjalan")
+                    .setTitle("Layanan & Proses")
                     .setView(panel)
                     .setNeutralButton(if (showAll) "Hanya berjalan" else "Semua aplikasi") { _, _ -> showProcessManager(!showAll) }
                     .setPositiveButton("Segarkan") { _, _ -> showProcessManager(showAll) }
