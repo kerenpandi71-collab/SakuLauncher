@@ -709,7 +709,7 @@ class MainActivity : Activity() {
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
-                    setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.MEDIUM)
+                    setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
                     gravity = Gravity.CENTER
                     maxLines = 1
