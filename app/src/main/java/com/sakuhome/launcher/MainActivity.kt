@@ -120,16 +120,16 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Minimal harus ada satu layar utama", Toast.LENGTH_SHORT).show()
             return
         }
-        val currentApps = homePackages(homePage)
-        val targetPage = if (homePage > 0) homePage - 1 else 1
-        if (currentApps.isNotEmpty()) {
-            val targetApps = homePackages(targetPage)
-            currentApps.forEach { if (!targetApps.contains(it)) targetApps.add(it) }
-            saveHomePackages(targetApps, targetPage)
-        }
-        for (page in (homePage + 1) until count) saveHomePackages(homePackages(page), page - 1)
-        preferences.edit().remove(homePageKey(count - 1)).putInt(KEY_HOME_PAGE_COUNT, count - 1).apply()
-        showHomePage((homePage - 1).coerceAtLeast(0).coerceAtMost(count - 2))
+        val pages = (0 until count).map { homePackages(it).toMutableList() }.toMutableList()
+        val removed = pages.removeAt(homePage)
+        val target = if (homePage > 0) homePage - 1 else 0
+        removed.forEach { if (!pages[target].contains(it)) pages[target].add(it) }
+        preferences.edit().apply {
+            for (page in 0 until count) remove(homePageKey(page))
+            putInt(KEY_HOME_PAGE_COUNT, pages.size)
+            pages.forEachIndexed { index, packages -> putString(homePageKey(index), packages.distinct().joinToString("\n")) }
+        }.apply()
+        showHomePage((homePage - 1).coerceAtLeast(0).coerceAtMost(pages.size - 1))
         Toast.makeText(this, "Layar dihapus; ikon dipindahkan agar tidak hilang", Toast.LENGTH_SHORT).show()
     }
 
@@ -343,6 +343,10 @@ class MainActivity : Activity() {
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
+        shell.addView(buildStatusStrip(), LinearLayout.LayoutParams(-1, dp(32)).apply {
+            topMargin = dp(2)
+            bottomMargin = dp(3)
+        })
 
         val pageControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -459,6 +463,49 @@ class MainActivity : Activity() {
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
+    }
+
+    private fun buildStatusStrip(): View {
+        val strip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), 0, dp(10), 0)
+            background = if (liquidGlass) glassSurface(18) else rounded(cardSurface, 18)
+        }
+        val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
+        val bluetoothOn = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.isEnabled == true } catch (_: Exception) { false }
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val percent = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+
+        fun statusItem(label: String, description: String, action: () -> Unit) {
+            strip.addView(TextView(this).apply {
+                text = label
+                textSize = 11f
+                setTextColor(primaryText)
+                gravity = Gravity.CENTER
+                setPadding(dp(7), 0, dp(7), 0)
+                contentDescription = description
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(-2, -1))
+        }
+        statusItem(if (wifiOn) "◉ Wi-Fi" else "○ Wi-Fi", "Buka pengaturan Wi-Fi") {
+            try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) } catch (_: Exception) { }
+        }
+        statusItem(if (bluetoothOn) "ᛒ Bluetooth" else "ᛒ Bluetooth", "Buka pengaturan Bluetooth") {
+            try { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) { }
+        }
+        strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        statusItem(if (percent >= 0) "▰ $percent%" else "▰ Baterai", "Buka pengaturan baterai") {
+            try { startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } catch (_: Exception) {
+                try { startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (_: Exception) { }
+            }
+        }
+        statusItem("⚙", "Buka pengaturan Android") {
+            try { startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (_: Exception) { }
+        }
+        return strip
     }
 
     private fun buildDock(): View {
