@@ -81,6 +81,9 @@ class MainActivity : Activity() {
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
+    private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
+    private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
+    private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -312,6 +315,9 @@ class MainActivity : Activity() {
             rootFrame.addView(ImageView(this).apply {
                 setImageBitmap(bitmap)
                 scaleType = ImageView.ScaleType.CENTER_CROP
+                if (android.os.Build.VERSION.SDK_INT >= 31 && blurRadius > 0f) {
+                    setRenderEffect(android.graphics.RenderEffect.createBlurEffect(blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP))
+                }
             }, FrameLayout.LayoutParams(-1, -1))
             rootFrame.addView(View(this).apply {
                 setBackgroundColor(if (isDarkTheme) 0x550D1420 else 0x260D1420)
@@ -772,8 +778,23 @@ class MainActivity : Activity() {
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
         return matches.filter { it.activityInfo.packageName != packageName }
             .distinctBy { it.activityInfo.packageName }
-            .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, info.loadIcon(packageManager)) }
+            .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, loadThemedIcon(info)) }
             .sortedBy { it.label.lowercase(Locale.getDefault()) }
+    }
+
+    private fun loadThemedIcon(info: ResolveInfo): android.graphics.drawable.Drawable {
+        val fallback = info.loadIcon(packageManager)
+        if (iconPackPackage.isBlank()) return fallback
+        return try {
+            val packResources = packageManager.getResourcesForApplication(iconPackPackage)
+            val appName = info.activityInfo.packageName.substringAfterLast(".")
+            val candidates = listOf(info.activityInfo.packageName.replace(".", "_"), appName, "app_" + appName)
+            val id = candidates.firstNotNullOfOrNull { name ->
+                packResources.getIdentifier(name, "drawable", iconPackPackage).takeIf { it != 0 }
+                    ?: packResources.getIdentifier(name, "mipmap", iconPackPackage).takeIf { it != 0 }
+            }
+            if (id != null) packResources.getDrawable(id, null) else fallback
+        } catch (_: Exception) { fallback }
     }
 
     private fun rebuildPinnedViews() {
@@ -965,6 +986,9 @@ class MainActivity : Activity() {
         val options = arrayOf(
             "Mode tampilan · $themeState",
             "Jumlah layar utama · ${homePageCount()}",
+            "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
+            "Transparansi · ${transparencyPercent}%",
+            "Kustomisasi ikon & icon pack",
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
@@ -976,11 +1000,14 @@ class MainActivity : Activity() {
                 when (which) {
                     0 -> toggleTheme()
                     1 -> chooseHomePageCount()
-                    2 -> chooseWallpaper()
-                    3 -> resetWallpaper()
-                    4 -> openHomeSettings()
-                    5 -> openOverlaySettings()
-                    6 -> showPermissionInfo()
+                    2 -> chooseBackgroundBlur()
+                    3 -> chooseTransparency()
+                    4 -> chooseIconCustomization()
+                    5 -> chooseWallpaper()
+                    6 -> resetWallpaper()
+                    7 -> openHomeSettings()
+                    8 -> openOverlaySettings()
+                    9 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1200,7 +1227,8 @@ class MainActivity : Activity() {
     }
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(if (isDarkTheme) Color.argb(158, 42, 55, 77) else Color.argb(172, 255, 255, 255))
+        val alpha = (transparencyPercent * 255 / 100).coerceIn(0, 255)
+        setColor(if (isDarkTheme) Color.argb(alpha, 42, 55, 77) else Color.argb(alpha, 255, 255, 255))
         cornerRadius = dp(radius).toFloat()
         setStroke(dp(1), if (isDarkTheme) Color.argb(115, 220, 233, 255) else Color.argb(170, 255, 255, 255))
     }
@@ -1436,6 +1464,65 @@ class MainActivity : Activity() {
                 preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
                 rebuildPinnedViews()
                 buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseBackgroundBlur() {
+        if (android.os.Build.VERSION.SDK_INT < 31) {
+            AlertDialog.Builder(this).setTitle("Background blur")
+                .setMessage("Efek blur wallpaper memerlukan Android 12 (API 31) atau lebih baru. Transparansi tetap bisa digunakan di versi ini.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(12), dp(22), dp(4)) }
+        val current = preferences.getInt(KEY_BLUR_RADIUS, 0)
+        val value = TextView(this).apply { text = if (current == 0) "Mati" else "$current px"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(primaryText) }
+        val slider = SeekBar(this).apply {
+            max = 30; progress = current
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { value.text = if (progress == 0) "Mati" else "$progress px" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(value); layout.addView(slider)
+        AlertDialog.Builder(this).setTitle("Background blur wallpaper").setView(layout)
+            .setPositiveButton("Terapkan") { _, _ -> preferences.edit().putInt(KEY_BLUR_RADIUS, slider.progress).apply(); buildScreen() }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseIconCustomization() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        val sizeLabel = TextView(this).apply { text = "Ukuran ikon: ${iconSizeDp} dp"; setTextColor(primaryText); textSize = 14f }
+        val sizes = intArrayOf(32, 36, 42, 48, 54, 60, 68)
+        val sizeSlider = SeekBar(this).apply {
+            max = sizes.lastIndex; progress = sizes.indexOf(iconSizeDp).takeIf { it >= 0 } ?: 3
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { sizeLabel.text = "Ukuran ikon: ${sizes[progress]} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(sizeLabel); layout.addView(sizeSlider)
+        AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
+            .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
+            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen() }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun chooseIconPack() {
+        val packs = packageManager.queryIntentActivities(Intent("org.adw.launcher.THEMES"), PackageManager.MATCH_ALL)
+            .map { it.activityInfo.packageName }.filter { it != packageName }.distinct().sorted()
+        val labels = (listOf("Ikon bawaan aplikasi") + packs.map { pack ->
+            try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pack, 0)).toString() } catch (_: Exception) { pack }
+        }).toTypedArray()
+        AlertDialog.Builder(this).setTitle("Pilih icon pack")
+            .setMessage("Memuat ikon memakai nama resource umum (nama paket dengan garis bawah, nama aplikasi, atau app_nama). Format icon pack yang tidak cocok akan memakai ikon bawaan.")
+            .setItems(labels) { _, which ->
+                val selected = if (which == 0) "" else packs[which - 1]
+                preferences.edit().putString(KEY_ICON_PACK, selected).apply()
+                apps = loadApps(); rebuildPinnedViews(); buildScreen()
+                Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih; ikon yang cocok diperbarui", Toast.LENGTH_SHORT).show()
             }.setNegativeButton("Batal", null).show()
     }
 
@@ -1803,6 +1890,8 @@ class MainActivity : Activity() {
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_TRANSPARENCY = "dock_transparency"
+        private const val KEY_BLUR_RADIUS = "background_blur_radius"
+        private const val KEY_ICON_PACK = "custom_icon_pack_package"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_FROZEN_APPS = "frozen_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
