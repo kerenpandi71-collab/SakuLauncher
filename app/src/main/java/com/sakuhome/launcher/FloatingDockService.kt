@@ -95,8 +95,7 @@ class FloatingDockService : Service() {
         val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
-            prefs.getString(KEY_PINNED, "").orEmpty().split('
-').filter { it.isNotBlank() }
+            prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
         } else loadApps().take(5).map { it.packageName }
         val apps = loadApps().associateBy { it.packageName }
         val dock = LinearLayout(this).apply {
