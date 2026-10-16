@@ -11,6 +11,14 @@ Shell desktop ringan untuk Android, terinspirasi pola Start/Taskbar Windows, She
 - Tahan ikon aplikasi untuk membuka menu konteks: buka normal, **coba buka sebagai jendela**, atau sematkan/lepas dari dock.
 - Pilihan tema gelap/cerah, warna aksen, dan wallpaper beranda; layout responsif portrait/landscape.
 
+## Virtual Mouse + Keyboard (v0.4)
+
+- Tombol penunjuk ⌖ di dock atau opsi **Virtual Mouse + Keyboard** di Pengaturan membuka panel touchpad mengambang.
+- Gerakan jari memindahkan penunjuk virtual; ketukan mengirim tap dan mode Drag mengirim gesture seret.
+- Tombol keyboard membuka pemilih IME. Aktifkan **Saku Keyboard** pada pengaturan keyboard Android, lalu pilih saat ingin mengetik ke kolom teks yang sedang fokus.
+- Pertama kali, aktifkan layanan **Saku Virtual Controls** di Pengaturan > Aksesibilitas dan izinkan panel overlay.
+- Input memakai Accessibility gesture API. Ini **bukan mouse hardware penuh**: tidak ada hover asli, pointer bisa tidak bekerja pada aplikasi tertentu, dan keyboard berfungsi saat sebuah kolom teks menerima fokus. Layanan tidak membaca teks layar.
+
 ## Izin dan batas platform
 
 Launcher, pencarian, pin, dan dock beranda tidak membutuhkan root atau Shizuku. Dock mengambang menggunakan izin Android **Display over other apps** (`SYSTEM_ALERT_WINDOW`) yang diminta hanya saat pengguna mengaktifkannya. Izin dapat dicabut di pengaturan sistem.
