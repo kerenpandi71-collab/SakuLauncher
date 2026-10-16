@@ -450,6 +450,8 @@ class MainActivity : Activity() {
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val base = (if (isStartMenu && !showingAllApps) pinnedApps() else apps).filterNot { hidden.contains(it.packageName) }
+        // Keep Start tidy: reveal apps only after the user types a query.
+        if (isStartMenu && searchQuery.isBlank()) return emptyList()
         return if (searchQuery.isBlank()) base else base.filter { it.label.contains(searchQuery, ignoreCase = true) }
     }
 
@@ -510,6 +512,8 @@ class MainActivity : Activity() {
             "Buka sebagai jendela",
             "Buka layar penuh",
             pinAction,
+            "Pindah ke kiri di dock",
+            "Pindah ke kanan di dock",
             "Info aplikasi",
             "Buka di Play Store",
             "Copot pemasangan"
@@ -519,9 +523,11 @@ class MainActivity : Activity() {
                 0 -> launch(app, asFreeform = true)
                 1 -> launch(app, asFreeform = false)
                 2 -> togglePinned(app)
-                3 -> openAppInfo(app)
-                4 -> openPlayStore(app)
-                5 -> uninstallApp(app)
+                3 -> movePinnedApp(app, -1)
+                4 -> movePinnedApp(app, 1)
+                5 -> openAppInfo(app)
+                6 -> openPlayStore(app)
+                7 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -574,6 +580,17 @@ class MainActivity : Activity() {
         if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
         savePinned(current)
         Toast.makeText(this, if (current.contains(app.packageName)) "${app.label} disematkan" else "${app.label} dilepas", Toast.LENGTH_SHORT).show()
+        rebuildPinnedViews()
+    }
+
+    private fun movePinnedApp(app: LaunchableApp, direction: Int) {
+        val current = pinnedPackages()
+        val index = current.indexOf(app.packageName)
+        val target = index + direction
+        if (index < 0 || target !in current.indices) return
+        val item = current.removeAt(index)
+        current.add(target, item)
+        savePinned(current)
         rebuildPinnedViews()
     }
 
@@ -844,10 +861,13 @@ class MainActivity : Activity() {
     }
 
     private fun chooseAccent() {
-        val names = arrayOf("Biru", "Teal", "Koral", "Ungu")
+        val names = arrayOf("Biru", "Teal", "Koral", "Ungu", "Merah muda", "Amber", "Hijau", "Merah", "Indigo", "Monokrom")
         val colors = intArrayOf(
             Color.rgb(110, 151, 245), Color.rgb(43, 184, 168),
-            Color.rgb(232, 112, 91), Color.rgb(165, 127, 236)
+            Color.rgb(232, 112, 91), Color.rgb(165, 127, 236),
+            Color.rgb(244, 114, 182), Color.rgb(245, 166, 35),
+            Color.rgb(72, 187, 120), Color.rgb(239, 83, 80),
+            Color.rgb(99, 102, 241), Color.rgb(148, 163, 184)
         )
         AlertDialog.Builder(this).setTitle("Warna aksen")
             .setItems(names) { _, which ->
@@ -979,6 +999,7 @@ class MainActivity : Activity() {
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
+        private const val KEY_WIDGET_HEIGHT_PREFIX = "home_widget_height_"
         private const val APP_WIDGET_HOST_ID = 2096
         private const val REQUEST_WIDGET_PICK = 483
         private const val REQUEST_WALLPAPER = 481
