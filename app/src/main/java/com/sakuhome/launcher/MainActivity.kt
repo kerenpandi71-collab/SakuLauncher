@@ -866,11 +866,10 @@ class MainActivity : Activity() {
                         maxLines = 2
                     })
                     details.addView(TextView(this).apply {
-                        text = row.app.packageName
-                        textSize = 10f
-                        setTextColor(secondaryText)
+                        text = if (row.frozen) "Dibekukan" else if (row.running) "Berjalan" else "Tidak berjalan"
+                        textSize = 11f
+                        setTextColor(if (row.frozen) Color.rgb(90, 160, 230) else secondaryText)
                         maxLines = 1
-                        ellipsize = android.text.TextUtils.TruncateAt.END
                     })
                     card.addView(details, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     card.addView(TextView(this).apply {
@@ -897,7 +896,6 @@ class MainActivity : Activity() {
                     .setNeutralButton(if (showAll) "Hanya berjalan" else "Semua aplikasi") { _, _ -> showProcessManager(!showAll) }
                     .setPositiveButton("Segarkan") { _, _ -> showProcessManager(showAll) }
                     .setNegativeButton("Tutup", null)
-                    .setMessage("Tampilan ringkas ala Opsi Pengembang. Daftar mencakup aplikasi pengguna yang punya ikon peluncur; proses sistem tidak ditampilkan. Aksi freeze perlu root dan bisa membuat aplikasi tidak merespons.")
                     .show()
             }
         }.start()
