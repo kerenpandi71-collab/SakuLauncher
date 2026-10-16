@@ -200,6 +200,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        requestedOrientation = preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
         buildScreen()
@@ -935,7 +936,8 @@ class MainActivity : Activity() {
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
-            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif"
+            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif",
+            "▰  Orientasi launcher"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -970,8 +972,28 @@ class MainActivity : Activity() {
                         .setNegativeButton("Batal", null)
                         .setPositiveButton(if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Aktifkan kembali" else "Nonaktifkan") { _, _ -> toggleNativeQuickSettings() }
                         .show()
+                    17 -> chooseLauncherOrientation()
                 }
             }.setNegativeButton("Selesai", null).show()
+    }
+
+    private fun chooseLauncherOrientation() {
+        val options = arrayOf("Ikuti sensor", "Kunci potret", "Kunci landscape")
+        val values = intArrayOf(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        )
+        val current = preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        val selected = values.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Orientasi Saku Launcher")
+            .setSingleChoiceItems(options, selected) { dialog, which ->
+                val value = values[which]
+                preferences.edit().putInt("launcher_orientation", value).apply()
+                requestedOrientation = value
+                dialog.dismiss()
+                Toast.makeText(this, "Orientasi launcher diperbarui", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
     }
 
     private fun toggleOverlay() {
