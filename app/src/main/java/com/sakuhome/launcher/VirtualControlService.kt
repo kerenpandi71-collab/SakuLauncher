@@ -35,6 +35,10 @@ class VirtualControlService : Service() {
     private var hintView: View? = null
     private var keyboardView: View? = null
     private var keyboardVisible = false
+    private var pcShift = false
+    private var pcCtrl = false
+    private var pcAlt = false
+    private var pcWin = false
     private var foreground = false
     private var cursorX = 0f
     private var cursorY = 0f
@@ -357,6 +361,12 @@ class VirtualControlService : Service() {
     }
 
     private fun sendPcKey(label: String) {
+        when (label) {
+            "Shift" -> { pcShift = !pcShift; return }
+            "Ctrl" -> { pcCtrl = !pcCtrl; return }
+            "Alt" -> { pcAlt = !pcAlt; return }
+            "Win" -> { pcWin = !pcWin; return }
+        }
         val bridge = SakuInputBridge.shell
         if (bridge == null) {
             Toast.makeText(this, "Aktifkan Shizuku dan izinkan Saku untuk mengetik.", Toast.LENGTH_SHORT).show()
@@ -366,10 +376,6 @@ class VirtualControlService : Service() {
             "Esc" -> android.view.KeyEvent.KEYCODE_ESCAPE
             "Tab" -> android.view.KeyEvent.KEYCODE_TAB
             "Caps" -> android.view.KeyEvent.KEYCODE_CAPS_LOCK
-            "Shift" -> android.view.KeyEvent.KEYCODE_SHIFT_LEFT
-            "Ctrl" -> android.view.KeyEvent.KEYCODE_CTRL_LEFT
-            "Alt" -> android.view.KeyEvent.KEYCODE_ALT_LEFT
-            "Win" -> android.view.KeyEvent.KEYCODE_META_LEFT
             "Enter" -> android.view.KeyEvent.KEYCODE_ENTER
             "⌫" -> android.view.KeyEvent.KEYCODE_DEL
             "Del" -> android.view.KeyEvent.KEYCODE_FORWARD_DEL
@@ -394,16 +400,15 @@ class VirtualControlService : Service() {
         }
         if (code == android.view.KeyEvent.KEYCODE_UNKNOWN) return
         val now = SystemClock.uptimeMillis()
-        val meta = when (label) {
-            "Shift" -> android.view.KeyEvent.META_SHIFT_ON
-            "Ctrl" -> android.view.KeyEvent.META_CTRL_ON
-            "Alt" -> android.view.KeyEvent.META_ALT_ON
-            "Win" -> android.view.KeyEvent.META_META_ON
-            else -> 0
-        }
+        var meta = 0
+        if (pcShift) meta = meta or android.view.KeyEvent.META_SHIFT_ON or android.view.KeyEvent.META_SHIFT_LEFT_ON
+        if (pcCtrl) meta = meta or android.view.KeyEvent.META_CTRL_ON or android.view.KeyEvent.META_CTRL_LEFT_ON
+        if (pcAlt) meta = meta or android.view.KeyEvent.META_ALT_ON or android.view.KeyEvent.META_ALT_LEFT_ON
+        if (pcWin) meta = meta or android.view.KeyEvent.META_META_ON
         try {
             bridge.injectKey(code, android.view.KeyEvent.ACTION_DOWN, meta, 0)
             bridge.injectKey(code, android.view.KeyEvent.ACTION_UP, meta, 0)
+            if (pcShift) pcShift = false
         } catch (_: Exception) {
             Toast.makeText(this, "Gagal mengirim tombol. Periksa koneksi Shizuku.", Toast.LENGTH_SHORT).show()
         }
