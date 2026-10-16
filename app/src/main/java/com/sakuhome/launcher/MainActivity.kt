@@ -451,6 +451,9 @@ class MainActivity : Activity() {
                     if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                         showStartPanel()
                         true
+                    } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && startPanel.visibility == View.VISIBLE) {
+                        hideStartPanel()
+                        true
                     } else if (kotlin.math.abs(dx) > dp(72)) {
                         val direction = if (dx < 0) -1f else 1f
                         desktopGrid.animate().cancel()
@@ -1107,17 +1110,48 @@ class MainActivity : Activity() {
     }
 
     private fun chooseHomePageCount() {
-        val current = homePageCount()
-        val options = (1..5).map { n -> "$n layar${if (n == current) " · aktif" else ""}" }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Jumlah layar utama")
-            .setMessage("Atur berapa halaman yang bisa digeser di layar utama.")
-            .setSingleChoiceItems(options, current - 1) { dialog, which ->
-                val target = which + 1
-                preferences.edit().putInt(KEY_HOME_PAGE_COUNT, target).apply()
-                homePage = homePage.coerceAtMost(target - 1)
-                dialog.dismiss()
-                buildScreen()
-            }.setNegativeButton("Batal", null).show()
+        val countText = TextView(this).apply {
+            text = "Jumlah layar utama: " + homePageCount()
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), 0, dp(12), dp(8))
+        }
+        val minus = chipButton("−", cardSurface, primaryText, 14)
+        val plus = chipButton("+", accent, Color.WHITE, 14)
+        fun updateCount(delta: Int) {
+            val next = (homePageCount() + delta).coerceIn(1, 5)
+            preferences.edit().putInt(KEY_HOME_PAGE_COUNT, next).apply()
+            homePage = homePage.coerceAtMost(next - 1)
+            countText.text = "Jumlah layar utama: " + next
+            minus.isEnabled = next > 1
+            minus.alpha = if (next > 1) 1f else 0.45f
+            plus.isEnabled = next < 5
+            plus.alpha = if (next < 5) 1f else 0.45f
+        }
+        minus.setOnClickListener { updateCount(-1) }
+        plus.setOnClickListener { updateCount(1) }
+        controls.addView(minus, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(10) })
+        controls.addView(plus, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(10) })
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(countText, LinearLayout.LayoutParams(-1, -2))
+            addView(controls, LinearLayout.LayoutParams(-1, -2))
+            addView(TextView(this@MainActivity).apply {
+                text = "Batas 1–5 layar. Halaman tambahan bisa diakses dengan menggeser layar utama ke kiri atau kanan."
+                textSize = 12f
+                setTextColor(secondaryText)
+                setPadding(dp(18), 0, dp(18), dp(10))
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Jumlah layar utama").setView(content)
+            .setPositiveButton("Simpan") { _, _ -> buildScreen() }
+            .setNegativeButton("Batal", null).show()
     }
 
     private fun chooseHomeIconPosition() {
