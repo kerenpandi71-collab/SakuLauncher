@@ -91,6 +91,9 @@ class FloatingDockService : Service() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val accentColor = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
+        val transparency = prefs.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
+        val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
+        val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
             prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
         } else loadApps().take(5).map { it.packageName }
@@ -100,7 +103,8 @@ class FloatingDockService : Service() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(7), dp(5), dp(7), dp(5))
             background = GradientDrawable().apply {
-                setColor(if (darkTheme) Color.rgb(31, 37, 52) else Color.rgb(247, 249, 253))
+                setColor(Color.argb(transparency * 255 / 100, if (darkTheme) 31 else 247, if (darkTheme) 37 else 249, if (darkTheme) 52 else 253))
+                setStroke(dp(1), Color.argb(150, 255, 255, 255))
                 cornerRadius = dp(22).toFloat()
             }
             elevation = dp(12).toFloat()
@@ -121,7 +125,7 @@ class FloatingDockService : Service() {
             }
         }
         dock.addView(startButton, LinearLayout.LayoutParams(dp(45), dp(48)))
-        pinnedPackages.take(6).mapNotNull { apps[it] }.forEach { app ->
+        pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
             val icon = ImageView(this).apply {
                 setImageDrawable(app.icon)
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -163,23 +167,8 @@ class FloatingDockService : Service() {
                     true
                 }
             }
-            dock.addView(icon, LinearLayout.LayoutParams(dp(46), dp(48)))
+            dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize), dp(48)))
         }
-        val settings = TextView(this).apply {
-            text = "⋯"
-            textSize = 20f
-            gravity = Gravity.CENTER
-            setTextColor(if (darkTheme) Color.rgb(200, 207, 221) else Color.rgb(83, 96, 120))
-            contentDescription = "Pengaturan dock"
-            setOnClickListener {
-                val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
-                }
-                startActivity(open)
-            }
-        }
-        dock.addView(settings, LinearLayout.LayoutParams(dp(38), dp(48)))
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -243,5 +232,8 @@ class FloatingDockService : Service() {
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_DARK_THEME = "dark_theme"
+        private const val KEY_TRANSPARENCY = "dock_transparency"
+        private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_HIDDEN_APPS = "hidden_app_packages"
     }
 }
