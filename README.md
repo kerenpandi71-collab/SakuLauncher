@@ -1,30 +1,25 @@
-# Saku Desktop
+# Saku Desktop — macOS-inspired edition
 
-Launcher desktop Android yang ringan. Desain dan alur fiturnya terinspirasi konsep umum dari Taskbar Android; kode dan aset Taskbar tidak disalin.
+Launcher Android dengan tampilan desktop bergaya macOS yang dibuat untuk penggunaan satu tangan di ponsel, dan berjalan dari HTML lokal di dalam WebView native.
 
-## Fitur
+## Tampilan dan fitur
+- Menu bar, jam, Dock kaca, ikon desktop, Launchpad dengan pencarian, dan Control Center.
+- Jendela internal yang dapat diseret, ditutup, diminimalkan, dan dimaksimalkan.
+- Catatan, Pengingat/To-Do, Kalkulator, Jam dan stopwatch, Kalender dengan acara, Cuaca Open-Meteo, Terminal simulasi, Finder, dan Pengaturan tema.
+- Catatan, tugas, acara, wallpaper, tema, dan aksen disimpan lokal melalui localStorage.
+- Bridge Android untuk menampilkan aplikasi yang terpasang dan membuka aplikasi Android asli dari Launchpad.
+- Pintasan: `Ctrl+Space` atau `Ctrl+F` membuka Launchpad; `Ctrl+,` membuka Pengaturan; `Esc` menutup panel.
+- Cuaca memerlukan internet; aplikasi lainnya pada dasarnya dapat digunakan offline.
 
-- Workspace desktop dengan jam, tanggal, wallpaper, tema gelap/cerah, dan warna aksen.
-- Start Menu untuk mencari dan membuka aplikasi, dengan tab semua aplikasi atau aplikasi yang disematkan.
-- Dock bawah berisi Start dan aplikasi favorit.
-- Pin/unpin aplikasi dan pengaturan urutan ikon.
-- Dock mengambang opsional di atas aplikasi lain, dengan notifikasi dan kontrol untuk mematikannya.
-- Ketuk ikon untuk membuka aplikasi; tahan ikon untuk mencoba mode jendela bebas.
-- Pilihan fullscreen atau freeform melalui menu konteks aplikasi.
-- Layout menyesuaikan orientasi portrait dan landscape.
-- Pintasan keyboard: `Ctrl+Space` membuka Start, `Ctrl+F` mencari aplikasi, `Ctrl+,` membuka pengaturan, `Esc` menutup Start, dan `F5` menyegarkan daftar aplikasi.
-
-## Perubahan arsitektur
-
-Panel mouse virtual, trackpad, keyboard virtual/IME, layanan aksesibilitas input, dan integrasi Shizuku telah dihapus. Saku sekarang fokus sebagai launcher/taskbar, bukan alat input. Keyboard atau mouse fisik yang disediakan Android tetap menggunakan jalur input sistem biasa.
-
-## Batasan Android
-
-Permintaan freeform menggunakan API publik Android dan dapat diabaikan jika ROM atau aplikasi tidak mendukungnya. Dock mengambang memerlukan izin Display over other apps; izin ini bisa dicabut kapan saja. Fitur dasar launcher, Start Menu, dan pin tidak membutuhkan root atau Shizuku.
+## Batasan yang perlu diketahui
+- Jendela internal adalah jendela UI di dalam launcher. Membuka aplikasi Android lain dalam freeform asli tetap bergantung pada dukungan window manager ROM dan permintaan mode freeform di layanan dock.
+- Tombol Wi-Fi/Bluetooth di Control Center merupakan kontrol visual, bukan pengalih radio Android sungguhan. Kecerahan di UI memengaruhi tampilan launcher, bukan kecerahan sistem.
+- Terminal adalah simulasi perintah aman di dalam aplikasi, bukan shell root/Termux. Finder belum mengakses seluruh filesystem Android.
+- Cuaca menggunakan layanan geocoding dan forecast Open-Meteo tanpa API key.
 
 ## Build
-
 - Android SDK Platform 35
 - JDK 17
+- `./gradlew assembleDebug`
 
-Jalankan `./gradlew assembleDebug`. APK debug berada di `app/build/outputs/apk/debug/app-debug.apk`. Build CI otomatis berjalan saat ada push ke `main` atau branch overhaul dan saat pull request ke `main`.
+APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK pada branch `feature/saku-desktop-overhaul`; periksa tab Actions untuk status build dan artefak.
