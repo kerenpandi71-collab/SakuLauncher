@@ -68,6 +68,9 @@ class MainActivity : Activity() {
     private val primaryText: Int get() = if (isDarkTheme) Color.rgb(245, 248, 255) else Color.rgb(25, 37, 57)
     private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(159, 177, 202) else Color.rgb(82, 101, 130)
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
+    private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
+    private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
+    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
