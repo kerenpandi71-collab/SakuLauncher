@@ -110,6 +110,16 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_WIDGET_PICK) {
+            val widgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetHost.INVALID_APPWIDGET_ID) ?: AppWidgetHost.INVALID_APPWIDGET_ID
+            if (resultCode == RESULT_OK && widgetId != AppWidgetHost.INVALID_APPWIDGET_ID) {
+                val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(widgetId)
+                if (info != null) addWidgetView(widgetId, info) else appWidgetHost.deleteAppWidgetId(widgetId)
+            } else if (widgetId != AppWidgetHost.INVALID_APPWIDGET_ID) {
+                appWidgetHost.deleteAppWidgetId(widgetId)
+            }
+            return
+        }
         if (requestCode != REQUEST_WALLPAPER || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         try {
@@ -720,6 +730,99 @@ class MainActivity : Activity() {
         setStroke(dp(1), if (isDarkTheme) Color.argb(115, 220, 233, 255) else Color.argb(170, 255, 255, 255))
     }
 
+    private fun hiddenPackages(): MutableSet<String> =
+        preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    private fun manageHiddenApps() {
+        val hidden = hiddenPackages()
+        val names = apps.map { it.label }.toTypedArray()
+        val checked = apps.map { hidden.contains(it.packageName) }.toBooleanArray()
+        AlertDialog.Builder(this).setTitle("Sembunyikan aplikasi")
+            .setMultiChoiceItems(names, checked) { _, which, selected ->
+                if (selected) hidden.add(apps[which].packageName) else hidden.remove(apps[which].packageName)
+            }.setPositiveButton("Simpan") { _, _ ->
+                preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
+                rebuildPinnedViews()
+                buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseTransparency() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(4))
+        }
+        val current = preferences.getInt(KEY_TRANSPARENCY, 88)
+        val value = TextView(this).apply {
+            text = "$current%"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+        }
+        val slider = SeekBar(this).apply {
+            max = 100
+            progress = current
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { value.text = "$progress%" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(value)
+        layout.addView(slider)
+        AlertDialog.Builder(this).setTitle("Transparansi dock").setView(layout)
+            .setPositiveButton("Terapkan") { _, _ ->
+                preferences.edit().putInt(KEY_TRANSPARENCY, slider.progress).apply()
+                buildScreen()
+                refreshFloatingDock()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun refreshFloatingDock() {
+        if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+            startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+        }
+    }
+
+    private fun pickWidget() {
+        val id = appWidgetHost.allocateAppWidgetId()
+        try {
+            startActivityForResult(Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id), REQUEST_WIDGET_PICK)
+        } catch (_: Exception) {
+            appWidgetHost.deleteAppWidgetId(id)
+            Toast.makeText(this, "Pemilih widget Android tidak tersedia", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun restoreWidgets() {
+        if (!::widgetStrip.isInitialized) return
+        val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").mapNotNull { it.toIntOrNull() }
+        val manager = AppWidgetManager.getInstance(this)
+        ids.forEach { id -> manager.getAppWidgetInfo(id)?.let { addWidgetView(id, it, false) } }
+    }
+
+    private fun addWidgetView(id: Int, info: AppWidgetProviderInfo, persist: Boolean = true) {
+        if (!::widgetStrip.isInitialized) return
+        val view = appWidgetHost.createView(this, id, info)
+        view.setAppWidget(id, info)
+        view.setOnLongClickListener {
+            AlertDialog.Builder(this).setTitle(info.loadLabel(packageManager))
+                .setItems(arrayOf("Hapus widget")) { _, _ ->
+                    widgetStrip.removeView(view)
+                    appWidgetHost.deleteAppWidgetId(id)
+                    val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() && it != id.toString() }
+                    preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+                }.setNegativeButton("Batal", null).show()
+            true
+        }
+        widgetStrip.addView(view, LinearLayout.LayoutParams(-1, dp(150)).apply { bottomMargin = dp(8) })
+        if (persist) {
+            val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() }.toMutableList()
+            if (!ids.contains(id.toString())) ids.add(id.toString())
+            preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+        }
+    }
+
     private fun showPermissionInfo() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
             .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start, pin aplikasi, dan dock tidak membutuhkan root atau Shizuku. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
@@ -867,6 +970,11 @@ class MainActivity : Activity() {
         private const val KEY_HIDE_LABELS = "hide_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_TRANSPARENCY = "dock_transparency"
+        private const val KEY_HIDDEN_APPS = "hidden_app_packages"
+        private const val KEY_WIDGET_IDS = "home_widget_ids"
+        private const val APP_WIDGET_HOST_ID = 2096
+        private const val REQUEST_WIDGET_PICK = 483
         private const val REQUEST_WALLPAPER = 481
         private const val REQUEST_UNINSTALL = 482
         const val EXTRA_OPEN_START = "com.sakuhome.launcher.OPEN_START"
