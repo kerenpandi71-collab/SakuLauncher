@@ -131,8 +131,17 @@ class FloatingDockService : Service() {
                     val launch = packageManager.getLaunchIntentForPackage(app.packageName)
                     if (launch != null) {
                         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        try { startActivity(launch) } catch (_: Exception) {
-                            Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                        val width = resources.displayMetrics.widthPixels
+                        val height = resources.displayMetrics.heightPixels
+                        val margin = dp(24)
+                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
+                        try {
+                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                            startActivity(launch, options.toBundle())
+                        } catch (_: Exception) {
+                            try { startActivity(launch) } catch (_: Exception) {
+                                Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 }
