@@ -61,12 +61,12 @@ class MainActivity : Activity() {
     private var showingAllApps = true
 
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
-    private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(24, 31, 48) else Color.rgb(229, 235, 246)
-    private val backgroundBottom: Int get() = if (isDarkTheme) Color.rgb(37, 47, 68) else Color.rgb(204, 215, 235)
-    private val dockSurface: Int get() = if (isDarkTheme) Color.rgb(34, 41, 57) else Color.rgb(241, 244, 250)
-    private val cardSurface: Int get() = if (isDarkTheme) Color.rgb(43, 51, 69) else Color.rgb(224, 230, 241)
-    private val primaryText: Int get() = if (isDarkTheme) Color.rgb(246, 247, 251) else Color.rgb(29, 38, 55)
-    private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(179, 188, 207) else Color.rgb(83, 96, 120)
+    private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
+    private val backgroundBottom: Int get() = if (isDarkTheme) Color.rgb(24, 35, 56) else Color.rgb(211, 224, 242)
+    private val dockSurface: Int get() = if (isDarkTheme) Color.rgb(25, 34, 51) else Color.rgb(246, 249, 255)
+    private val cardSurface: Int get() = if (isDarkTheme) Color.rgb(39, 51, 72) else Color.rgb(229, 237, 249)
+    private val primaryText: Int get() = if (isDarkTheme) Color.rgb(245, 248, 255) else Color.rgb(25, 37, 57)
+    private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(159, 177, 202) else Color.rgb(82, 101, 130)
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
 
     private fun pinnedPackages(): MutableList<String> {
@@ -149,7 +149,7 @@ class MainActivity : Activity() {
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(10), dp(18), dp(8))
+            setPadding(dp(18), dp(15), dp(18), dp(12))
         }
 
         val topBar = LinearLayout(this).apply {
@@ -159,13 +159,14 @@ class MainActivity : Activity() {
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(TextView(this).apply {
-            text = "SAKU DOCK"
-            textSize = 11f
-            letterSpacing = 0.16f
+            text = "SAKU DESKTOP"
+            textSize = 10f
+            letterSpacing = 0.22f
             setTextColor(accent)
         })
         clockText = TextView(this).apply {
-            textSize = 26f
+            textSize = 32f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
             includeFontPadding = false
         }
@@ -184,17 +185,18 @@ class MainActivity : Activity() {
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
 
         val workspaceTitle = TextView(this).apply {
-            text = "Ruang kerja"
-            textSize = 13f
+            text = "WORKSPACE  /  APLIKASI FAVORIT"
+            textSize = 10f
+            letterSpacing = 0.12f
             setTextColor(secondaryText)
-            setPadding(dp(4), dp(8), dp(4), dp(7))
+            setPadding(dp(5), dp(13), dp(5), dp(10))
         }
         shell.addView(workspaceTitle)
 
         desktopGrid = GridView(this).apply {
             numColumns = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4
-            verticalSpacing = dp(15)
-            horizontalSpacing = dp(5)
+            verticalSpacing = dp(13)
+            horizontalSpacing = dp(9)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
@@ -205,8 +207,8 @@ class MainActivity : Activity() {
         desktopGrid.adapter = pinnedAdapter
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(62)).apply {
-            topMargin = dp(7)
+        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
+            topMargin = dp(10)
         })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
@@ -225,9 +227,9 @@ class MainActivity : Activity() {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(7), dp(6), dp(7), dp(6))
-            background = rounded(dockSurface, 23)
-            elevation = dp(9).toFloat()
+            setPadding(dp(8), dp(7), dp(8), dp(7))
+            background = rounded(dockSurface, 25)
+            elevation = dp(14).toFloat()
         }
         dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
             textSize = 20f
@@ -278,7 +280,7 @@ class MainActivity : Activity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = rounded(if (isDarkTheme) Color.rgb(31, 38, 54) else Color.rgb(247, 249, 253), 26)
+            background = rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
             elevation = dp(16).toFloat()
         }
         val header = LinearLayout(this).apply {
@@ -403,7 +405,7 @@ class MainActivity : Activity() {
         val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
         val dockIndex = shell.childCount - 1
         shell.removeViewAt(dockIndex)
-        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(62)).apply { topMargin = dp(7) })
+        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
     }
 
     private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
@@ -696,17 +698,18 @@ class MainActivity : Activity() {
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(4), dp(7), dp(4), dp(7))
-                background = if (isStartMenu) rounded(cardSurface, 17) else ColorDrawable(Color.TRANSPARENT)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 88 else 94))
+                setPadding(dp(5), dp(9), dp(5), dp(9))
+                background = rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 94 else 102))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) 42 else 46), dp(if (isStartMenu) 42 else 46)))
+                }, LinearLayout.LayoutParams(dp(if (isStartMenu) 42 else 48), dp(if (isStartMenu) 42 else 48)))
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
+                    setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.MEDIUM)
                     setTextColor(primaryText)
                     gravity = Gravity.CENTER
                     maxLines = 1
