@@ -86,7 +86,8 @@ class MainActivity : Activity() {
 
     private fun pinnedApps(): List<LaunchableApp> {
         val byPackage = apps.associateBy { it.packageName }
-        return pinnedPackages().mapNotNull { byPackage[it] }
+        val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+        return pinnedPackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
