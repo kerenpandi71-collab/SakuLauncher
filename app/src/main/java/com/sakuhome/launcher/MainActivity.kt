@@ -652,6 +652,8 @@ class MainActivity : Activity() {
                     13 -> showPermissionInfo()
                 }
             }.setNegativeButton("Selesai", null).show()
+    }
+
     private fun toggleOverlay() {
         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
         if (enabled) {
