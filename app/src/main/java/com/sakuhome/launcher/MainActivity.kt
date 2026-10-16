@@ -2,6 +2,10 @@ package com.sakuhome.launcher
 
 import android.app.Activity
 import android.app.ActivityOptions
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.widget.SeekBar
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
@@ -47,6 +51,8 @@ class MainActivity : Activity() {
     private lateinit var rootFrame: FrameLayout
     private lateinit var startPanel: LinearLayout
     private lateinit var startGrid: GridView
+    private lateinit var widgetStrip: LinearLayout
+    private lateinit var appWidgetHost: AppWidgetHost
     private lateinit var desktopGrid: GridView
     private lateinit var startSearchField: EditText
     private lateinit var pinnedTabButton: TextView
@@ -86,8 +92,10 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
         buildScreen()
+        restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
     }
@@ -117,6 +125,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!::preferences.isInitialized) return
+        try { appWidgetHost.startListening() } catch (_: Exception) { }
         apps = loadApps()
         if (::rootFrame.isInitialized) {
             rebuildPinnedViews()
@@ -127,6 +136,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        try { appWidgetHost.stopListening() } catch (_: Exception) { }
         startSearchField.hideKeyboard()
     }
 
@@ -232,6 +242,11 @@ class MainActivity : Activity() {
             bottomMargin = dp(12)
         })
 
+        widgetStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, dp(4))
+        }
+        shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
             numColumns = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4
             verticalSpacing = dp(13)
@@ -422,7 +437,8 @@ class MainActivity : Activity() {
     }
 
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
-        val base = if (isStartMenu && !showingAllApps) pinnedApps() else apps
+        val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+        val base = (if (isStartMenu && !showingAllApps) pinnedApps() else apps).filterNot { hidden.contains(it.packageName) }
         return if (searchQuery.isBlank()) base else base.filter { it.label.contains(searchQuery, ignoreCase = true) }
     }
 
