@@ -793,13 +793,10 @@ class MainActivity : Activity() {
     private fun hiddenPackages(): MutableSet<String> =
         preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.toMutableSet() ?: mutableSetOf()
 
-    private data class ProcessApp(val app: LaunchableApp, val running: Boolean, val frozen: Boolean)
+    private data class ProcessApp(val app: LaunchableApp, val running: Boolean, val frozen: Boolean, val pid: String)
 
-    /**
-     * Root-assisted process manager. Only user-installed launcher apps are shown,
-     * avoiding accidental actions on Android/SystemUI and other system components.
-     */
-    private fun showProcessManager() {
+    /** Developer-options-inspired overview for running user apps. */
+    private fun showProcessManager(showAll: Boolean = false) {
         val candidates = apps.filter { app ->
             try {
                 val info = packageManager.getApplicationInfo(app.packageName, 0)
@@ -809,19 +806,98 @@ class MainActivity : Activity() {
         val frozenSet = preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()
         Thread {
             val rows = candidates.map { app ->
-                val pid = runRootCommand("pidof '${app.packageName}'").trim()
-                ProcessApp(app, pid.isNotEmpty(), frozenSet.contains(app.packageName))
-            }
+                val pid = runRootCommand("pidof '\${app.packageName}'").trim()
+                ProcessApp(app, pid.isNotEmpty(), frozenSet.contains(app.packageName), pid)
+            }.sortedWith(compareByDescending<ProcessApp> { it.running }.thenBy { it.app.label.lowercase(Locale.getDefault()) })
             runOnUiThread {
-                val labels = rows.map { row ->
-                    "${if (row.frozen) "❄ " else if (row.running) "● " else "○ "}${row.app.label}  ·  ${when { row.frozen -> "Dibekukan"; row.running -> "Berjalan"; else -> "Tidak berjalan" }}"
-                }.toTypedArray()
+                val visibleRows = if (showAll) rows else rows.filter { it.running || it.frozen }
+                val panel = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(16), dp(10), dp(16), dp(8))
+                    setBackgroundColor(backgroundTop)
+                }
+                panel.addView(TextView(this).apply {
+                    text = "● \${rows.count { it.running }} berjalan   ·   ❄ \${rows.count { it.frozen }} dibekukan"
+                    textSize = 14f
+                    setTextColor(accent)
+                    setPadding(0, 0, 0, dp(10))
+                })
+                val scroll = android.widget.ScrollView(this)
+                val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                if (visibleRows.isEmpty()) {
+                    list.addView(TextView(this).apply {
+                        text = if (showAll) "Tidak ada aplikasi pengguna yang terdeteksi." else "Belum ada aplikasi pengguna yang sedang berjalan."
+                        textSize = 14f
+                        setTextColor(secondaryText)
+                        setPadding(dp(8), dp(24), dp(8), dp(24))
+                    })
+                }
+                visibleRows.forEach { row ->
+                    val card = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(12), dp(10), dp(8), dp(10))
+                        background = GradientDrawable().apply {
+                            setColor(cardSurface)
+                            cornerRadius = dp(16).toFloat()
+                            setStroke(dp(1), if (row.frozen) Color.rgb(90, 160, 230) else Color.argb(35, 150, 175, 210))
+                        }
+                    }
+                    card.addView(ImageView(this).apply {
+                        setImageDrawable(row.app.icon)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }, LinearLayout.LayoutParams(dp(42), dp(42)))
+                    val details = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(10), 0, dp(6), 0)
+                    }
+                    details.addView(TextView(this).apply {
+                        text = row.app.label
+                        textSize = 14f
+                        setTextColor(primaryText)
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
+                    details.addView(TextView(this).apply {
+                        text = "\${if (row.frozen) "❄ Dibekukan" else if (row.running) "● Berjalan" else "○ Tidak berjalan"}  ·  PID \${row.pid.ifBlank { "—" }}"
+                        textSize = 11f
+                        setTextColor(if (row.running) accent else secondaryText)
+                        maxLines = 2
+                    })
+                    details.addView(TextView(this).apply {
+                        text = row.app.packageName
+                        textSize = 10f
+                        setTextColor(secondaryText)
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
+                    card.addView(details, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    card.addView(TextView(this).apply {
+                        text = "Kelola"
+                        textSize = 12f
+                        setTextColor(primaryText)
+                        gravity = Gravity.CENTER
+                        setPadding(dp(10), dp(9), dp(10), dp(9))
+                        background = GradientDrawable().apply {
+                            setColor(accent)
+                            cornerRadius = dp(12).toFloat()
+                        }
+                        setOnClickListener { showProcessActions(row) }
+                    })
+                    val cardParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    cardParams.bottomMargin = dp(9)
+                    list.addView(card, cardParams)
+                }
+                scroll.addView(list)
+                panel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(390)))
                 AlertDialog.Builder(this)
-                    .setTitle("Pengelola proses · ${rows.count { it.running }} berjalan")
-                    .setItems(labels) { _, index -> showProcessActions(rows[index]) }
-                    .setPositiveButton("Segarkan") { _, _ -> showProcessManager() }
+                    .setTitle("Layanan & proses berjalan")
+                    .setView(panel)
+                    .setNeutralButton(if (showAll) "Hanya berjalan" else "Semua aplikasi") { _, _ -> showProcessManager(!showAll) }
+                    .setPositiveButton("Segarkan") { _, _ -> showProcessManager(showAll) }
                     .setNegativeButton("Tutup", null)
-                    .setMessage("Aplikasi pengguna yang terpasang. Pilih aplikasi untuk menghentikan proses atau membekukan/melanjutkannya. Perlu izin root Magisk.")
+                    .setMessage("Tampilan ringkas ala Opsi Pengembang. Daftar mencakup aplikasi pengguna yang punya ikon peluncur; proses sistem tidak ditampilkan. Aksi freeze perlu root dan bisa membuat aplikasi tidak merespons.")
                     .show()
             }
         }.start()
