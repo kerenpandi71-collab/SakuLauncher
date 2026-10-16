@@ -496,7 +496,7 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             }, LinearLayout.LayoutParams(-2, -1))
         }
-        item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showControlCenter() }
+        item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showSettings() }
         strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
         val bluetoothOn = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.isEnabled == true } catch (_: Exception) { false }
@@ -525,7 +525,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (success) {
                     preferences.edit().putBoolean(KEY_NATIVE_QS_DISABLED, disable).apply()
-                    Toast.makeText(this, if (disable) "Ekspansi panel Android dinonaktifkan. Control Center Saku tersedia dari status bar launcher." else "Panel Android dipulihkan.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, if (disable) "Ekspansi panel Android dinonaktifkan. menu Saku tersedia dari layar utama." else "Panel Android dipulihkan.", Toast.LENGTH_LONG).show()
                     buildScreen()
                 } else {
                     Toast.makeText(this, "Perintah ditolak ROM. Pulihkan manual jika perlu: su -c cmd statusbar enable 0x00010000", Toast.LENGTH_LONG).show()
