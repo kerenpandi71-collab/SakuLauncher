@@ -63,7 +63,7 @@ class FloatingDockService : Service() {
             }
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
         }
-        val open = Intent(this, MainActivity::class.java).apply {
+        val open = Intent(this, MacDesktopActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(MainActivity.EXTRA_OPEN_START, true)
         }
@@ -117,7 +117,7 @@ class FloatingDockService : Service() {
             background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
             setOnClickListener {
-                val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
+                val open = Intent(this@FloatingDockService, MacDesktopActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra(MainActivity.EXTRA_OPEN_START, true)
                 }
