@@ -591,17 +591,11 @@ class MainActivity : Activity() {
         }
         val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heading.addView(TextView(this).apply {
-            text = "Launchpad"
-            textSize = 23f
+            text = "Aplikasi"
+            textSize = 20f
             setTextColor(primaryText)
             setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD))
-            letterSpacing = -0.025f
-        })
-        heading.addView(TextView(this).apply {
-            text = "Semua aplikasi di satu tempat"
-            textSize = 11f
-            setTextColor(secondaryText)
-            setPadding(0, dp(2), 0, 0)
+            letterSpacing = -0.02f
         })
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
@@ -618,7 +612,7 @@ class MainActivity : Activity() {
             setPadding(dp(15), 0, dp(15), 0)
             background = if (liquidGlass) glassSurface(16) else rounded(cardSurface, 16)
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            contentDescription = "Cari aplikasi di Launchpad"
+            contentDescription = "Cari aplikasi"
             compoundDrawablePadding = dp(8)
         }
         panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(13) })
@@ -679,14 +673,31 @@ class MainActivity : Activity() {
     private fun showStartPanel() {
         if (!::startPanel.isInitialized) return
         showingAllApps = true
+        startPanel.animate().cancel()
         startPanel.visibility = View.VISIBLE
         startPanel.bringToFront()
+        startPanel.alpha = 0f
+        startPanel.translationX = dp(42).toFloat()
+        startPanel.scaleX = 0.985f
+        startPanel.scaleY = 0.985f
         startSearchField.setText("")
         refreshStartPanel()
+        startPanel.animate().alpha(1f).translationX(0f).scaleX(1f).scaleY(1f)
+            .setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
 
     private fun hideStartPanel() {
-        if (::startPanel.isInitialized) startPanel.visibility = View.GONE
+        if (!::startPanel.isInitialized || startPanel.visibility != View.VISIBLE) return
+        startPanel.animate().cancel()
+        startPanel.animate().alpha(0f).translationX(dp(32).toFloat()).scaleX(0.985f).scaleY(0.985f)
+            .setDuration(170).setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                startPanel.visibility = View.GONE
+                startPanel.alpha = 1f
+                startPanel.translationX = 0f
+                startPanel.scaleX = 1f
+                startPanel.scaleY = 1f
+            }.start()
         searchQuery = ""
         if (::startSearchField.isInitialized) startSearchField.setText("")
     }
