@@ -1696,7 +1696,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = if (liquidGlass) glassSurface(if (isStartMenu) 16 else 19) else if (isStartMenu) rounded(if (isDarkTheme) Color.argb(170, 45, 61, 84) else Color.argb(205, 250, 252, 255), 16) else rounded(if (isDarkTheme) Color.argb(110, 45, 61, 84) else Color.argb(135, 250, 252, 255), 19)
+                background = rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 42 else 30, 190, 210, 240) else Color.argb(if (isStartMenu) 46 else 32, 70, 95, 130), 24)
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 91 else 102))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
