@@ -959,7 +959,6 @@ class MainActivity : Activity() {
                     14 -> chooseHomeGrid()
                     15 -> chooseDrawerGrid()
                     16 -> showProcessManager()
-                    17 -> showControlCenter()
                     19 -> chooseHomePageCount()
                     20 -> chooseHomeIconPosition()
                     18 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
