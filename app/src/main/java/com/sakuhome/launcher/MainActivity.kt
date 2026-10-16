@@ -449,10 +449,17 @@ class MainActivity : Activity() {
                     if (kotlin.math.abs(dx) > dp(72)) {
                         val direction = if (dx < 0) -1f else 1f
                         desktopGrid.animate().cancel()
-                        desktopGrid.translationX = direction * dp(34).toFloat()
-                        desktopGrid.alpha = 0.72f
-                        showHomePage(homePage + if (dx < 0) 1 else -1)
-                        desktopGrid.animate().translationX(0f).alpha(1f).setDuration(190L).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                        desktopGrid.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
+                            .setDuration(115L)
+                            .setInterpolator(android.view.animation.AccelerateInterpolator())
+                            .withEndAction {
+                                showHomePage(homePage + if (dx < 0) 1 else -1)
+                                desktopGrid.translationX = direction * dp(30).toFloat()
+                                desktopGrid.animate().alpha(1f).translationX(0f)
+                                    .setDuration(235L)
+                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                    .start()
+                            }.start()
                         true
                     } else false
                 }
@@ -697,13 +704,14 @@ class MainActivity : Activity() {
         startPanel.visibility = View.VISIBLE
         startPanel.bringToFront()
         startPanel.alpha = 0f
-        startPanel.translationY = dp(28).toFloat()
-        startPanel.scaleX = 0.97f
-        startPanel.scaleY = 0.97f
+        startPanel.translationY = dp(22).toFloat()
+        startPanel.translationX = 0f
+        startPanel.scaleX = 0.985f
+        startPanel.scaleY = 0.985f
         startSearchField.setText("")
         refreshStartPanel()
         startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-            .setDuration(280).setInterpolator(android.view.animation.OvershootInterpolator(0.85f)).start()
+             .setDuration(250).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
 
     private fun hideStartPanel() {
@@ -931,69 +939,22 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val overlayState = if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Aktif" else "Nonaktif"
-        val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
-        val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
-        val labelState = if (hideLabels) "Sembunyi" else "Tampil"
-        val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
-        val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
         val options = arrayOf(
-            "◧  Taskbar bawah · $hideTaskbarState",
-            "▦  Ukuran ikon · ${iconSizeDp} dp",
-            "◌  Label aplikasi · $labelState",
-            "✧  Liquid Glass · $glassState",
-            "◐  Transparansi · $transparency%",
-            "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
-            "⌘  Dock mengambang · $overlayState",
-            "▤  Kelola aplikasi dock · $pinnedState",
-            "☾  Mode tampilan · $themeState",
-            "✦  Warna aksen",
-            "▧  Pilih wallpaper",
-            "↺  Reset wallpaper",
-            "ⓘ  Tentang & izin",
-            "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
-            "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
-            "◉  Pengelola proses aplikasi",
-            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif",
-            "▰  Orientasi launcher"
+            "Mode tampilan · $themeState",
+            "Pilih wallpaper",
+            "Reset wallpaper",
+            "Tentang & izin"
         )
-        AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
+        AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_TASKBAR, !preferences.getBoolean(KEY_HIDE_TASKBAR, false)).apply()
-                        buildScreen()
-                    }
-                    1 -> chooseIconSize()
-                    2 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
-                        buildScreen()
-                    }
-                    3 -> {
-                        preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
-                        buildScreen()
-                    }
-                    4 -> chooseTransparency()
-                    5 -> manageHiddenApps()
-                    6 -> toggleOverlay()
-                    7 -> managePins()
-                    8 -> toggleTheme()
-                    9 -> chooseAccent()
-                    10 -> chooseWallpaper()
-                    11 -> resetWallpaper()
-                    12 -> showPermissionInfo()
-                    13 -> chooseHomeGrid()
-                    14 -> chooseDrawerGrid()
-                    15 -> showProcessManager()
-                    16 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
-                        .setMessage("Opsi root ini mencoba menonaktifkan ekspansi panel Android. Kompatibilitas tergantung ROM. Perintah pemulihan: su -c cmd statusbar enable 0x00010000")
-                        .setNegativeButton("Batal", null)
-                        .setPositiveButton(if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Aktifkan kembali" else "Nonaktifkan") { _, _ -> toggleNativeQuickSettings() }
-                        .show()
-                    17 -> chooseLauncherOrientation()
+                    0 -> toggleTheme()
+                    1 -> chooseWallpaper()
+                    2 -> resetWallpaper()
+                    3 -> showPermissionInfo()
                 }
-            }.setNegativeButton("Selesai", null).show()
+            }.setNegativeButton("Tutup", null).show()
     }
 
     private fun chooseLauncherOrientation() {
