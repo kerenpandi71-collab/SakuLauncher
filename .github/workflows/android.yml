@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feature/saku-desktop-overhaul"]
   pull_request:
     branches: ["main"]
 
@@ -38,3 +38,5 @@ jobs:
         with:
           name: saku-launcher-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
