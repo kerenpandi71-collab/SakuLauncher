@@ -63,7 +63,7 @@ class FloatingDockService : Service() {
             }
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
         }
-        val open = Intent(this, MacDesktopActivity::class.java).apply {
+        val open = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(MainActivity.EXTRA_OPEN_START, true)
         }
@@ -95,7 +95,8 @@ class FloatingDockService : Service() {
         val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
-            prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
+            prefs.getString(KEY_PINNED, "").orEmpty().split('
+').filter { it.isNotBlank() }
         } else loadApps().take(5).map { it.packageName }
         val apps = loadApps().associateBy { it.packageName }
         val dock = LinearLayout(this).apply {
@@ -117,7 +118,7 @@ class FloatingDockService : Service() {
             background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
             setOnClickListener {
-                val open = Intent(this@FloatingDockService, MacDesktopActivity::class.java).apply {
+                val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra(MainActivity.EXTRA_OPEN_START, true)
                 }
@@ -135,24 +136,8 @@ class FloatingDockService : Service() {
                     val launch = packageManager.getLaunchIntentForPackage(app.packageName)
                     if (launch != null) {
                         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val width = resources.displayMetrics.widthPixels
-                        val height = resources.displayMetrics.heightPixels
-                        val margin = dp(24)
-                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                        try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds).apply {
-                                // Android hides the windowing-mode setter from the public SDK on some builds.
-                                // Try requesting native freeform mode; retain launch bounds as a safe fallback.
-                                try {
-                                    javaClass.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                                        .invoke(this, 5) // WINDOWING_MODE_FREEFORM
-                                } catch (_: Exception) { }
-                            }
-                            startActivity(launch, options.toBundle())
-                        } catch (_: Exception) {
-                            try { startActivity(launch) } catch (_: Exception) {
-                                Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
-                            }
+                        try { startActivity(launch) } catch (_: Exception) {
+                            Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -160,22 +145,8 @@ class FloatingDockService : Service() {
                     val launch = packageManager.getLaunchIntentForPackage(app.packageName)
                     if (launch != null) {
                         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val width = resources.displayMetrics.widthPixels
-                        val height = resources.displayMetrics.heightPixels
-                        val margin = dp(24)
-                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                        try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds).apply {
-                                // Android hides the windowing-mode setter from the public SDK on some builds.
-                                // Try requesting native freeform mode; retain launch bounds as a safe fallback.
-                                try {
-                                    javaClass.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                                        .invoke(this, 5) // WINDOWING_MODE_FREEFORM
-                                } catch (_: Exception) { }
-                            }
-                            startActivity(launch, options.toBundle())
-                        } catch (_: Exception) {
-                            Toast.makeText(this@FloatingDockService, "Android tidak mengizinkan jendela bebas untuk aplikasi ini", Toast.LENGTH_SHORT).show()
+                        try { startActivity(launch) } catch (_: Exception) {
+                            Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
                         }
                     }
                     true
