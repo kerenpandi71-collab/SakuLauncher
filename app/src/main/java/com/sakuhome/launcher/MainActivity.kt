@@ -947,22 +947,23 @@ class MainActivity : Activity() {
 
     private fun freezeApp(app: LaunchableApp) {
         Thread {
-            val result = runRootCommand("pids=\$(pidof '${app.packageName}'); [ -n \"\$pids\" ] && kill -STOP \$pids")
+            val command = "pids=\\$(pidof '${app.packageName}'); if [ -z \"\\$pids\" ]; then echo NO_PROCESS; else kill -STOP \\$pids && echo FREEZE_SENT || echo FREEZE_FAILED; fi"
+            val result = runRootCommand(command).trim()
+            val verifyCommand = "pids=\\$(pidof '${app.packageName}'); for p in \\$pids; do awk '/^State:/ {print \\$2}' /proc/\\$p/status; done"
+            val states = runRootCommand(verifyCommand).trim().lines().filter { it.isNotBlank() }
+            val verified = states.isNotEmpty() && states.all { it == "T" || it == "t" }
             runOnUiThread {
-                if (result.isBlank()) {
-                    // pidof/kill often produce no output on success; verify process state after the command.
-                    val frozen = (preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
-                    frozen.add(app.packageName)
-                    preferences.edit().putStringSet(KEY_FROZEN_APPS, frozen).apply()
-                    Toast.makeText(this, "Permintaan freeze dikirim. Jika aplikasi macet, pilih Lanjutkan.", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this, "Freeze gagal; periksa izin root", Toast.LENGTH_LONG).show()
+                val message = when {
+                    result == "NO_PROCESS" -> "Proses aplikasi tidak ditemukan"
+                    result == "FREEZE_FAILED" -> "Freeze gagal; periksa izin root"
+                    verified -> "Freeze terverifikasi"
+                    else -> "Perintah dikirim, tetapi status freeze belum terverifikasi"
                 }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                 showProcessManager()
             }
         }.start()
     }
-
     private fun resumeApp(app: LaunchableApp) {
         Thread {
             runRootCommand("pids=\$(pidof '${app.packageName}'); [ -n \"\$pids\" ] && kill -CONT \$pids")
