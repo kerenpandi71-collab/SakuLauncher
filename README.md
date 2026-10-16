@@ -14,12 +14,14 @@ Shell desktop ringan untuk Android, terinspirasi pola Start/Taskbar Windows, She
 
 ## Virtual Mouse + Keyboard (v0.4)
 
-- Tombol penunjuk ⌖ di dock atau opsi **Virtual Mouse + Keyboard** di Pengaturan membuka panel touchpad mengambang.
-- Gerakan jari memindahkan penunjuk virtual; ketukan mengirim tap dan mode Drag mengirim gesture seret.
-- Tombol keyboard membuka pemilih IME. Aktifkan **Saku Keyboard** pada pengaturan keyboard Android, lalu pilih saat ingin mengetik ke kolom teks yang sedang fokus.
-- Pertama kali, aktifkan layanan **Saku Virtual Controls** di Pengaturan > Aksesibilitas dan izinkan panel overlay.
-- Input memakai Accessibility gesture API. Ini **bukan mouse hardware penuh**: tidak ada hover asli, pointer bisa tidak bekerja pada aplikasi tertentu, dan keyboard berfungsi saat sebuah kolom teks menerima fokus. Layanan tidak membaca teks layar.
-
+- Tombol penunjuk ⌖ di dock atau opsi **Virtual Mouse + Keyboard** di Pengaturan membuka panel trackpad mengambang.
+- Gerak satu jari menggerakkan pointer relatif dengan akselerasi; tap melakukan klik kiri, tombol **Right** mengirim klik kanan, **Drag** menahan/melepas tombol kiri, dan gerak dua jari mengirim scroll.
+- Jalur mouse utama meniru arsitektur input DroidOS: Shizuku UserService memanggil `InputManager.injectInputEvent` untuk mouse hover/move/button/scroll. Jika Shizuku tidak aktif/izin ditolak, tap dan long-press memakai Accessibility sebagai fallback.
+- Keyboard Saku memakai susunan gaya PC: Esc, F1–F12, angka, QWERTY, Shift/Caps, Ctrl, Alt, Win, Fn/simbol, Backspace/Delete, Enter, panah, dan spasi.
+- Untuk pointer mouse asli dan shortcut global, instal/jalankan Shizuku lalu berikan izin kepada Saku saat diminta. Input bridge tidak memerlukan root langsung.
+- Untuk fallback, aktifkan layanan **Saku Virtual Controls** di Pengaturan > Aksesibilitas dan izinkan overlay.
+- Keyboard bekerja sebagai IME pada kolom teks yang fokus; saat Shizuku terhubung, tombol navigasi dan shortcut dapat dikirim sebagai event keyboard global. Kompatibilitas hover/scroll dan shortcut tetap bergantung pada ROM/aplikasi.
+ 
 ## Izin dan batas platform
 
 Launcher, pencarian, pin, dan dock beranda tidak membutuhkan root atau Shizuku. Dock mengambang menggunakan izin Android **Display over other apps** (`SYSTEM_ALERT_WINDOW`) yang diminta hanya saat pengguna mengaktifkannya. Izin dapat dicabut di pengaturan sistem.
