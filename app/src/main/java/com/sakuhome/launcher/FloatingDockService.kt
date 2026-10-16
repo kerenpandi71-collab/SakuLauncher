@@ -140,7 +140,14 @@ class FloatingDockService : Service() {
                         val margin = dp(24)
                         val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
                         try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds).apply {
+                                // Android hides the windowing-mode setter from the public SDK on some builds.
+                                // Try requesting native freeform mode; retain launch bounds as a safe fallback.
+                                try {
+                                    javaClass.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                                        .invoke(this, 5) // WINDOWING_MODE_FREEFORM
+                                } catch (_: Exception) { }
+                            }
                             startActivity(launch, options.toBundle())
                         } catch (_: Exception) {
                             try { startActivity(launch) } catch (_: Exception) {
@@ -158,7 +165,14 @@ class FloatingDockService : Service() {
                         val margin = dp(24)
                         val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
                         try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds).apply {
+                                // Android hides the windowing-mode setter from the public SDK on some builds.
+                                // Try requesting native freeform mode; retain launch bounds as a safe fallback.
+                                try {
+                                    javaClass.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                                        .invoke(this, 5) // WINDOWING_MODE_FREEFORM
+                                } catch (_: Exception) { }
+                            }
                             startActivity(launch, options.toBundle())
                         } catch (_: Exception) {
                             Toast.makeText(this@FloatingDockService, "Android tidak mengizinkan jendela bebas untuk aplikasi ini", Toast.LENGTH_SHORT).show()
