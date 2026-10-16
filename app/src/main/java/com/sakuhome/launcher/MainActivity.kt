@@ -166,6 +166,42 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            val ctrl = event.isCtrlPressed
+            when {
+                event.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && startPanel.visibility == View.VISIBLE -> {
+                    hideStartPanel()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_SPACE -> {
+                    toggleStartPanel()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_COMMA -> {
+                    showSettings()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_F -> {
+                    showStartPanel()
+                    startSearchField.requestFocus()
+                    startSearchField.post {
+                        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                        imm.showSoftInput(startSearchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                    }
+                    return true
+                }
+                event.keyCode == android.view.KeyEvent.KEYCODE_F5 -> {
+                    apps = loadApps()
+                    rebuildPinnedViews()
+                    Toast.makeText(this, "Daftar aplikasi diperbarui", Toast.LENGTH_SHORT).show()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
