@@ -250,7 +250,8 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(48), -1))
         }
         scroll.addView(icons)
-        dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))dock.addView(chipButton("⋯", cardSurface, secondaryText, 16).apply {
+        dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+        dock.addView(chipButton("⋯", cardSurface, secondaryText, 16).apply {
             contentDescription = "Kelola dock"
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(43), -1))
