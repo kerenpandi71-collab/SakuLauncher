@@ -7,7 +7,6 @@ android {
     namespace = "com.sakuhome.launcher"
     compileSdk = 35
 
-    buildFeatures { aidl = true }
 
     defaultConfig {
         applicationId = "com.sakuhome.launcher"
@@ -28,7 +27,4 @@ android {
 }
 
 dependencies {
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
-    implementation("dev.rikka.shizuku:aidl:13.1.5")
 }
