@@ -458,20 +458,29 @@ class MainActivity : Activity() {
     private fun buildStartPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
-            elevation = dp(16).toFloat()
+            setPadding(dp(17), dp(16), dp(17), dp(13))
+            background = if (liquidGlass) glassSurface(30) else rounded(if (isDarkTheme) Color.rgb(24, 31, 47) else Color.rgb(246, 248, 253), 30)
+            elevation = dp(20).toFloat()
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(TextView(this).apply {
-            text = "Start"
-            textSize = 20f
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heading.addView(TextView(this).apply {
+            text = "Launchpad"
+            textSize = 23f
             setTextColor(primaryText)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD))
+            letterSpacing = -0.025f
+        })
+        heading.addView(TextView(this).apply {
+            text = "Semua aplikasi di satu tempat"
+            textSize = 11f
+            setTextColor(secondaryText)
+            setPadding(0, dp(2), 0, 0)
+        })
+        header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
@@ -484,11 +493,12 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(15), 0, dp(15), 0)
-            background = rounded(cardSurface, 18)
+            background = if (liquidGlass) glassSurface(16) else rounded(cardSurface, 16)
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            contentDescription = "Cari aplikasi di menu Start"
+            contentDescription = "Cari aplikasi di Launchpad"
+            compoundDrawablePadding = dp(8)
         }
-        panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(13) })
 
         val filters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1464,8 +1474,8 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 94 else 102))
+                background = if (isStartMenu) ColorDrawable(Color.TRANSPARENT) else if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(110, 45, 61, 84) else Color.argb(135, 250, 252, 255), 19)
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 91 else 102))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
