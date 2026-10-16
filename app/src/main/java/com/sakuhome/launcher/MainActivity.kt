@@ -678,6 +678,30 @@ class MainActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
+    private fun chooseIconSize() {
+        val sizes = intArrayOf(36, 42, 48, 54, 60)
+        val labels = sizes.map { "$it dp" }.toTypedArray()
+        val selected = sizes.indexOf(iconSizeDp).coerceAtLeast(2)
+        AlertDialog.Builder(this).setTitle("Ukuran ikon aplikasi")
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                preferences.edit().putInt(KEY_ICON_SIZE, sizes[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun showWidgetInfo() {
+        AlertDialog.Builder(this).setTitle("Widget Android")
+            .setMessage("Widget interaktif belum aktif di versi ini. Integrasi yang benar membutuhkan AppWidgetHost, pemilih widget Android, izin binding, dan penyimpanan posisi widget di workspace.")
+            .setPositiveButton("Mengerti", null).show()
+    }
+
+    private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable().apply {
+        setColor(if (isDarkTheme) Color.argb(158, 42, 55, 77) else Color.argb(172, 255, 255, 255))
+        cornerRadius = dp(radius).toFloat()
+        setStroke(dp(1), if (isDarkTheme) Color.argb(115, 220, 233, 255) else Color.argb(170, 255, 255, 255))
+    }
+
     private fun showPermissionInfo() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
             .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start, pin aplikasi, dan dock tidak membutuhkan root atau Shizuku. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
@@ -781,13 +805,13 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
+                background = if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 94 else 102))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) 42 else 48), dp(if (isStartMenu) 42 else 48)))
+                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)))
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
@@ -797,10 +821,12 @@ class MainActivity : Activity() {
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(0, dp(5), 0, 0)
+                    visibility = if (hideLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(-1, -2))
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
+            cell.findViewById<TextView>(android.R.id.text1).visibility = if (hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
@@ -819,6 +845,10 @@ class MainActivity : Activity() {
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
+        private const val KEY_HIDE_TASKBAR = "hide_bottom_taskbar"
+        private const val KEY_HIDE_LABELS = "hide_app_labels"
+        private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
+        private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val REQUEST_WALLPAPER = 481
         private const val REQUEST_UNINSTALL = 482
         const val EXTRA_OPEN_START = "com.sakuhome.launcher.OPEN_START"
