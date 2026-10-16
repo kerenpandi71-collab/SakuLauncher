@@ -114,6 +114,48 @@ class MainActivity : Activity() {
         Toast.makeText(this, "Layar baru ditambahkan", Toast.LENGTH_SHORT).show()
     }
 
+    private fun removeCurrentHomePage() {
+        val count = homePageCount()
+        if (count <= 1) {
+            Toast.makeText(this, "Minimal harus ada satu layar utama", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val currentApps = homePackages(homePage)
+        val targetPage = if (homePage > 0) homePage - 1 else 1
+        if (currentApps.isNotEmpty()) {
+            val targetApps = homePackages(targetPage)
+            currentApps.forEach { if (!targetApps.contains(it)) targetApps.add(it) }
+            saveHomePackages(targetApps, targetPage)
+        }
+        for (page in (homePage + 1) until count) saveHomePackages(homePackages(page), page - 1)
+        preferences.edit().remove(homePageKey(count - 1)).putInt(KEY_HOME_PAGE_COUNT, count - 1).apply()
+        showHomePage((homePage - 1).coerceAtLeast(0).coerceAtMost(count - 2))
+        Toast.makeText(this, "Layar dihapus; ikon dipindahkan agar tidak hilang", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showHomeLayoutOptions() {
+        val options = arrayOf(
+            if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
+            "Hapus layar ini",
+            "Tambah layar baru"
+        )
+        AlertDialog.Builder(this).setTitle("Tata letak layar utama").setItems(options) { _, which ->
+            when (which) {
+                0 -> {
+                    preferences.edit().putBoolean(KEY_HIDE_PAGE_CONTROLS, !preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)).apply()
+                    buildScreen()
+                }
+                1 -> AlertDialog.Builder(this)
+                    .setTitle("Hapus layar ${homePage + 1}?")
+                    .setMessage("Ikon di layar ini akan dipindahkan ke layar sebelumnya atau layar terdekat agar tidak hilang.")
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Hapus") { _, _ -> removeCurrentHomePage(); buildScreen() }
+                    .show()
+                2 -> { addHomePage(); buildScreen() }
+            }
+        }.setNegativeButton("Batal", null).show()
+    }
+
     private fun moveHomeApp(app: LaunchableApp, direction: Int) {
         val current = homePackages()
         val index = current.indexOf(app.packageName)
@@ -306,6 +348,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(5), dp(13), dp(5), dp(10))
+            visibility = if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) View.GONE else View.VISIBLE
         }
         pageControls.addView(TextView(this).apply {
             text = "LAYAR UTAMA"
@@ -328,8 +371,16 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(34), dp(30)))
         pageControls.addView(chipButton("+", accent, Color.WHITE, 12).apply {
             contentDescription = "Buat layar utama baru"
-            setOnClickListener { addHomePage() }
+            setOnClickListener { addHomePage(); buildScreen() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(6) })
+        pageControls.addView(chipButton("−", cardSurface, primaryText, 12).apply {
+            contentDescription = "Hapus layar utama ini"
+            setOnClickListener { showHomeLayoutOptions() }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
+        pageControls.addView(chipButton("⋯", cardSurface, primaryText, 12).apply {
+            contentDescription = "Opsi tata letak layar utama"
+            setOnClickListener { showHomeLayoutOptions() }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
         shell.addView(pageControls)
 
         // App search removed from the home screen as requested.
@@ -639,9 +690,10 @@ class MainActivity : Activity() {
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
-            "Buka sebagai jendela",
             "Buka layar penuh",
             homeAction,
+            if (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.contains(app.packageName) == true) "Tampilkan aplikasi" else "Sembunyikan aplikasi",
+            "Opsi tata letak layar utama",
             "Pindah posisi ke kiri",
             "Pindah posisi ke kanan",
             "Pindahkan ke layar lain",
@@ -652,18 +704,25 @@ class MainActivity : Activity() {
         )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
-                0 -> launch(app, asFreeform = true)
-                1 -> launch(app, asFreeform = false)
-                2 -> {
+                0 -> launch(app, asFreeform = false)
+                1 -> {
                     val current = homePackages()
                     if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
                     saveHomePackages(current)
                     pinnedAdapter.notifyDataSetChanged()
                     Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
                 }
-                3 -> moveHomeApp(app, -1)
-                4 -> moveHomeApp(app, 1)
-                5 -> {
+                2 -> {
+                    val hidden = (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
+                    if (hidden.contains(app.packageName)) hidden.remove(app.packageName) else hidden.add(app.packageName)
+                    preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
+                    rebuildPinnedViews()
+                    Toast.makeText(this, if (hidden.contains(app.packageName)) "Aplikasi disembunyikan" else "Aplikasi ditampilkan", Toast.LENGTH_SHORT).show()
+                }
+                3 -> showHomeLayoutOptions()
+                4 -> moveHomeApp(app, -1)
+                5 -> moveHomeApp(app, 1)
+                6 -> {
                     val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
                     if (pages.isEmpty()) {
                         addHomePage()
@@ -675,10 +734,10 @@ class MainActivity : Activity() {
                         }.setNegativeButton("Batal", null).show()
                     }
                 }
-                6 -> togglePinned(app)
-                7 -> openAppInfo(app)
-                8 -> openPlayStore(app)
-                9 -> uninstallApp(app)
+                7 -> togglePinned(app)
+                8 -> openAppInfo(app)
+                9 -> openPlayStore(app)
+                10 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1532,6 +1591,7 @@ class MainActivity : Activity() {
         private const val KEY_HIDE_LABELS = "hide_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_TRANSPARENCY = "dock_transparency"
