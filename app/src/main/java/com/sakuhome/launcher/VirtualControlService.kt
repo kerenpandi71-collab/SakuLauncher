@@ -43,6 +43,7 @@ class VirtualControlService : Service() {
     private var lastRawY = 0f
     private var lastScrollY = 0f
     private var lastMoveAt = 0L
+    private var dragDownTime = 0L
     private lateinit var cursorParams: WindowManager.LayoutParams
 
     override fun onCreate() {
@@ -181,7 +182,7 @@ class VirtualControlService : Service() {
                             if (bridge != null) {
                                 try {
                                     bridge.injectMouse(MotionEvent.ACTION_HOVER_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, if (dragMode) MotionEvent.BUTTON_PRIMARY else 0, now)
-                                    if (dragMode) bridge.injectMouse(MotionEvent.ACTION_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, now)
+                                    if (dragMode) bridge.injectMouse(MotionEvent.ACTION_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, dragDownTime)
                                 } catch (_: Exception) {}
                             }
                             true
@@ -255,14 +256,16 @@ class VirtualControlService : Service() {
         val bridge = SakuInputBridge.shell
         if (!dragMode) {
             dragMode = true
+            dragDownTime = SystemClock.uptimeMillis()
             if (bridge != null) {
-                try { bridge.injectMouse(MotionEvent.ACTION_DOWN, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, SystemClock.uptimeMillis()) } catch (_: Exception) {}
+                try { bridge.injectMouse(MotionEvent.ACTION_DOWN, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, dragDownTime) } catch (_: Exception) {}
             }
         } else {
             dragMode = false
             if (bridge != null) {
-                try { bridge.injectMouse(MotionEvent.ACTION_UP, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, 0, SystemClock.uptimeMillis()) } catch (_: Exception) {}
+                try { bridge.injectMouse(MotionEvent.ACTION_UP, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, 0, if (dragDownTime != 0L) dragDownTime else SystemClock.uptimeMillis()) } catch (_: Exception) {}
             }
+            dragDownTime = 0L
         }
         panel?.let { view ->
             // Rebuild the toolbar label without restarting the input service.
@@ -310,7 +313,7 @@ class VirtualControlService : Service() {
 
     override fun onDestroy() {
         if (dragMode) {
-            try { SakuInputBridge.shell?.injectMouse(MotionEvent.ACTION_UP, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, 0, SystemClock.uptimeMillis()) } catch (_: Exception) {}
+            try { SakuInputBridge.shell?.injectMouse(MotionEvent.ACTION_UP, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, 0, if (dragDownTime != 0L) dragDownTime else SystemClock.uptimeMillis()) } catch (_: Exception) {}
         }
         listOfNotNull(panel, cursor).forEach { try { wm.removeView(it) } catch (_: Exception) { } }
         panel = null
