@@ -514,14 +514,27 @@ class MainActivity : Activity() {
     }
 
     private fun uninstallApp(app: LaunchableApp) {
-        if (app.packageName == packageName) return
+        if (app.packageName == packageName) {
+            Toast.makeText(this, "Saku Launcher tidak dapat mencopot dirinya sendiri saat sedang berjalan", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uninstallIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+            data = Uri.parse("package:${app.packageName}")
+            putExtra(Intent.EXTRA_RETURN_RESULT, true)
+        }
         try {
-            startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}")))
-        } catch (_: Exception) {
-            Toast.makeText(this, "Pemasangan aplikasi ini tidak dapat dihapus dari launcher", Toast.LENGTH_SHORT).show()
+            if (uninstallIntent.resolveActivity(packageManager) != null) {
+                startActivityForResult(uninstallIntent, REQUEST_UNINSTALL)
+            } else {
+                val fallback = Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}"))
+                startActivityForResult(fallback, REQUEST_UNINSTALL)
+            }
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "Installer sistem tidak tersedia untuk mencopot aplikasi", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tidak bisa membuka pencopot aplikasi: ${e.localizedMessage ?: "akses ditolak"}", Toast.LENGTH_LONG).show()
         }
     }
-
     private fun togglePinned(app: LaunchableApp) {
         val current = pinnedPackages()
         if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
@@ -780,6 +793,7 @@ class MainActivity : Activity() {
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val REQUEST_WALLPAPER = 481
+        private const val REQUEST_UNINSTALL = 482
         const val EXTRA_OPEN_START = "com.sakuhome.launcher.OPEN_START"
         const val EXTRA_OPEN_SETTINGS = "com.sakuhome.launcher.OPEN_SETTINGS"
     }
