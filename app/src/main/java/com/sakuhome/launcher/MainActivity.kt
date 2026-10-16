@@ -643,7 +643,8 @@ class MainActivity : Activity() {
             "↺  Reset wallpaper",
             "ⓘ  Tentang & izin",
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
-            "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}"
+            "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
+            "◉  Pengelola proses aplikasi"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -673,6 +674,7 @@ class MainActivity : Activity() {
                     13 -> showPermissionInfo()
                     14 -> chooseHomeGrid()
                     15 -> chooseDrawerGrid()
+                    16 -> showProcessManager()
                 }
             }.setNegativeButton("Selesai", null).show()
     }
@@ -790,6 +792,106 @@ class MainActivity : Activity() {
 
     private fun hiddenPackages(): MutableSet<String> =
         preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    private data class ProcessApp(val app: LaunchableApp, val running: Boolean, val frozen: Boolean)
+
+    /**
+     * Root-assisted process manager. Only user-installed launcher apps are shown,
+     * avoiding accidental actions on Android/SystemUI and other system components.
+     */
+    private fun showProcessManager() {
+        val candidates = apps.filter { app ->
+            try {
+                val info = packageManager.getApplicationInfo(app.packageName, 0)
+                (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+            } catch (_: Exception) { false }
+        }
+        val frozenSet = preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()
+        Thread {
+            val rows = candidates.map { app ->
+                val pid = runRootCommand("pidof '${app.packageName}'").trim()
+                ProcessApp(app, pid.isNotEmpty(), frozenSet.contains(app.packageName))
+            }
+            runOnUiThread {
+                val labels = rows.map { row ->
+                    "${if (row.frozen) "❄ " else if (row.running) "● " else "○ "}${row.app.label}  ·  ${when { row.frozen -> "Dibekukan"; row.running -> "Berjalan"; else -> "Tidak berjalan" }}"
+                }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("Pengelola proses · ${rows.count { it.running }} berjalan")
+                    .setItems(labels) { _, index -> showProcessActions(rows[index]) }
+                    .setPositiveButton("Segarkan") { _, _ -> showProcessManager() }
+                    .setNegativeButton("Tutup", null)
+                    .setMessage("Aplikasi pengguna yang terpasang. Pilih aplikasi untuk menghentikan proses atau membekukan/melanjutkannya. Perlu izin root Magisk.")
+                    .show()
+            }
+        }.start()
+    }
+
+    private fun showProcessActions(row: ProcessApp) {
+        val choices = if (row.frozen) {
+            arrayOf("Lanjutkan aplikasi (unfreeze)", "Hentikan aplikasi", "Buka aplikasi")
+        } else {
+            arrayOf("Hentikan proses (force-stop)", "Freeze proses", "Buka aplikasi")
+        }
+        AlertDialog.Builder(this).setTitle(row.app.label)
+            .setItems(choices) { _, which ->
+                when (which) {
+                    0 -> if (row.frozen) resumeApp(row.app) else stopApp(row.app)
+                    1 -> if (row.frozen) stopApp(row.app) else freezeApp(row.app)
+                    2 -> launch(row.app)
+                }
+            }.setNegativeButton("Kembali") { _, _ -> showProcessManager() }.show()
+    }
+
+    private fun runRootCommand(command: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            output
+        } catch (_: Exception) { "" }
+    }
+
+    private fun stopApp(app: LaunchableApp) {
+        Thread {
+            runRootCommand("am force-stop '${app.packageName}'")
+            runOnUiThread {
+                Toast.makeText(this, "Perintah hentikan dikirim: ${app.label}", Toast.LENGTH_SHORT).show()
+                showProcessManager()
+            }
+        }.start()
+    }
+
+    private fun freezeApp(app: LaunchableApp) {
+        Thread {
+            val result = runRootCommand("pids=\$(pidof '${app.packageName}'); [ -n \"\$pids\" ] && kill -STOP \$pids")
+            runOnUiThread {
+                if (result.isBlank()) {
+                    // pidof/kill often produce no output on success; verify process state after the command.
+                    val frozen = (preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
+                    frozen.add(app.packageName)
+                    preferences.edit().putStringSet(KEY_FROZEN_APPS, frozen).apply()
+                    Toast.makeText(this, "Permintaan freeze dikirim. Jika aplikasi macet, pilih Lanjutkan.", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "Freeze gagal; periksa izin root", Toast.LENGTH_LONG).show()
+                }
+                showProcessManager()
+            }
+        }.start()
+    }
+
+    private fun resumeApp(app: LaunchableApp) {
+        Thread {
+            runRootCommand("pids=\$(pidof '${app.packageName}'); [ -n \"\$pids\" ] && kill -CONT \$pids")
+            runOnUiThread {
+                val frozen = (preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
+                frozen.remove(app.packageName)
+                preferences.edit().putStringSet(KEY_FROZEN_APPS, frozen).apply()
+                Toast.makeText(this, "Permintaan lanjutkan dikirim: ${app.label}", Toast.LENGTH_SHORT).show()
+                showProcessManager()
+            }
+        }.start()
+    }
 
     private fun manageHiddenApps() {
         val hidden = hiddenPackages()
@@ -1152,6 +1254,7 @@ class MainActivity : Activity() {
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
+        private const val KEY_FROZEN_APPS = "frozen_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
         private const val KEY_WIDGET_HEIGHT_PREFIX = "home_widget_height_"
         private const val APP_WIDGET_HOST_ID = 2096
