@@ -903,20 +903,29 @@ class MainActivity : Activity() {
 
     private fun showProcessActions(row: ProcessApp) {
         val choices = if (row.frozen) {
-            arrayOf("Lanjutkan aplikasi (unfreeze)", "Hentikan aplikasi", "Buka aplikasi")
+            arrayOf("Lanjutkan aplikasi", "Hentikan aplikasi", "Buka aplikasi", "Detail teknis")
         } else {
-            arrayOf("Hentikan proses (force-stop)", "Freeze proses", "Buka aplikasi")
+            arrayOf("Freeze proses", "Hentikan aplikasi", "Buka aplikasi", "Detail teknis")
         }
         AlertDialog.Builder(this).setTitle(row.app.label)
             .setItems(choices) { _, which ->
                 when (which) {
-                    0 -> if (row.frozen) resumeApp(row.app) else stopApp(row.app)
-                    1 -> if (row.frozen) stopApp(row.app) else freezeApp(row.app)
+                    0 -> if (row.frozen) resumeApp(row.app) else AlertDialog.Builder(this)
+                        .setTitle("Bekukan aplikasi?")
+                        .setMessage("Aplikasi tidak akan merespons sampai dilanjutkan. Notifikasi dan tugas latar belakang dapat terganggu. Freeze tidak menjamin RAM langsung berkurang.")
+                        .setNegativeButton("Batal", null)
+                        .setPositiveButton("Freeze") { _, _ -> freezeApp(row.app) }.show()
+                    1 -> AlertDialog.Builder(this).setTitle("Hentikan aplikasi?")
+                        .setMessage("Force-stop dapat menghentikan notifikasi dan tugas latar belakang sampai aplikasi dibuka kembali.")
+                        .setNegativeButton("Batal", null)
+                        .setPositiveButton("Hentikan") { _, _ -> stopApp(row.app) }.show()
                     2 -> launch(row.app)
+                    3 -> AlertDialog.Builder(this).setTitle("Detail aplikasi")
+                        .setMessage("Paket: ${row.app.packageName}\nPID: ${row.pid.ifBlank { "—" }}\nStatus: ${if (row.frozen) "dibekukan (SIGSTOP)" else if (row.running) "berjalan" else "tidak berjalan"}")
+                        .setPositiveButton("Tutup", null).show()
                 }
             }.setNegativeButton("Kembali") { _, _ -> showProcessManager() }.show()
     }
-
     private fun runRootCommand(command: String): String {
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
