@@ -1716,12 +1716,12 @@ class MainActivity : Activity() {
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(0, dp(5), 0, 0)
-                    visibility = if (hideLabels) View.GONE else View.VISIBLE
+                    visibility = if (!isStartMenu && hideLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(-1, -2))
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
-            cell.findViewById<TextView>(android.R.id.text1).visibility = if (hideLabels) View.GONE else View.VISIBLE
+            cell.findViewById<TextView>(android.R.id.text1).visibility = if (!isStartMenu && hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
