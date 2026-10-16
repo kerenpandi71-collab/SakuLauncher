@@ -441,12 +441,17 @@ class MainActivity : Activity() {
             }
         }
         var downX = 0f
+        var downY = 0f
         desktopGrid.setOnTouchListener { _, event ->
             when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; false }
+                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
-                    if (kotlin.math.abs(dx) > dp(72)) {
+                    val dy = event.y - downY
+                    if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                        showStartPanel()
+                        true
+                    } else if (kotlin.math.abs(dx) > dp(72)) {
                         val direction = if (dx < 0) -1f else 1f
                         desktopGrid.animate().cancel()
                         desktopGrid.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
@@ -558,32 +563,10 @@ class MainActivity : Activity() {
     private fun buildDock(): View {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(5), dp(8), dp(5))
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(5), dp(10), dp(5))
             background = if (liquidGlass) glassSurface(24) else rounded(dockSurface, 24)
             elevation = dp(14).toFloat()
-        }
-
-        val startButton = TextView(this).apply {
-            text = "⊞"
-            textSize = 29f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(0, 145, 255))
-            background = if (liquidGlass) glassSurface(13) else rounded(cardSurface, 13)
-            contentDescription = "Buka menu Start Windows"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { toggleStartPanel() }
-            setOnLongClickListener {
-                Toast.makeText(this@MainActivity, "Menu Start", Toast.LENGTH_SHORT).show()
-                true
-            }
-        }
-        dock.addView(startButton, LinearLayout.LayoutParams(dp(44), -1))
-
-        val centeredArea = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
         }
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -595,31 +578,17 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(7), 0, dp(7), 0)
         }
-        pinnedApps().take(6).forEachIndexed { index, app ->
+        pinnedApps().take(7).forEachIndexed { index, app ->
             icons.addView(dockIcon(app, index).apply {
                 background = if (liquidGlass) glassSurface(12) else rounded(cardSurface, 12)
                 setPadding(dp(7), dp(6), dp(7), dp(6))
             }, LinearLayout.LayoutParams(dp(iconSizeDp), -1).apply {
-                marginStart = dp(2)
-                marginEnd = dp(2)
+                marginStart = dp(3)
+                marginEnd = dp(3)
             })
         }
         scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
-        centeredArea.addView(scroll, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER))
-        dock.addView(centeredArea, LinearLayout.LayoutParams(0, -1, 1f))
-
-        val trayButton = TextView(this).apply {
-            text = "⋯"
-            textSize = 23f
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-            background = if (liquidGlass) glassSurface(13) else rounded(cardSurface, 13)
-            contentDescription = "Area notifikasi"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { showStartPanel() }
-        }
-        dock.addView(trayButton, LinearLayout.LayoutParams(dp(38), -1))
+        dock.addView(scroll, LinearLayout.LayoutParams(-2, -1))
         return dock
     }
 
