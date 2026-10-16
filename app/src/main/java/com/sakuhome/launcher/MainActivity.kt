@@ -947,9 +947,9 @@ class MainActivity : Activity() {
 
     private fun freezeApp(app: LaunchableApp) {
         Thread {
-            val command = "pids=\\$(pidof '${app.packageName}'); if [ -z \"\\$pids\" ]; then echo NO_PROCESS; else kill -STOP \\$pids && echo FREEZE_SENT || echo FREEZE_FAILED; fi"
+            val command = "pids=\$(pidof '${app.packageName}'); if [ -z \"\$pids\" ]; then echo NO_PROCESS; else kill -STOP \$pids && echo FREEZE_SENT || echo FREEZE_FAILED; fi"
             val result = runRootCommand(command).trim()
-            val verifyCommand = "pids=\\$(pidof '${app.packageName}'); for p in \\$pids; do awk '/^State:/ {print \\$2}' /proc/\\$p/status; done"
+            val verifyCommand = "pids=\$(pidof '${app.packageName}'); for p in \$pids; do awk '/^State:/ {print \$2}' /proc/\$p/status; done"
             val states = runRootCommand(verifyCommand).trim().lines().filter { it.isNotBlank() }
             val verified = states.isNotEmpty() && states.all { it == "T" || it == "t" }
             runOnUiThread {
