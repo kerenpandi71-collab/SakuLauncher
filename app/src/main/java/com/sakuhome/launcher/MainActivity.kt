@@ -65,6 +65,8 @@ class MainActivity : Activity() {
     private var apps: List<LaunchableApp> = emptyList()
     private var searchQuery = ""
     private var showingAllApps = true
+    private var drawerMode = "grid"
+    private lateinit var drawerModeButton: TextView
     private var homePage = 0
     private var homePageLabel: TextView? = null
 
@@ -398,7 +400,7 @@ class MainActivity : Activity() {
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5)
             verticalSpacing = dp(10)
             horizontalSpacing = dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -678,13 +680,13 @@ class MainActivity : Activity() {
         startPanel.visibility = View.VISIBLE
         startPanel.bringToFront()
         startPanel.alpha = 0f
-        startPanel.translationX = dp(42).toFloat()
-        startPanel.scaleX = 0.985f
-        startPanel.scaleY = 0.985f
+        startPanel.translationY = dp(28).toFloat()
+        startPanel.scaleX = 0.97f
+        startPanel.scaleY = 0.97f
         startSearchField.setText("")
         refreshStartPanel()
-        startPanel.animate().alpha(1f).translationX(0f).scaleX(1f).scaleY(1f)
-            .setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(280).setInterpolator(android.view.animation.OvershootInterpolator(0.85f)).start()
     }
 
     private fun hideStartPanel() {
