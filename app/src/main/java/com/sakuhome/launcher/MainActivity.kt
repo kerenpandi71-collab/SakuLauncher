@@ -193,6 +193,42 @@ class MainActivity : Activity() {
         }
         shell.addView(workspaceTitle)
 
+        // Spotlight-style app search, inspired by iPhone home screen.
+        val homeSearch = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(14), 0)
+            background = rounded(if (isDarkTheme) Color.argb(185, 43, 55, 75) else Color.argb(225, 255, 255, 255), 22)
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Cari aplikasi"
+            addView(TextView(this@MainActivity).apply {
+                text = "⌕"
+                textSize = 24f
+                setTextColor(secondaryText)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "Cari aplikasi"
+                textSize = 14f
+                setTextColor(secondaryText)
+                setPadding(dp(8), 0, 0, 0)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(TextView(this@MainActivity).apply {
+                text = "⌘"
+                textSize = 16f
+                setTextColor(secondaryText)
+            })
+            setOnClickListener {
+                showStartPanel()
+                startSearchField.requestFocus()
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.showSoftInput(startSearchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        shell.addView(homeSearch, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            bottomMargin = dp(12)
+        })
+
         desktopGrid = GridView(this).apply {
             numColumns = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4
             verticalSpacing = dp(13)
