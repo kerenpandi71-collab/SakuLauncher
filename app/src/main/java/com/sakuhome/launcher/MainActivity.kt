@@ -395,7 +395,9 @@ class MainActivity : Activity() {
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
             clipToPadding = false
-            setPadding(0, dp(4), 0, dp(4))
+            val iconPosition = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+            val topSpace = when (iconPosition) { "top" -> 4; "bottom" -> 180; else -> 82 }
+            setPadding(0, dp(topSpace), 0, dp(if (iconPosition == "bottom") 4 else 24))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -1009,7 +1011,9 @@ class MainActivity : Activity() {
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "⌘  Control Center Saku",
-            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif"
+            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif",
+            "▦  Jumlah layar utama · ${homePageCount()}",
+            "↕  Posisi ikon · ${homeIconPositionLabel()}"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -1041,6 +1045,8 @@ class MainActivity : Activity() {
                     15 -> chooseDrawerGrid()
                     16 -> showProcessManager()
                     17 -> showControlCenter()
+                    19 -> chooseHomePageCount()
+                    20 -> chooseHomeIconPosition()
                     18 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
                         .setMessage("Opsi root ini mencoba menonaktifkan ekspansi panel Android. Kompatibilitas tergantung ROM. Perintah pemulihan: su -c cmd statusbar enable 0x00010000")
                         .setNegativeButton("Batal", null)
@@ -1121,6 +1127,39 @@ class MainActivity : Activity() {
                     startAdapter.notifyDataSetChanged()
                 }
                 Toast.makeText(this, "Kolom menu aplikasi diperbarui", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "middle")) {
+        "top" -> "Atas"
+        "bottom" -> "Bawah"
+        else -> "Tengah"
+    }
+
+    private fun chooseHomePageCount() {
+        val current = homePageCount()
+        val options = (1..5).map { n -> "$n layar${if (n == current) " · aktif" else ""}" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Jumlah layar utama")
+            .setMessage("Atur berapa halaman yang bisa digeser di layar utama.")
+            .setSingleChoiceItems(options, current - 1) { dialog, which ->
+                val target = which + 1
+                preferences.edit().putInt(KEY_HOME_PAGE_COUNT, target).apply()
+                homePage = homePage.coerceAtMost(target - 1)
+                dialog.dismiss()
+                buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseHomeIconPosition() {
+        val labels = arrayOf("Atas", "Tengah", "Bawah")
+        val values = arrayOf("top", "middle", "bottom")
+        val current = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+        AlertDialog.Builder(this).setTitle("Posisi ikon layar utama")
+            .setMessage("Pilih area penempatan ikon aplikasi. Pengaturan ini mengubah ruang kosong di atas grid.")
+            .setSingleChoiceItems(labels, values.indexOf(current).coerceAtLeast(0)) { dialog, which ->
+                preferences.edit().putString(KEY_HOME_ICON_POSITION, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
             }.setNegativeButton("Batal", null).show()
     }
 
@@ -1754,6 +1793,7 @@ class MainActivity : Activity() {
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
+        private const val KEY_HOME_ICON_POSITION = "home_icon_position"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
