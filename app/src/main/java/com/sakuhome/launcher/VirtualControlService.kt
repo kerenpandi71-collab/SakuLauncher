@@ -455,7 +455,6 @@ class VirtualControlService : Service() {
         layoutParams = LinearLayout.LayoutParams(width, -1).apply { marginStart = dp(4) }
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
         setColor(color)
