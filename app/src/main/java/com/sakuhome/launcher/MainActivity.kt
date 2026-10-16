@@ -579,12 +579,13 @@ class MainActivity : Activity() {
             setPadding(dp(7), 0, dp(7), 0)
         }
         pinnedApps().take(7).forEachIndexed { index, app ->
+            // Ikon menyatu dengan dock: tanpa bubble individual atau sekat di sekelilingnya.
             icons.addView(dockIcon(app, index).apply {
-                background = if (liquidGlass) glassSurface(12) else rounded(cardSurface, 12)
-                setPadding(dp(7), dp(6), dp(7), dp(6))
-            }, LinearLayout.LayoutParams(dp(iconSizeDp), -1).apply {
-                marginStart = dp(3)
-                marginEnd = dp(3)
+                background = ColorDrawable(Color.TRANSPARENT)
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+            }, LinearLayout.LayoutParams(dp(iconSizeDp + 2), -1).apply {
+                marginStart = dp(2)
+                marginEnd = dp(2)
             })
         }
         scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
@@ -960,19 +961,50 @@ class MainActivity : Activity() {
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
             "Mode tampilan · $themeState",
+            "Jumlah layar utama · ${homePageCount()}",
             "Pilih wallpaper",
             "Reset wallpaper",
+            "Jadikan launcher default",
+            "Izin tampil di atas aplikasi",
             "Tentang & izin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> toggleTheme()
-                    1 -> chooseWallpaper()
-                    2 -> resetWallpaper()
-                    3 -> showPermissionInfo()
+                    1 -> chooseHomePageCount()
+                    2 -> chooseWallpaper()
+                    3 -> resetWallpaper()
+                    4 -> openHomeSettings()
+                    5 -> openOverlaySettings()
+                    6 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openHomeSettings() {
+        val intent = Intent(Settings.ACTION_HOME_SETTINGS)
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Buka Pengaturan Android > Aplikasi default > Aplikasi layar utama", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openOverlaySettings() {
+        if (Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Izin tampil di atas aplikasi sudah aktif", Toast.LENGTH_SHORT).show()
+        } else {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Aktifkan izin tampil di atas aplikasi dari Pengaturan Android", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun chooseLauncherOrientation() {
@@ -1551,7 +1583,7 @@ class MainActivity : Activity() {
 
     private fun showPermissionInfo() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
-            .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start, pin aplikasi, dan dock tidak membutuhkan root atau Shizuku. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
+            .setMessage("Saku Launcher memakai peran HOME Android untuk menjadi launcher utama. Jika layar Recent menampilkan wallpaper launcher lama, buka ‘Jadikan launcher default’ lalu pilih Saku Launcher lagi. Izin overlay hanya diperlukan untuk dock mengambang di atas aplikasi lain; izin ini terpisah dari peran HOME. Android tidak menyediakan izin universal untuk mengambil alih seluruh Recent Apps atau mengganti wallpaper sistem. Semua izin dapat ditinjau dan dicabut dari Pengaturan Android.")
             .setPositiveButton("Mengerti", null).show()
     }
 
