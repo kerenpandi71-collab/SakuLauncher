@@ -181,8 +181,11 @@ class VirtualControlService : Service() {
                             val bridge = SakuInputBridge.shell
                             if (bridge != null) {
                                 try {
-                                    bridge.injectMouse(MotionEvent.ACTION_HOVER_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, if (dragMode) MotionEvent.BUTTON_PRIMARY else 0, now)
-                                    if (dragMode) bridge.injectMouse(MotionEvent.ACTION_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, dragDownTime)
+                                    if (dragMode) {
+                                        bridge.injectMouse(MotionEvent.ACTION_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, MotionEvent.BUTTON_PRIMARY, dragDownTime)
+                                    } else {
+                                        bridge.injectMouse(MotionEvent.ACTION_HOVER_MOVE, cursorX, cursorY, 0, InputDevice.SOURCE_MOUSE, 0, now)
+                                    }
                                 } catch (_: Exception) {}
                             }
                             true
