@@ -496,7 +496,6 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             }, LinearLayout.LayoutParams(-2, -1))
         }
-        item("●", "Menu desktop") { showControlCenter() }
         item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showControlCenter() }
         strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
@@ -514,104 +513,9 @@ class MainActivity : Activity() {
         item(if (percent >= 0) "▰ $percent%" else "▰", "Baterai: buka pengaturan") {
             try { startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } catch (_: Exception) { }
         }
-        item("☷", "Buka Control Center gaya iOS") { showControlCenter() }
-        item(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now), "Jam") { showControlCenter() }
+        item(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now), "Jam") { showSettings() }
         return strip
     }
-
-    private fun showControlCenter() {
-        if (!::rootFrame.isInitialized) return
-        val existing = rootFrame.findViewWithTag<View>("saku_control_center")
-        if (existing != null) {
-            rootFrame.removeView(existing)
-            return
-        }
-        val scrim = FrameLayout(this).apply {
-            tag = "saku_control_center"
-            setBackgroundColor(0x55000000)
-            setOnClickListener { rootFrame.removeView(this) }
-        }
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(17), dp(17), dp(17), dp(16))
-            background = if (liquidGlass) glassSurface(28) else rounded(if (isDarkTheme) Color.rgb(28, 34, 48) else Color.rgb(245, 248, 255), 28)
-            elevation = dp(24).toFloat()
-            setOnClickListener { /* keep taps inside the panel */ }
-        }
-        val heading = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        heading.addView(TextView(this).apply {
-            text = "Control Center"
-            textSize = 21f
-            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        heading.addView(chipButton("×", cardSurface, primaryText, 18).apply {
-            setOnClickListener { rootFrame.removeView(scrim) }
-        }, LinearLayout.LayoutParams(dp(36), dp(36)))
-        panel.addView(heading)
-        panel.addView(TextView(this).apply {
-            text = SimpleDateFormat("EEEE, d MMMM • HH:mm", Locale("id", "ID")).format(Date())
-            textSize = 11f
-            setTextColor(secondaryText)
-            setPadding(0, dp(3), 0, dp(13))
-        })
-        val tiles = GridView(this).apply {
-            numColumns = 2
-            horizontalSpacing = dp(9)
-            verticalSpacing = dp(9)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setSelector(ColorDrawable(Color.TRANSPARENT))
-            adapter = object : BaseAdapter() {
-                private val names = arrayOf("Wi-Fi", "Bluetooth", "Mode Fokus", "Layar & Kecerahan", "Baterai", "Pengaturan")
-                override fun getCount() = names.size
-                override fun getItem(position: Int) = names[position]
-                override fun getItemId(position: Int) = position.toLong()
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    val tile = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(dp(13), dp(10), dp(10), dp(10))
-                        background = rounded(if (isDarkTheme) Color.rgb(59, 70, 91) else Color.rgb(222, 231, 246), 20)
-                        addView(TextView(context).apply { id = android.R.id.icon; textSize = 22f; setTextColor(primaryText) })
-                        addView(TextView(context).apply { id = android.R.id.text1; textSize = 12f; setTextColor(primaryText); setPadding(0, dp(5), 0, 0) })
-                    }
-                    val icons = arrayOf("◉", "ᛒ", "☾", "☼", "▰", "⚙")
-                    tile.findViewById<TextView>(android.R.id.icon).text = icons[position]
-                    tile.findViewById<TextView>(android.R.id.text1).text = names[position]
-                    tile.setOnClickListener {
-                        val intent = when (position) {
-                            0 -> Intent(Settings.ACTION_WIFI_SETTINGS)
-                            1 -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                            2 -> Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                            3 -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
-                            4 -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
-                            else -> Intent(Settings.ACTION_SETTINGS)
-                        }
-                        try { startActivity(intent) } catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
-                    }
-                    return tile
-                }
-            }
-        }
-        panel.addView(tiles, LinearLayout.LayoutParams(-1, dp(224)))
-        panel.addView(TextView(this).apply {
-            text = "Kontrol sistem membuka Pengaturan Android agar tetap kompatibel dengan Android 15."
-            textSize = 10f
-            setTextColor(secondaryText)
-            setPadding(dp(2), dp(10), dp(2), 0)
-        })
-        val width = minOf(resources.displayMetrics.widthPixels - dp(24), dp(380))
-        scrim.addView(panel, FrameLayout.LayoutParams(width, -2, Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(12)
-            marginEnd = dp(12)
-        })
-        rootFrame.addView(scrim, FrameLayout.LayoutParams(-1, -1))
-        scrim.bringToFront()
-    }
-
 
     private fun toggleNativeQuickSettings() {
         val disable = !preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)
@@ -1022,7 +926,6 @@ class MainActivity : Activity() {
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
-            "⌘  Control Center Saku",
             "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif",
             "▦  Jumlah layar utama · ${homePageCount()}",
             "↕  Posisi ikon · ${homeIconPositionLabel()}"
