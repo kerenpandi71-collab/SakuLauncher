@@ -65,6 +65,8 @@ class MainActivity : Activity() {
     private var apps: List<LaunchableApp> = emptyList()
     private var searchQuery = ""
     private var showingAllApps = true
+    private var homePage = 0
+    private var homePageLabel: TextView? = null
 
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
     private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
@@ -84,9 +86,54 @@ class MainActivity : Activity() {
             .split('\n').filter { it.isNotBlank() }.toMutableList()
     }
 
-    private fun homePackages(): MutableList<String> {
-        if (!preferences.contains(KEY_HOME_APPS)) return mutableListOf()
-        return preferences.getString(KEY_HOME_APPS, "").orEmpty().split('\n').filter { it.isNotBlank() }.toMutableList()
+    private fun homePageKey(page: Int) = "home_screen_packages_page_$page"
+
+    private fun homePackages(page: Int = homePage): MutableList<String> {
+        if (page == 0 && !preferences.contains(homePageKey(0)) && preferences.contains(KEY_HOME_APPS)) {
+            return preferences.getString(KEY_HOME_APPS, "").orEmpty().split('\n').filter { it.isNotBlank() }.toMutableList()
+        }
+        return preferences.getString(homePageKey(page), "").orEmpty().split('\n').filter { it.isNotBlank() }.toMutableList()
+    }
+
+    private fun saveHomePackages(packages: List<String>, page: Int = homePage) {
+        preferences.edit().putString(homePageKey(page), packages.distinct().joinToString("\n")).remove(KEY_HOME_APPS).apply()
+    }
+
+    private fun homePageCount(): Int = maxOf(1, preferences.getInt(KEY_HOME_PAGE_COUNT, 1))
+
+    private fun showHomePage(page: Int) {
+        homePage = page.coerceIn(0, homePageCount() - 1)
+        if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
+        homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
+    }
+
+    private fun addHomePage() {
+        val next = homePageCount()
+        preferences.edit().putInt(KEY_HOME_PAGE_COUNT, next + 1).apply()
+        showHomePage(next)
+        Toast.makeText(this, "Layar baru ditambahkan", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun moveHomeApp(app: LaunchableApp, direction: Int) {
+        val current = homePackages()
+        val index = current.indexOf(app.packageName)
+        val target = index + direction
+        if (index < 0 || target !in current.indices) return
+        val item = current.removeAt(index)
+        current.add(target, item)
+        saveHomePackages(current)
+        pinnedAdapter.notifyDataSetChanged()
+    }
+
+    private fun moveHomeAppToPage(app: LaunchableApp, page: Int) {
+        val from = homePackages()
+        if (!from.remove(app.packageName)) return
+        saveHomePackages(from)
+        val targetPage = page.coerceIn(0, homePageCount() - 1)
+        val target = homePackages(targetPage)
+        if (!target.contains(app.packageName)) target.add(app.packageName)
+        saveHomePackages(target, targetPage)
+        showHomePage(targetPage)
     }
 
     private fun homeApps(): List<LaunchableApp> {
@@ -219,51 +266,37 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
 
-        val workspaceTitle = TextView(this).apply {
-            text = "LAYAR UTAMA  ·  TAHAN IKON UNTUK MENGELOLA"
+        val pageControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(5), dp(13), dp(5), dp(10))
+        }
+        pageControls.addView(TextView(this).apply {
+            text = "LAYAR UTAMA"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
-            setPadding(dp(5), dp(13), dp(5), dp(10))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        pageControls.addView(chipButton("‹", cardSurface, primaryText, 12).apply {
+            setOnClickListener { showHomePage(homePage - 1) }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)))
+        homePageLabel = TextView(this).apply {
+            text = "${homePage + 1} / ${homePageCount()}"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
         }
-        shell.addView(workspaceTitle)
+        pageControls.addView(homePageLabel, LinearLayout.LayoutParams(dp(54), -2))
+        pageControls.addView(chipButton("›", cardSurface, primaryText, 12).apply {
+            setOnClickListener { showHomePage(homePage + 1) }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)))
+        pageControls.addView(chipButton("+", accent, Color.WHITE, 12).apply {
+            contentDescription = "Buat layar utama baru"
+            setOnClickListener { addHomePage() }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(6) })
+        shell.addView(pageControls)
 
-        // Spotlight-style app search, inspired by iPhone home screen.
-        val homeSearch = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), 0, dp(14), 0)
-            background = rounded(if (isDarkTheme) Color.argb(185, 43, 55, 75) else Color.argb(225, 255, 255, 255), 22)
-            isClickable = true
-            isFocusable = true
-            contentDescription = "Cari aplikasi"
-            addView(TextView(this@MainActivity).apply {
-                text = "⌕"
-                textSize = 24f
-                setTextColor(secondaryText)
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "Cari aplikasi"
-                textSize = 14f
-                setTextColor(secondaryText)
-                setPadding(dp(8), 0, 0, 0)
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(TextView(this@MainActivity).apply {
-                text = "⌘"
-                textSize = 16f
-                setTextColor(secondaryText)
-            })
-            setOnClickListener {
-                showStartPanel()
-                startSearchField.requestFocus()
-                val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-                imm.showSoftInput(startSearchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-            }
-        }
-        shell.addView(homeSearch, LinearLayout.LayoutParams(-1, dp(44)).apply {
-            bottomMargin = dp(12)
-        })
-
+        // App search removed from the home screen as requested.
         widgetStrip = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(2), 0, dp(4))
@@ -281,6 +314,20 @@ class MainActivity : Activity() {
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
+        var downX = 0f
+        desktopGrid.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; false }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val dx = event.x - downX
+                    if (kotlin.math.abs(dx) > dp(72)) {
+                        showHomePage(homePage + if (dx < 0) 1 else -1)
+                        true
+                    } else false
+                }
+                else -> false
+            }
+        }
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
@@ -527,6 +574,9 @@ class MainActivity : Activity() {
             "Buka sebagai jendela",
             "Buka layar penuh",
             homeAction,
+            "Pindah posisi ke kiri",
+            "Pindah posisi ke kanan",
+            "Pindahkan ke layar lain",
             pinAction,
             "Info aplikasi",
             "Buka di Play Store",
@@ -539,14 +589,28 @@ class MainActivity : Activity() {
                 2 -> {
                     val current = homePackages()
                     if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
-                    preferences.edit().putString(KEY_HOME_APPS, current.distinct().joinToString("\n")).apply()
+                    saveHomePackages(current)
                     pinnedAdapter.notifyDataSetChanged()
                     Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
                 }
-                3 -> togglePinned(app)
-                4 -> openAppInfo(app)
-                5 -> openPlayStore(app)
-                6 -> uninstallApp(app)
+                3 -> moveHomeApp(app, -1)
+                4 -> moveHomeApp(app, 1)
+                5 -> {
+                    val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
+                    if (pages.isEmpty()) {
+                        addHomePage()
+                        moveHomeAppToPage(app, homePage)
+                    } else {
+                        AlertDialog.Builder(this).setTitle("Pindahkan ke layar").setItems(pages) { _, selected ->
+                            val target = (0 until homePageCount()).filter { it != homePage }[selected]
+                            moveHomeAppToPage(app, target)
+                        }.setNegativeButton("Batal", null).show()
+                    }
+                }
+                6 -> togglePinned(app)
+                7 -> openAppInfo(app)
+                8 -> openPlayStore(app)
+                9 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1376,6 +1440,7 @@ class MainActivity : Activity() {
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
+        private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
