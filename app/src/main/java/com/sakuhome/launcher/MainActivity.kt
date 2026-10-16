@@ -438,6 +438,8 @@ class MainActivity : Activity() {
     private fun rebuildPinnedViews() {
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
+        // When the bottom taskbar is hidden, there is no dock view to rebuild.
+        if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         // Rebuild only the dock; keep the open Start panel and its scroll position intact.
         val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
         val dockIndex = shell.childCount - 1
