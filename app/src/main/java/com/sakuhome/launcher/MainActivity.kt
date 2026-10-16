@@ -405,17 +405,12 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             clipToPadding = false
             clipChildren = false
-            val iconPosition = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
-            // Compact top spacing leaves more usable room when widgets are present.
-            val topSpace = when (iconPosition) { "top" -> 2; "bottom" -> 112; else -> 40 }
-            setPadding(dp(2), dp(topSpace), dp(2), dp(if (iconPosition == "bottom") 2 else 12))
+            // Fixed compact layout: no configurable vertical icon-position mode.
+            setPadding(dp(2), dp(40), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
-        desktopGrid.setOnLongClickListener {
-            showHomeLayoutOptions()
-            true
-        }
+        desktopGrid.setOnLongClickListener { false }
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
                 android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
@@ -542,15 +537,15 @@ class MainActivity : Activity() {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(7), dp(8), dp(7))
-            background = if (liquidGlass) glassSurface(25) else rounded(dockSurface, 25)
-            elevation = dp(14).toFloat()
+            setPadding(dp(7), dp(5), dp(7), dp(5))
+            background = if (liquidGlass) glassSurface(30) else rounded(dockSurface, 30)
+            elevation = dp(12).toFloat()
         }
         dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
             textSize = 20f
             contentDescription = "Buka menu Start"
             setOnClickListener { toggleStartPanel() }
-        }, LinearLayout.LayoutParams(dp(49), -1))
+        }, LinearLayout.LayoutParams(dp(46), -1))
 
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -561,7 +556,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(5), 0, dp(5), 0)
         }
-        pinnedApps().take(6).forEachIndexed { index, app ->
+        pinnedApps().take(5).forEachIndexed { index, app ->
             icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp), -1))
         }
         scroll.addView(icons)
@@ -572,7 +567,7 @@ class MainActivity : Activity() {
     private fun dockIcon(app: LaunchableApp, index: Int): View = ImageView(this).apply {
         setImageDrawable(app.icon)
         scaleType = ImageView.ScaleType.FIT_CENTER
-        setPadding(dp(8), dp(7), dp(8), dp(7))
+        setPadding(dp(7), dp(6), dp(7), dp(6))
         contentDescription = app.label
         isClickable = true
         isFocusable = true
@@ -919,7 +914,6 @@ class MainActivity : Activity() {
             "✧  Liquid Glass · $glassState",
             "◐  Transparansi · $transparency%",
             "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
-            "＋  Tambahkan widget",
             "⌘  Dock mengambang · $overlayState",
             "▤  Kelola aplikasi dock · $pinnedState",
             "☾  Mode tampilan · $themeState",
@@ -930,9 +924,7 @@ class MainActivity : Activity() {
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
-            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif",
-            "▦  Jumlah layar utama · ${homePageCount()}",
-            "↕  Posisi ikon · ${homeIconPositionLabel()}"
+            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -952,20 +944,17 @@ class MainActivity : Activity() {
                     }
                     4 -> chooseTransparency()
                     5 -> manageHiddenApps()
-                    6 -> pickWidget()
-                    7 -> toggleOverlay()
-                    8 -> managePins()
-                    9 -> toggleTheme()
-                    10 -> chooseAccent()
-                    11 -> chooseWallpaper()
-                    12 -> resetWallpaper()
-                    13 -> showPermissionInfo()
-                    14 -> chooseHomeGrid()
-                    15 -> chooseDrawerGrid()
-                    16 -> showProcessManager()
-                    19 -> chooseHomePageCount()
-                    20 -> chooseHomeIconPosition()
-                    18 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
+                    6 -> toggleOverlay()
+                    7 -> managePins()
+                    8 -> toggleTheme()
+                    9 -> chooseAccent()
+                    10 -> chooseWallpaper()
+                    11 -> resetWallpaper()
+                    12 -> showPermissionInfo()
+                    13 -> chooseHomeGrid()
+                    14 -> chooseDrawerGrid()
+                    15 -> showProcessManager()
+                    16 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
                         .setMessage("Opsi root ini mencoba menonaktifkan ekspansi panel Android. Kompatibilitas tergantung ROM. Perintah pemulihan: su -c cmd statusbar enable 0x00010000")
                         .setNegativeButton("Batal", null)
                         .setPositiveButton(if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Aktifkan kembali" else "Nonaktifkan") { _, _ -> toggleNativeQuickSettings() }
