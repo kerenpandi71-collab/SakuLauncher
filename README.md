@@ -1,35 +1,29 @@
-# Saku Launcher
+# Saku Dock
 
-Launcher Android native yang ringan, dengan tata letak lapang dan sudut lembut yang terinspirasi pendekatan ergonomis One UI—tanpa menyalin aset atau merek Samsung.
+Shell desktop ringan untuk Android, terinspirasi pola Start/Taskbar Windows, Shelf ChromeOS, dan proyek Taskbar/Smart Dock. Tidak menyalin aset atau kode proyek tersebut.
 
-## Yang sudah ada
+## Fitur v0.3
 
-- Dapat dipilih sebagai aplikasi **Home** default Android.
-- Jam dan tanggal berbahasa Indonesia.
-- Dua mode: **Normal** (beranda ringkas) dan **Desktop** dengan taskbar, pintasan favorit, serta grid aplikasi.
-- Pencarian aplikasi terpasang dan grid ikon aplikasi.
-- Personalisasi jumlah kolom (3–6), ukuran ikon, label aplikasi, tema terang/gelap, dan warna aksen.
-- Tekan lama ikon untuk menambah atau menghapus favorit; favorit tampil di Desktop/taskbar.
-- Opsi meminta Android membuka aplikasi dengan batas jendela bebas saat mode Desktop aktif.
-- Implementasi native Kotlin + Android Views, tanpa framework UI tambahan.
-- Kueri paket dibatasi pada aplikasi yang memang mendaftarkan kategori launcher.
+- Workspace beranda yang terpisah dari **Start drawer** pencarian/daftar aplikasi.
+- Dock bawah dengan Start dan aplikasi yang disematkan; tahan ikon dock untuk menggeser atau melepasnya.
+- Tahan ikon di workspace/Start untuk menyematkan atau melepas aplikasi. Urutan favorit disimpan lokal.
+- **Dock mengambang opsional** di atas aplikasi lain. Pengguna memberi izin overlay dari Settings Android; service menampilkan notifikasi permanen yang punya kontrol mematikan dock.
+- Tahan ikon aplikasi untuk membuka menu konteks: buka normal, **coba buka sebagai jendela**, atau sematkan/lepas dari dock.
+- Tema desktop gelap dan layout responsif untuk portrait/landscape.
 
-## Jendela bebas dan mode Desktop
+## Izin dan batas platform
 
-Saku mengirim `launchBounds` Android saat opsi **Jendela bebas** aktif di mode Desktop. Jendela mengambang sesungguhnya dikendalikan sistem: perlu perangkat/ROM yang mendukung freeform multi-window atau lingkungan desktop seperti Samsung DeX. Jika sistem tidak mendukungnya, aplikasi tujuan tetap terbuka dengan mode jendela standarnya. Mode Desktop Saku tetap menampilkan taskbar dan pintasan walau dijalankan di ponsel biasa.
+Launcher, pencarian, pin, dan dock beranda tidak membutuhkan root atau Shizuku. Dock mengambang menggunakan izin Android **Display over other apps** (`SYSTEM_ALERT_WINDOW`) yang diminta hanya saat pengguna mengaktifkannya. Izin dapat dicabut di pengaturan sistem.
 
-## Persyaratan dan build
+Mode **coba buka sebagai jendela** mengirim batas jendela melalui API Android publik. Jendela aplikasi freeform tetap dikendalikan Android dan implementasi OEM; permintaan ini dapat diabaikan dan Saku bukan window manager. Shizuku/root tidak diminta untuk dock atau aksi jendela ini. Izin istimewa baru layak ditambahkan bila ada tindakan sistem konkret yang memerlukannya, dengan persetujuan terpisah.
 
-- Android SDK Platform 35 (build CI memasangnya otomatis).
-- JDK 17.
-- Gradle Wrapper.
+## Build
+
+- Android SDK Platform 35
+- JDK 17
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-APK debug akan berada di `app/build/outputs/apk/debug/app-debug.apk`. Instal di perangkat uji, lalu pilih **Saku Launcher** sebagai aplikasi Home untuk mencobanya.
-
-## Status
-
-Versi `0.2.0`. Widget Android, folder, icon pack, gesture khusus, dan pengaturan dock lanjutan belum termasuk.
+APK debug: `app/build/outputs/apk/debug/app-debug.apk`. Build CI otomatis berjalan pada push ke `main`.
