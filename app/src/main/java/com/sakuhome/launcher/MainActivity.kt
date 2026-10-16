@@ -472,14 +472,54 @@ class MainActivity : Activity() {
     private fun showAppMenu(app: LaunchableApp) {
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
-        val options = arrayOf("Buka sebagai jendela (default)", "Buka layar penuh", pinAction)
+        val options = arrayOf(
+            "Buka sebagai jendela",
+            "Buka layar penuh",
+            pinAction,
+            "Info aplikasi",
+            "Buka di Play Store",
+            "Copot pemasangan"
+        )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
                 0 -> launch(app, asFreeform = true)
                 1 -> launch(app, asFreeform = false)
                 2 -> togglePinned(app)
+                3 -> openAppInfo(app)
+                4 -> openPlayStore(app)
+                5 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun openAppInfo(app: LaunchableApp) {
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.packageName}")))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Info aplikasi tidak tersedia", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openPlayStore(app: LaunchableApp) {
+        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${app.packageName}"))
+        try {
+            startActivity(market)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${app.packageName}")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Play Store tidak tersedia", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun uninstallApp(app: LaunchableApp) {
+        if (app.packageName == packageName) return
+        try {
+            startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}")))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Pemasangan aplikasi ini tidak dapat dihapus dari launcher", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun togglePinned(app: LaunchableApp) {
