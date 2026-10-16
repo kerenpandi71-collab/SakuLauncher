@@ -1777,24 +1777,39 @@ class MainActivity : Activity() {
             cell.setOnLongClickListener {
                 if (!isStartMenu && homePackages().contains(app.packageName)) {
                     val current = homePackages().toMutableList()
-                    val choices = arrayOf("Pindahkan ke awal layar", "Pindahkan ke akhir layar", "Kelola aplikasi")
-                    AlertDialog.Builder(this@MainActivity).setTitle(app.label)
+                    val choices = arrayOf("⇧  Pindahkan ke atas", "↕  Pindahkan ke tengah", "⇩  Pindahkan ke bawah", "⇤  Pindahkan ke awal layar", "⇥  Pindahkan ke akhir layar", "↗  Pindahkan ke layar lain", "⚙  Kelola aplikasi")
+                    AlertDialog.Builder(this@MainActivity).setTitle("Atur posisi · ${app.label}")
                         .setItems(choices) { _, which ->
                             when (which) {
-                                0, 1 -> {
+                                0, 1, 2 -> {
                                     current.remove(app.packageName)
-                                    if (which == 0) current.add(0, app.packageName) else current.add(app.packageName)
+                                    val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, 4).coerceAtLeast(1)
+                                    val target = when (which) { 0 -> 0; 1 -> (current.size / 2 / columns) * columns; else -> current.size }
+                                    current.add(target.coerceIn(0, current.size), app.packageName)
+                                    saveHomePackages(current)
+                                    pinnedAdapter.notifyDataSetChanged()
+                                    Toast.makeText(this@MainActivity, "Posisi ikon disimpan", Toast.LENGTH_SHORT).show()
+                                }
+                                3, 4 -> {
+                                    current.remove(app.packageName)
+                                    if (which == 3) current.add(0, app.packageName) else current.add(app.packageName)
                                     saveHomePackages(current)
                                     pinnedAdapter.notifyDataSetChanged()
                                 }
-                                2 -> showAppMenu(app)
+                                5 -> {
+                                    if (homePageCount() <= 1) Toast.makeText(this@MainActivity, "Tambah layar dulu lewat tombol ⋯", Toast.LENGTH_SHORT).show()
+                                    else {
+                                        val pages = (0 until homePageCount()).map { "Layar ${it + 1}" }.toTypedArray()
+                                        AlertDialog.Builder(this@MainActivity).setTitle("Pindahkan ke layar")
+                                            .setItems(pages) { _, page -> moveHomeAppToPage(app, page); buildScreen() }
+                                            .setNegativeButton("Batal", null).show()
+                                    }
+                                }
+                                6 -> showAppMenu(app)
                             }
                         }.setNegativeButton("Batal", null).show()
                     true
-                } else {
-                    showAppMenu(app)
-                    true
-                }
+                } else { showAppMenu(app); true }
             }
             return cell
         }
