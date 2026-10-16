@@ -601,6 +601,22 @@ class MainActivity : Activity() {
             letterSpacing = -0.02f
         })
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
+        drawerMode = preferences.getString("drawer_mode", "grid") ?: "grid"
+        drawerModeButton = chipButton(if (drawerMode == "list") "▦" else "☷", cardSurface, primaryText, 15).apply {
+            textSize = 18f
+            contentDescription = "Ubah tampilan aplikasi"
+            setOnClickListener {
+                drawerMode = if (drawerMode == "grid") "list" else "grid"
+                preferences.edit().putString("drawer_mode", drawerMode).apply()
+                if (::startGrid.isInitialized) {
+                    startGrid.numColumns = if (drawerMode == "list") 1 else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, 4)
+                    startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
+                    startAdapter.notifyDataSetChanged()
+                }
+                drawerModeButton.text = if (drawerMode == "list") "▦" else "☷"
+            }
+        }
+        header.addView(drawerModeButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(6) })
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
@@ -644,9 +660,10 @@ class MainActivity : Activity() {
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
-            verticalSpacing = dp(5)
-            horizontalSpacing = dp(4)
+            numColumns = if (drawerMode == "list") 1 else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
+            verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
+            horizontalSpacing = dp(8)
+            setPadding(dp(2), dp(4), dp(2), dp(8))
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
@@ -1674,25 +1691,28 @@ class MainActivity : Activity() {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(2), dp(4), dp(2), dp(4))
+                orientation = if (isStartMenu && drawerMode == "list") LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                gravity = if (isStartMenu && drawerMode == "list") Gravity.CENTER_VERTICAL else Gravity.CENTER
+                setPadding(dp(if (isStartMenu && drawerMode == "list") 10 else 2), dp(4), dp(6), dp(4))
                 // Native macOS/iOS-inspired icon layout: no surrounding bubble, card, or shadow.
                 background = ColorDrawable(Color.TRANSPARENT)
                 elevation = 0f
                 stateListAnimator = null
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 82 else 92))
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu && drawerMode == "list") 64 else if (isStartMenu) 90 else 92))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)))
+                }, LinearLayout.LayoutParams(dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)).apply {
+                    if (isStartMenu && drawerMode == "list") marginEnd = dp(14)
+                })
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
                     setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
-                    gravity = Gravity.CENTER
+                    gravity = if (isStartMenu && drawerMode == "list") Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+                    textSize = if (isStartMenu && drawerMode == "list") 13f else 10.5f
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(0, dp(5), 0, 0)
