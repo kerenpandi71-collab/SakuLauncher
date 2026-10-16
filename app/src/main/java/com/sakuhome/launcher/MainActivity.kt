@@ -806,7 +806,7 @@ class MainActivity : Activity() {
         val frozenSet = preferences.getStringSet(KEY_FROZEN_APPS, emptySet()) ?: emptySet()
         Thread {
             val rows = candidates.map { app ->
-                val pid = runRootCommand("pidof '\${app.packageName}'").trim()
+                val pid = runRootCommand("pidof '${app.packageName}'").trim()
                 ProcessApp(app, pid.isNotEmpty(), frozenSet.contains(app.packageName), pid)
             }.sortedWith(compareByDescending<ProcessApp> { it.running }.thenBy { it.app.label.lowercase(Locale.getDefault()) })
             runOnUiThread {
@@ -817,7 +817,7 @@ class MainActivity : Activity() {
                     setBackgroundColor(backgroundTop)
                 }
                 panel.addView(TextView(this).apply {
-                    text = "● \${rows.count { it.running }} berjalan   ·   ❄ \${rows.count { it.frozen }} dibekukan"
+                    text = "● ${rows.count { it.running }} berjalan   ·   ❄ ${rows.count { it.frozen }} dibekukan"
                     textSize = 14f
                     setTextColor(accent)
                     setPadding(0, 0, 0, dp(10))
@@ -860,7 +860,7 @@ class MainActivity : Activity() {
                         ellipsize = android.text.TextUtils.TruncateAt.END
                     })
                     details.addView(TextView(this).apply {
-                        text = "\${if (row.frozen) "❄ Dibekukan" else if (row.running) "● Berjalan" else "○ Tidak berjalan"}  ·  PID \${row.pid.ifBlank { "—" }}"
+                        text = "${if (row.frozen) "❄ Dibekukan" else if (row.running) "● Berjalan" else "○ Tidak berjalan"}  ·  PID ${row.pid.ifBlank { "—" }}"
                         textSize = 11f
                         setTextColor(if (row.running) accent else secondaryText)
                         maxLines = 2
