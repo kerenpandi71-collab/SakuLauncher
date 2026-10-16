@@ -21,6 +21,13 @@ class VirtualMouseAccessibilityService : AccessibilityService() {
         ).build(), null, null)
     }
 
+    fun longPressAt(x: Float, y: Float) {
+        val path = Path().apply { moveTo(x, y); lineTo(x + 0.1f, y + 0.1f) }
+        dispatchGesture(GestureDescription.Builder().addStroke(
+            GestureDescription.StrokeDescription(path, 0, 650)
+        ).build(), null, null)
+    }
+
     fun swipe(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long = 240L) {
         val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
         dispatchGesture(GestureDescription.Builder().addStroke(
