@@ -135,23 +135,30 @@ class MainActivity : Activity() {
 
     private fun showHomeLayoutOptions() {
         val options = arrayOf(
+            "＋  Tambah layar utama",
+            "－  Kurangi layar utama",
+            "↕  Posisi ikon: ${homeIconPositionLabel()}",
             if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
-            "Hapus layar ini",
-            "Tambah layar baru"
+            "Hapus layar ini"
         )
         AlertDialog.Builder(this).setTitle("Tata letak layar utama").setItems(options) { _, which ->
             when (which) {
-                0 -> {
+                0 -> { addHomePage(); buildScreen() }
+                1 -> {
+                    if (homePageCount() <= 1) Toast.makeText(this, "Minimal satu layar utama", Toast.LENGTH_SHORT).show()
+                    else { removeCurrentHomePage(); buildScreen() }
+                }
+                2 -> chooseHomeIconPosition()
+                3 -> {
                     preferences.edit().putBoolean(KEY_HIDE_PAGE_CONTROLS, !preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)).apply()
                     buildScreen()
                 }
-                1 -> AlertDialog.Builder(this)
+                4 -> AlertDialog.Builder(this)
                     .setTitle("Hapus layar ${homePage + 1}?")
                     .setMessage("Ikon di layar ini akan dipindahkan ke layar sebelumnya atau layar terdekat agar tidak hilang.")
                     .setNegativeButton("Batal", null)
                     .setPositiveButton("Hapus") { _, _ -> removeCurrentHomePage(); buildScreen() }
                     .show()
-                2 -> { addHomePage(); buildScreen() }
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -438,7 +445,12 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
                     if (kotlin.math.abs(dx) > dp(72)) {
+                        val direction = if (dx < 0) -1f else 1f
+                        desktopGrid.animate().cancel()
+                        desktopGrid.translationX = direction * dp(34).toFloat()
+                        desktopGrid.alpha = 0.72f
                         showHomePage(homePage + if (dx < 0) 1 else -1)
+                        desktopGrid.animate().translationX(0f).alpha(1f).setDuration(190L).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
                         true
                     } else false
                 }
