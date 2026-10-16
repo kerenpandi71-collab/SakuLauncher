@@ -702,7 +702,7 @@ class MainActivity : Activity() {
         shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
+    private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
