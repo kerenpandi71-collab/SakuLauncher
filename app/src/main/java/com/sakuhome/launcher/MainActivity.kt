@@ -826,48 +826,124 @@ class MainActivity : Activity() {
 
     private fun addWidgetView(id: Int, info: AppWidgetProviderInfo, persist: Boolean = true) {
         if (!::widgetStrip.isInitialized) return
-        val view = appWidgetHost.createView(this, id, info)
-        view.setAppWidget(id, info)
+        if ((0 until widgetStrip.childCount).any { (widgetStrip.getChildAt(it).tag as? Int) == id }) return
+
         val sizeKey = KEY_WIDGET_HEIGHT_PREFIX + id
-        val heightDp = preferences.getInt(sizeKey, 150).coerceIn(90, 280)
-        view.tag = id
-        view.setOnLongClickListener {
-            val choices = arrayOf("Perkecil widget", "Perbesar widget", "Pindahkan ke atas", "Pindahkan ke bawah", "Hapus widget")
-            AlertDialog.Builder(this).setTitle(info.loadLabel(packageManager))
-                .setItems(choices) { _, selected ->
+        var heightDp = preferences.getInt(sizeKey, 150).coerceIn(90, 280)
+        val widgetView = appWidgetHost.createView(this, id, info).apply {
+            setAppWidget(id, info)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            tag = id
+            background = glassSurface(16)
+            setPadding(dp(8), dp(6), dp(8), dp(8))
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = TextView(this).apply {
+            text = info.loadLabel(packageManager)
+            textSize = 12f
+            setTextColor(secondaryText)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        controls.addView(title, LinearLayout.LayoutParams(0, dp(36), 1f))
+
+        fun control(label: String, description: String, action: () -> Unit) {
+            controls.addView(TextView(this).apply {
+                text = label
+                contentDescription = description
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(primaryText)
+                background = glassSurface(10)
+                setPadding(dp(10), 0, dp(10), 0)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(-2, dp(34)).apply {
+                marginStart = dp(4)
+            })
+        }
+
+        fun resizeWidget(delta: Int) {
+            heightDp = (heightDp + delta).coerceIn(90, 280)
+            preferences.edit().putInt(sizeKey, heightDp).apply()
+            widgetView.layoutParams = LinearLayout.LayoutParams(-1, dp(heightDp))
+            widgetView.requestLayout()
+        }
+
+        control("−", "Perkecil widget") { resizeWidget(-40) }
+        control("+", "Perbesar widget") { resizeWidget(40) }
+        control("↑", "Pindahkan widget ke atas") {
+            val from = widgetStrip.indexOfChild(card)
+            if (from > 0) {
+                widgetStrip.removeView(card)
+                widgetStrip.addView(card, from - 1)
+                saveWidgetOrder()
+            }
+        }
+        control("↓", "Pindahkan widget ke bawah") {
+            val from = widgetStrip.indexOfChild(card)
+            if (from >= 0 && from < widgetStrip.childCount - 1) {
+                widgetStrip.removeView(card)
+                widgetStrip.addView(card, from + 1)
+                saveWidgetOrder()
+            }
+        }
+        control("×", "Hapus widget") {
+            widgetStrip.removeView(card)
+            appWidgetHost.deleteAppWidgetId(id)
+            preferences.edit().remove(sizeKey).apply()
+            saveWidgetOrder()
+            Toast.makeText(this, "Widget dihapus", Toast.LENGTH_SHORT).show()
+        }
+
+        card.addView(controls, LinearLayout.LayoutParams(-1, -2))
+        card.addView(widgetView, LinearLayout.LayoutParams(-1, dp(heightDp)))
+        card.setOnLongClickListener {
+            AlertDialog.Builder(this)
+                .setTitle(info.loadLabel(packageManager))
+                .setItems(arrayOf("Perkecil widget", "Perbesar widget", "Pindahkan ke atas", "Pindahkan ke bawah", "Hapus widget")) { _, selected ->
                     when (selected) {
-                        0, 1 -> {
-                            val currentHeight = preferences.getInt(sizeKey, 150).coerceIn(90, 280)
-                            val nextHeight = (currentHeight + if (selected == 1) 40 else -40).coerceIn(90, 280)
-                            preferences.edit().putInt(sizeKey, nextHeight).apply()
-                            view.layoutParams = LinearLayout.LayoutParams(-1, dp(nextHeight)).apply { bottomMargin = dp(8) }
+                        0 -> resizeWidget(-40)
+                        1 -> resizeWidget(40)
+                        2 -> {
+                            val from = widgetStrip.indexOfChild(card)
+                            if (from > 0) { widgetStrip.removeView(card); widgetStrip.addView(card, from - 1); saveWidgetOrder() }
                         }
-                        2, 3 -> {
-                            val from = widgetStrip.indexOfChild(view)
-                            val to = from + if (selected == 2) -1 else 1
-                            if (to in 0 until widgetStrip.childCount) {
-                                widgetStrip.removeView(view)
-                                widgetStrip.addView(view, to)
-                                val ids = (0 until widgetStrip.childCount).mapNotNull { widgetStrip.getChildAt(it).tag as? Int }
-                                preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
-                            }
+                        3 -> {
+                            val from = widgetStrip.indexOfChild(card)
+                            if (from >= 0 && from < widgetStrip.childCount - 1) { widgetStrip.removeView(card); widgetStrip.addView(card, from + 1); saveWidgetOrder() }
                         }
                         4 -> {
-                            widgetStrip.removeView(view)
+                            widgetStrip.removeView(card)
                             appWidgetHost.deleteAppWidgetId(id)
-                            val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() && it != id.toString() }
-                            preferences.edit().remove(sizeKey).putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+                            preferences.edit().remove(sizeKey).apply()
+                            saveWidgetOrder()
                         }
                     }
                 }.setNegativeButton("Batal", null).show()
             true
         }
-        widgetStrip.addView(view, LinearLayout.LayoutParams(-1, dp(heightDp)).apply { bottomMargin = dp(8) })
+
+        widgetStrip.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         if (persist) {
             val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() }.toMutableList()
             if (!ids.contains(id.toString())) ids.add(id.toString())
             preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
         }
+    }
+
+    private fun saveWidgetOrder() {
+        if (!::widgetStrip.isInitialized) return
+        val ids = (0 until widgetStrip.childCount).mapNotNull { widgetStrip.getChildAt(it).tag as? Int }
+        preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
     }
 
     private fun showPermissionInfo() {
