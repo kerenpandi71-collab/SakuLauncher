@@ -391,20 +391,24 @@ class MainActivity : Activity() {
         // App search removed from the home screen as requested.
         widgetStrip = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(2), 0, dp(4))
+            setPadding(0, dp(2), 0, dp(2))
+            clipToPadding = false
+            clipChildren = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
             numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
-            verticalSpacing = dp(13)
-            horizontalSpacing = dp(9)
+            verticalSpacing = dp(10)
+            horizontalSpacing = dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
             clipToPadding = false
+            clipChildren = false
             val iconPosition = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
-            val topSpace = when (iconPosition) { "top" -> 4; "bottom" -> 180; else -> 82 }
-            setPadding(0, dp(topSpace), 0, dp(if (iconPosition == "bottom") 4 else 24))
+            // Compact top spacing leaves more usable room when widgets are present.
+            val topSpace = when (iconPosition) { "top" -> 2; "bottom" -> 112; else -> 40 }
+            setPadding(dp(2), dp(topSpace), dp(2), dp(if (iconPosition == "bottom") 2 else 12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
