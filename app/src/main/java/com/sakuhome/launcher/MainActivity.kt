@@ -84,6 +84,17 @@ class MainActivity : Activity() {
             .split('\n').filter { it.isNotBlank() }.toMutableList()
     }
 
+    private fun homePackages(): MutableList<String> {
+        if (!preferences.contains(KEY_HOME_APPS)) return mutableListOf()
+        return preferences.getString(KEY_HOME_APPS, "").orEmpty().split('\n').filter { it.isNotBlank() }.toMutableList()
+    }
+
+    private fun homeApps(): List<LaunchableApp> {
+        val byPackage = apps.associateBy { it.packageName }
+        val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+        return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
+    }
+
     private fun pinnedApps(): List<LaunchableApp> {
         val byPackage = apps.associateBy { it.packageName }
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
@@ -209,7 +220,7 @@ class MainActivity : Activity() {
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
 
         val workspaceTitle = TextView(this).apply {
-            text = "WORKSPACE  /  APLIKASI FAVORIT"
+            text = "LAYAR UTAMA  ·  TAHAN IKON UNTUK MENGELOLA"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
@@ -508,14 +519,15 @@ class MainActivity : Activity() {
     }
 
     private fun showAppMenu(app: LaunchableApp) {
+        val isHome = homePackages().contains(app.packageName)
+        val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
             "Buka sebagai jendela",
             "Buka layar penuh",
+            homeAction,
             pinAction,
-            "Pindah ke kiri di dock",
-            "Pindah ke kanan di dock",
             "Info aplikasi",
             "Buka di Play Store",
             "Copot pemasangan"
@@ -524,12 +536,17 @@ class MainActivity : Activity() {
             when (which) {
                 0 -> launch(app, asFreeform = true)
                 1 -> launch(app, asFreeform = false)
-                2 -> togglePinned(app)
-                3 -> movePinnedApp(app, -1)
-                4 -> movePinnedApp(app, 1)
-                5 -> openAppInfo(app)
-                6 -> openPlayStore(app)
-                7 -> uninstallApp(app)
+                2 -> {
+                    val current = homePackages()
+                    if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
+                    preferences.edit().putString(KEY_HOME_APPS, current.distinct().joinToString("\n")).apply()
+                    pinnedAdapter.notifyDataSetChanged()
+                    Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
+                }
+                3 -> togglePinned(app)
+                4 -> openAppInfo(app)
+                5 -> openPlayStore(app)
+                6 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1305,7 +1322,7 @@ class MainActivity : Activity() {
         }
 
         private fun refreshItems() {
-            items = if (isStartMenu) visibleApps(true) else pinnedApps()
+            items = if (isStartMenu) visibleApps(true) else homeApps()
         }
 
         override fun notifyDataSetChanged() {
@@ -1358,6 +1375,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
+        private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
