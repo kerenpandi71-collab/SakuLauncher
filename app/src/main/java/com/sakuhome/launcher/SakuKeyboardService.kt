@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.KeyCharacterMap
+import android.view.InputDevice
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -196,10 +198,10 @@ class SakuKeyboardService : InputMethodService() {
         val ic: InputConnection = currentInputConnection ?: return
         val downTime = android.os.SystemClock.uptimeMillis()
         ic.sendKeyEvent(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, code, 0, meta,
-            KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
+            KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD))
         val upTime = android.os.SystemClock.uptimeMillis()
         ic.sendKeyEvent(KeyEvent(downTime, upTime, KeyEvent.ACTION_UP, code, 0, meta,
-            KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
+            KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD))
     }
 
     private fun clearOneShotModifiers() {
