@@ -451,7 +451,6 @@ class MainActivity : Activity() {
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val base = (if (isStartMenu && !showingAllApps) pinnedApps() else apps).filterNot { hidden.contains(it.packageName) }
         // Keep Start tidy: reveal apps only after the user types a query.
-        if (isStartMenu && searchQuery.isBlank()) return emptyList()
         return if (searchQuery.isBlank()) base else base.filter { it.label.contains(searchQuery, ignoreCase = true) }
     }
 
