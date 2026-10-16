@@ -843,7 +843,7 @@ class MainActivity : Activity() {
                     setTextColor(primaryText)
                 })
                 memoryCard.addView(TextView(this).apply {
-                    text = "${usedRamMb / 1024.0.let { String.format(Locale.getDefault(), "%.1f", it) }} GB digunakan dari ${totalRamMb / 1024.0.let { String.format(Locale.getDefault(), "%.1f", it) }} GB"
+                    text = String.format(Locale.getDefault(), "%.1f GB digunakan dari %.1f GB", usedRamMb / 1024.0, totalRamMb / 1024.0)
                     textSize = 12f
                     setTextColor(secondaryText)
                     setPadding(0, dp(4), 0, dp(8))
