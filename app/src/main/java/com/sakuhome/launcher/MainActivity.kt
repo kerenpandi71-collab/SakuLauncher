@@ -406,7 +406,7 @@ class MainActivity : Activity() {
         shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(62)).apply { topMargin = dp(7) })
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
+    private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
@@ -438,11 +438,11 @@ class MainActivity : Activity() {
     private fun showAppMenu(app: LaunchableApp) {
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
-        val options = arrayOf("Buka aplikasi", "Coba buka sebagai jendela", pinAction)
+        val options = arrayOf("Buka sebagai jendela (default)", "Buka layar penuh", pinAction)
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
-                0 -> launch(app)
-                1 -> launch(app, asFreeform = true)
+                0 -> launch(app, asFreeform = true)
+                1 -> launch(app, asFreeform = false)
                 2 -> togglePinned(app)
             }
         }.setNegativeButton("Batal", null).show()
