@@ -1,5 +1,6 @@
 package com.sakuhome.launcher
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,6 +13,7 @@ import android.content.pm.ResolveInfo
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
@@ -133,6 +135,23 @@ class FloatingDockService : Service() {
                             Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
                         }
                     }
+                }
+                setOnLongClickListener {
+                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
+                    if (launch != null) {
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val width = resources.displayMetrics.widthPixels
+                        val height = resources.displayMetrics.heightPixels
+                        val margin = dp(24)
+                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
+                        try {
+                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                            startActivity(launch, options.toBundle())
+                        } catch (_: Exception) {
+                            Toast.makeText(this@FloatingDockService, "Android tidak mengizinkan jendela bebas untuk aplikasi ini", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    true
                 }
             }
             dock.addView(icon, LinearLayout.LayoutParams(dp(46), dp(48)))
