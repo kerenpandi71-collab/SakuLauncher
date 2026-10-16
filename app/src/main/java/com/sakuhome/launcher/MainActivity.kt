@@ -290,7 +290,7 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         window.statusBarColor = backgroundTop
         window.navigationBarColor = backgroundTop
-        window.decorView.systemUiVisibility = 0
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN
 
         rootFrame = FrameLayout(this).apply {
             background = GradientDrawable(
@@ -309,7 +309,7 @@ class MainActivity : Activity() {
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(12))
+            setPadding(dp(14), dp(3), dp(14), dp(10))
         }
 
         val topBar = LinearLayout(this).apply {
@@ -319,23 +319,23 @@ class MainActivity : Activity() {
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(TextView(this).apply {
-            text = "SAKU DESKTOP"
-            textSize = 10f
-            letterSpacing = 0.22f
+            text = "Finder"
+            textSize = 11f
+            letterSpacing = 0.02f
             setTextColor(accent)
         })
         clockText = TextView(this).apply {
-            textSize = 32f
+            textSize = 17f
             setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
             includeFontPadding = false
         }
         dateText = TextView(this).apply {
-            textSize = 12f
+            textSize = 10f
             setTextColor(secondaryText)
         }
-        brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(3) })
-        brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
+        brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(1) })
+        brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(0) })
         topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
 
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
@@ -343,9 +343,9 @@ class MainActivity : Activity() {
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
-        shell.addView(buildStatusStrip(), LinearLayout.LayoutParams(-1, dp(32)).apply {
-            topMargin = dp(2)
-            bottomMargin = dp(3)
+        shell.addView(buildStatusStrip(), LinearLayout.LayoutParams(-1, dp(34)).apply {
+            topMargin = dp(1)
+            bottomMargin = dp(1)
         })
 
         val pageControls = LinearLayout(this).apply {
@@ -469,17 +469,11 @@ class MainActivity : Activity() {
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), 0, dp(10), 0)
-            background = if (liquidGlass) glassSurface(18) else rounded(cardSurface, 18)
+            setPadding(dp(9), 0, dp(6), 0)
+            background = if (liquidGlass) glassSurface(14) else rounded(cardSurface, 14)
         }
-        val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
-        val bluetoothOn = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.isEnabled == true } catch (_: Exception) { false }
-        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
-        val percent = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
-
-        fun statusItem(label: String, description: String, action: () -> Unit) {
+        val now = Date()
+        fun item(label: String, description: String, action: () -> Unit) {
             strip.addView(TextView(this).apply {
                 text = label
                 textSize = 11f
@@ -490,22 +484,121 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             }, LinearLayout.LayoutParams(-2, -1))
         }
-        statusItem(if (wifiOn) "◉ Wi-Fi" else "○ Wi-Fi", "Buka pengaturan Wi-Fi") {
+        item("●", "Menu desktop") { showControlCenter() }
+        item("Finder", "Menu Finder") { showStartPanel() }
+        item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showControlCenter() }
+        strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
+        val bluetoothOn = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.isEnabled == true } catch (_: Exception) { false }
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val percent = if (level >= 0 && scale > 0) level * 100 / scale else -1
+        item(if (wifiOn) "◉" else "○", "Wi-Fi: buka pengaturan") {
             try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) } catch (_: Exception) { }
         }
-        statusItem(if (bluetoothOn) "ᛒ Bluetooth" else "ᛒ Bluetooth", "Buka pengaturan Bluetooth") {
+        item(if (bluetoothOn) "ᛒ" else "ᛒ", "Bluetooth: buka pengaturan") {
             try { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) { }
         }
-        strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        statusItem(if (percent >= 0) "▰ $percent%" else "▰ Baterai", "Buka pengaturan baterai") {
-            try { startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } catch (_: Exception) {
-                try { startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (_: Exception) { }
+        item(if (percent >= 0) "▰ $percent%" else "▰", "Baterai: buka pengaturan") {
+            try { startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } catch (_: Exception) { }
+        }
+        item("☷", "Buka Control Center gaya iOS") { showControlCenter() }
+        item(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now), "Jam") { showControlCenter() }
+        return strip
+    }
+
+    private fun showControlCenter() {
+        if (!::rootFrame.isInitialized) return
+        val existing = rootFrame.findViewWithTag<View>("saku_control_center")
+        if (existing != null) {
+            rootFrame.removeView(existing)
+            return
+        }
+        val scrim = FrameLayout(this).apply {
+            tag = "saku_control_center"
+            setBackgroundColor(0x55000000)
+            setOnClickListener { rootFrame.removeView(this) }
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(17), dp(17), dp(17), dp(16))
+            background = if (liquidGlass) glassSurface(28) else rounded(if (isDarkTheme) Color.rgb(28, 34, 48) else Color.rgb(245, 248, 255), 28)
+            elevation = dp(24).toFloat()
+            setOnClickListener { /* keep taps inside the panel */ }
+        }
+        val heading = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        heading.addView(TextView(this).apply {
+            text = "Control Center"
+            textSize = 21f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(chipButton("×", cardSurface, primaryText, 18).apply {
+            setOnClickListener { rootFrame.removeView(scrim) }
+        }, LinearLayout.LayoutParams(dp(36), dp(36)))
+        panel.addView(heading)
+        panel.addView(TextView(this).apply {
+            text = SimpleDateFormat("EEEE, d MMMM • HH:mm", Locale("id", "ID")).format(Date())
+            textSize = 11f
+            setTextColor(secondaryText)
+            setPadding(0, dp(3), 0, dp(13))
+        })
+        val tiles = GridView(this).apply {
+            numColumns = 2
+            horizontalSpacing = dp(9)
+            verticalSpacing = dp(9)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            setSelector(ColorDrawable(Color.TRANSPARENT))
+            adapter = object : BaseAdapter() {
+                private val names = arrayOf("Wi-Fi", "Bluetooth", "Mode Fokus", "Layar & Kecerahan", "Baterai", "Pengaturan")
+                override fun getCount() = names.size
+                override fun getItem(position: Int) = names[position]
+                override fun getItemId(position: Int) = position.toLong()
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    val tile = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(13), dp(10), dp(10), dp(10))
+                        background = rounded(if (isDarkTheme) Color.rgb(59, 70, 91) else Color.rgb(222, 231, 246), 20)
+                        addView(TextView(context).apply { id = android.R.id.icon; textSize = 22f; setTextColor(primaryText) })
+                        addView(TextView(context).apply { id = android.R.id.text1; textSize = 12f; setTextColor(primaryText); setPadding(0, dp(5), 0, 0) })
+                    }
+                    val icons = arrayOf("◉", "ᛒ", "☾", "☼", "▰", "⚙")
+                    tile.findViewById<TextView>(android.R.id.icon).text = icons[position]
+                    tile.findViewById<TextView>(android.R.id.text1).text = names[position]
+                    tile.setOnClickListener {
+                        val intent = when (position) {
+                            0 -> Intent(Settings.ACTION_WIFI_SETTINGS)
+                            1 -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            2 -> Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                            3 -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                            4 -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                            else -> Intent(Settings.ACTION_SETTINGS)
+                        }
+                        try { startActivity(intent) } catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                    }
+                    return tile
+                }
             }
         }
-        statusItem("⚙", "Buka pengaturan Android") {
-            try { startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (_: Exception) { }
-        }
-        return strip
+        panel.addView(tiles, LinearLayout.LayoutParams(-1, dp(224)))
+        panel.addView(TextView(this).apply {
+            text = "Kontrol sistem membuka Pengaturan Android agar tetap kompatibel dengan Android 15."
+            textSize = 10f
+            setTextColor(secondaryText)
+            setPadding(dp(2), dp(10), dp(2), 0)
+        })
+        val width = minOf(resources.displayMetrics.widthPixels - dp(24), dp(380))
+        scrim.addView(panel, FrameLayout.LayoutParams(width, -2, Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(12)
+            marginEnd = dp(12)
+        })
+        rootFrame.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+        scrim.bringToFront()
     }
 
     private fun buildDock(): View {
