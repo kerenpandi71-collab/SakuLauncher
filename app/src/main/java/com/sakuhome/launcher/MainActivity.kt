@@ -246,9 +246,11 @@ class MainActivity : Activity() {
         desktopGrid.adapter = pinnedAdapter
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
-            topMargin = dp(10)
-        })
+        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
+            shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
+                topMargin = dp(10)
+            })
+        }
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
@@ -267,7 +269,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(7), dp(8), dp(7))
-            background = rounded(dockSurface, 25)
+            background = if (liquidGlass) glassSurface(25) else rounded(dockSurface, 25)
             elevation = dp(14).toFloat()
         }
         dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
@@ -286,7 +288,7 @@ class MainActivity : Activity() {
             setPadding(dp(5), 0, dp(5), 0)
         }
         pinnedApps().take(6).forEachIndexed { index, app ->
-            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(48), -1))
+            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp), -1))
         }
         scroll.addView(icons)
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
