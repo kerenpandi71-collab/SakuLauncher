@@ -16,6 +16,11 @@ import android.widget.TextView
  * navigation/system keys are sent as KeyEvents through the active InputConnection.
  */
 class SakuKeyboardService : InputMethodService() {
+    override fun onCreate() {
+        super.onCreate()
+        SakuInputBridge.ensureConnected(this)
+    }
+
     private var shifted = false
     private var ctrl = false
     private var alt = false
@@ -99,11 +104,8 @@ class SakuKeyboardService : InputMethodService() {
             "F11" -> pressKey(KeyEvent.KEYCODE_F11)
             "F12" -> pressKey(KeyEvent.KEYCODE_F12)
             "⌫" -> {
-                val ic = currentInputConnection
-                if (ic != null) {
-                    ic.deleteSurroundingText(1, 0)
-                    if (ctrl) sendKeyPair(KeyEvent.KEYCODE_DEL, metaState())
-                }
+                if (ctrl || alt || win) sendKeyPair(KeyEvent.KEYCODE_DEL, metaState())
+                else currentInputConnection?.deleteSurroundingText(1, 0)
                 clearOneShotModifiers()
             }
             "←" -> pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
@@ -115,17 +117,16 @@ class SakuKeyboardService : InputMethodService() {
     }
 
     private fun type(raw: String) {
-        val ic = currentInputConnection ?: return
+        val ic = currentInputConnection
         val value = if (shifted) shiftedValue(raw) else raw
         val keyCode = keyCodeFor(value)
         if (ctrl || alt || win) {
-            if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
-                sendKeyPair(keyCode, metaState())
-            } else {
-                ic.commitText(value, 1)
-            }
-        } else {
+            if (keyCode != KeyEvent.KEYCODE_UNKNOWN) sendKeyPair(keyCode, metaState())
+            else ic?.commitText(value, 1)
+        } else if (ic != null) {
             ic.commitText(value, 1)
+        } else if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
+            sendKeyPair(keyCode, metaState())
         }
         clearOneShotModifiers()
     }
@@ -175,22 +176,30 @@ class SakuKeyboardService : InputMethodService() {
     }
 
     private fun pressKey(code: Int) {
-        if (ctrl || alt || win || shifted) sendKeyPair(code, metaState())
-        else {
-            val ic = currentInputConnection
-            if (ic != null) sendKeyPair(code, 0) else if (code == KeyEvent.KEYCODE_ENTER) {
-                currentInputConnection?.performEditorAction(EditorInfo.IME_ACTION_DONE)
-            }
+        if (SakuInputBridge.shell != null || currentInputConnection != null) {
+            sendKeyPair(code, metaState())
+        } else if (code == KeyEvent.KEYCODE_ENTER) {
+            currentInputConnection?.performEditorAction(EditorInfo.IME_ACTION_DONE)
         }
         clearOneShotModifiers()
     }
 
     private fun sendKeyPair(code: Int, meta: Int) {
+        val bridge = SakuInputBridge.shell
+        if (bridge != null) {
+            try {
+                bridge.injectKey(code, KeyEvent.ACTION_DOWN, meta, 0)
+                bridge.injectKey(code, KeyEvent.ACTION_UP, meta, 0)
+                return
+            } catch (_: Exception) {}
+        }
         val ic: InputConnection = currentInputConnection ?: return
-        ic.sendKeyEvent(KeyEvent(android.os.SystemClock.uptimeMillis(), android.os.SystemClock.uptimeMillis(),
-            KeyEvent.ACTION_DOWN, code, 0, meta, KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
-        ic.sendKeyEvent(KeyEvent(android.os.SystemClock.uptimeMillis(), android.os.SystemClock.uptimeMillis(),
-            KeyEvent.ACTION_UP, code, 0, meta, KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
+        val downTime = android.os.SystemClock.uptimeMillis()
+        ic.sendKeyEvent(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, code, 0, meta,
+            KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
+        val upTime = android.os.SystemClock.uptimeMillis()
+        ic.sendKeyEvent(KeyEvent(downTime, upTime, KeyEvent.ACTION_UP, code, 0, meta,
+            KeyEvent.VIRTUAL_KEYBOARD, 0, 0, KeyEvent.SOURCE_KEYBOARD))
     }
 
     private fun clearOneShotModifiers() {
