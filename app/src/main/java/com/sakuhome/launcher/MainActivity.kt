@@ -1695,9 +1695,12 @@ class MainActivity : Activity() {
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 42 else 30, 190, 210, 240) else Color.argb(if (isStartMenu) 46 else 32, 70, 95, 130), 24)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 91 else 102))
+                setPadding(dp(2), dp(4), dp(2), dp(4))
+                // Native macOS/iOS-inspired icon layout: no surrounding bubble, card, or shadow.
+                background = ColorDrawable(Color.TRANSPARENT)
+                elevation = 0f
+                stateListAnimator = null
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 82 else 92))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
