@@ -30,7 +30,8 @@ class SakuKeyboardService : InputMethodService() {
         }
 
         // A compact function/navigation row like a laptop keyboard.
-        addRow(root, listOf("Esc", "Tab", "Ctrl", "Alt", "←", "↑", "↓", "→", "⌫"), dp(31), 0.8f)
+        addRow(root, listOf("Esc","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"), dp(27), 0.7f)
+        addRow(root, listOf("Tab", "Ctrl", "Alt", "←", "↑", "↓", "→", "Del"), dp(29), 0.8f)
 
         if (!symbols) {
             addRow(root, listOf("1","2","3","4","5","6","7","8","9","0","⌫"), dp(39), 1f)
@@ -39,7 +40,7 @@ class SakuKeyboardService : InputMethodService() {
             addRow(root, listOf("⇧","z","x","c","v","b","n","m",",",".","⇧"), dp(39), 1f)
         } else {
             addRow(root, listOf("!","@","#","$","%","^","&","*","(",")","⌫"), dp(39), 1f)
-            addRow(root, listOf("[","]","{","}","<",">","=","+","-","/","\\\\","Enter"), dp(39), 1f)
+            addRow(root, listOf("[","]","{","}","<",">","=","+","-","/","\\","Enter"), dp(39), 1f)
             addRow(root, listOf("~","`","|",":",";","'","\"","?","_","Enter"), dp(39), 1f)
         }
 
@@ -65,7 +66,7 @@ class SakuKeyboardService : InputMethodService() {
         }
         labels.forEach { label ->
             val weight = when (label) {
-                "Ctrl", "Alt", "Caps", "Tab", "Esc", "Enter", "⇧", "⌫", "CTRL", "ALT", "WIN" -> 1.45f
+                "Ctrl", "Alt", "Caps", "Tab", "Esc", "Enter", "⇧", "⌫", "CTRL", "ALT", "WIN", "Del" -> 1.45f
                 else -> keyWeight
             }
             line.addView(key(label, weight) { handle(label) }, weighted(height, weight).apply {
@@ -82,8 +83,21 @@ class SakuKeyboardService : InputMethodService() {
             "Ctrl" -> { ctrl = !ctrl; refreshKeyboard() }
             "Alt" -> { alt = !alt; refreshKeyboard() }
             "Esc" -> pressKey(KeyEvent.KEYCODE_ESCAPE)
+            "Del" -> pressKey(KeyEvent.KEYCODE_FORWARD_DEL)
             "Tab" -> pressKey(KeyEvent.KEYCODE_TAB)
             "Enter", "↵" -> pressKey(KeyEvent.KEYCODE_ENTER)
+            "F1" -> pressKey(KeyEvent.KEYCODE_F1)
+            "F2" -> pressKey(KeyEvent.KEYCODE_F2)
+            "F3" -> pressKey(KeyEvent.KEYCODE_F3)
+            "F4" -> pressKey(KeyEvent.KEYCODE_F4)
+            "F5" -> pressKey(KeyEvent.KEYCODE_F5)
+            "F6" -> pressKey(KeyEvent.KEYCODE_F6)
+            "F7" -> pressKey(KeyEvent.KEYCODE_F7)
+            "F8" -> pressKey(KeyEvent.KEYCODE_F8)
+            "F9" -> pressKey(KeyEvent.KEYCODE_F9)
+            "F10" -> pressKey(KeyEvent.KEYCODE_F10)
+            "F11" -> pressKey(KeyEvent.KEYCODE_F11)
+            "F12" -> pressKey(KeyEvent.KEYCODE_F12)
             "⌫" -> {
                 val ic = currentInputConnection
                 if (ic != null) {
@@ -122,7 +136,7 @@ class SakuKeyboardService : InputMethodService() {
         val symbols = mapOf('1' to '!', '2' to '@', '3' to '#', '4' to '$', '5' to '%',
             '6' to '^', '7' to '&', '8' to '*', '9' to '(', '0' to ')',
             ',' to '<', '.' to '>', '/' to '?', ';' to ':', '\'' to '"',
-            '[' to '{', ']' to '}', '-' to '_', '=' to '+', '`' to '~', '\\\\' to '|')
+            '[' to '{', ']' to '}', '-' to '_', '=' to '+', '`' to '~', '\\' to '|')
         return symbols[c]?.toString() ?: c.uppercaseChar().toString()
     }
 
@@ -146,7 +160,7 @@ class SakuKeyboardService : InputMethodService() {
             "-" , "_" -> KeyEvent.KEYCODE_MINUS
             "=" , "+" -> KeyEvent.KEYCODE_EQUALS
             "`" , "~" -> KeyEvent.KEYCODE_GRAVE
-            "\\\\" , "|" -> KeyEvent.KEYCODE_BACKSLASH
+            "\\" , "|" -> KeyEvent.KEYCODE_BACKSLASH
             else -> KeyEvent.KEYCODE_UNKNOWN
         }
     }
