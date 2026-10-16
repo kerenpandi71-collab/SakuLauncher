@@ -315,7 +315,7 @@ class MainActivity : Activity() {
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(4), dp(3), dp(5))
+            setPadding(dp(4), 0, dp(3), dp(2))
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(TextView(this).apply {
@@ -599,6 +599,132 @@ class MainActivity : Activity() {
         })
         rootFrame.addView(scrim, FrameLayout.LayoutParams(-1, -1))
         scrim.bringToFront()
+    }
+
+
+    private fun showControlCenter() {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            background = GradientDrawable().apply {
+                setColor(if (isDarkTheme) Color.rgb(28, 34, 48) else Color.rgb(242, 246, 253))
+                cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), if (isDarkTheme) Color.argb(100, 220, 232, 255) else Color.argb(170, 255, 255, 255))
+            }
+        }
+        panel.addView(TextView(this).apply {
+            text = "Control Center"
+            textSize = 24f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText)
+        })
+        panel.addView(TextView(this).apply {
+            text = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date())
+            textSize = 12f
+            setTextColor(secondaryText)
+            setPadding(0, dp(2), 0, dp(14))
+        })
+        val tiles = GridView(this).apply {
+            numColumns = 2
+            horizontalSpacing = dp(10)
+            verticalSpacing = dp(10)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            isScrollContainer = false
+            adapter = object : BaseAdapter() {
+                private val labels = arrayOf("◉  Wi-Fi", "ᛒ  Bluetooth", "✈  Mode pesawat", "◐  Suara", "▣  Baterai", "⚙  Pengaturan")
+                override fun getCount() = labels.size
+                override fun getItem(position: Int) = labels[position]
+                override fun getItemId(position: Int) = position.toLong()
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                    return (convertView as? TextView ?: TextView(this@MainActivity).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(14), dp(12), dp(10), dp(12))
+                        textSize = 14f
+                        setTextColor(primaryText)
+                        background = GradientDrawable().apply {
+                            setColor(if (isDarkTheme) Color.rgb(55, 67, 88) else Color.WHITE)
+                            cornerRadius = dp(18).toFloat()
+                        }
+                        minHeight = dp(64)
+                    }).apply { text = labels[position] }
+                }
+            }
+            setOnItemClickListener { _, _, position, _ ->
+                val action = when (position) {
+                    0 -> Settings.ACTION_WIFI_SETTINGS
+                    1 -> Settings.ACTION_BLUETOOTH_SETTINGS
+                    2 -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
+                    3 -> Settings.ACTION_SOUND_SETTINGS
+                    4 -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+                    else -> Settings.ACTION_SETTINGS
+                }
+                try { startActivity(Intent(action)) } catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+            }
+        }
+        panel.addView(tiles, LinearLayout.LayoutParams(-1, dp(148)).apply { bottomMargin = dp(14) })
+        panel.addView(TextView(this).apply {
+            text = "Kecerahan layar"
+            textSize = 13f
+            setTextColor(primaryText)
+        })
+        panel.addView(SeekBar(this).apply {
+            max = 100
+            progress = 70
+            progressTintList = android.content.res.ColorStateList.valueOf(accent)
+            thumbTintList = android.content.res.ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
+                    if (fromUser) window.attributes = window.attributes.apply { screenBrightness = value.coerceAtLeast(1) / 100f }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }, LinearLayout.LayoutParams(-1, dp(38)))
+        val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
+        panel.addView(TextView(this).apply {
+            text = "Volume media"
+            textSize = 13f
+            setTextColor(primaryText)
+            setPadding(0, dp(5), 0, 0)
+        })
+        panel.addView(SeekBar(this).apply {
+            max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            progress = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+            progressTintList = android.content.res.ColorStateList.valueOf(accent)
+            thumbTintList = android.content.res.ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
+                    if (fromUser) audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, value, 0)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }, LinearLayout.LayoutParams(-1, dp(38)))
+        panel.addView(TextView(this).apply {
+            text = "Konektivitas membuka pengaturan Android agar kompatibel dengan ROM."
+            textSize = 10f
+            setTextColor(secondaryText)
+            setPadding(0, dp(8), 0, 0)
+        })
+        AlertDialog.Builder(this).setView(android.widget.ScrollView(this).apply { addView(panel) })
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun toggleNativeQuickSettings() {
+        val disable = !preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)
+        Thread {
+            val output = runRootCommand(if (disable) "cmd statusbar disable 0x00010000; echo QS_EXIT:$?" else "cmd statusbar enable 0x00010000; echo QS_EXIT:$?")
+            val success = output.contains("QS_EXIT:0")
+            runOnUiThread {
+                if (success) {
+                    preferences.edit().putBoolean(KEY_NATIVE_QS_DISABLED, disable).apply()
+                    Toast.makeText(this, if (disable) "Ekspansi panel Android dinonaktifkan. Control Center Saku tersedia dari status bar launcher." else "Panel Android dipulihkan.", Toast.LENGTH_LONG).show()
+                    buildScreen()
+                } else {
+                    Toast.makeText(this, "Perintah ditolak ROM. Pulihkan manual jika perlu: su -c cmd statusbar enable 0x00010000", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private fun buildDock(): View {
@@ -992,7 +1118,9 @@ class MainActivity : Activity() {
             "ⓘ  Tentang & izin",
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
-            "◉  Pengelola proses aplikasi"
+            "◉  Pengelola proses aplikasi",
+            "⌘  Control Center Saku",
+            "▱  Panel tarik-turun Android · " + if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Dinonaktifkan" else "Aktif"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -1023,6 +1151,12 @@ class MainActivity : Activity() {
                     14 -> chooseHomeGrid()
                     15 -> chooseDrawerGrid()
                     16 -> showProcessManager()
+                    17 -> showControlCenter()
+                    18 -> AlertDialog.Builder(this).setTitle("Panel sistem Android")
+                        .setMessage("Opsi root ini mencoba menonaktifkan ekspansi panel Android. Kompatibilitas tergantung ROM. Perintah pemulihan: su -c cmd statusbar enable 0x00010000")
+                        .setNegativeButton("Batal", null)
+                        .setPositiveButton(if (preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)) "Aktifkan kembali" else "Nonaktifkan") { _, _ -> toggleNativeQuickSettings() }
+                        .show()
                 }
             }.setNegativeButton("Selesai", null).show()
     }
@@ -1732,6 +1866,7 @@ class MainActivity : Activity() {
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
+        private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_TRANSPARENCY = "dock_transparency"
