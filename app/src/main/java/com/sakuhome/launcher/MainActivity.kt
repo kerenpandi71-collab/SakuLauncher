@@ -404,6 +404,9 @@ class MainActivity : Activity() {
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
+            isSmoothScrollbarEnabled = true
+            isScrollingCacheEnabled = true
+            persistentDrawingCache = ViewGroup.PERSISTENT_NO_CACHE
         }
         startAdapter = AppGridAdapter(isStartMenu = true)
         startGrid.adapter = startAdapter
@@ -1074,9 +1077,26 @@ class MainActivity : Activity() {
     }
 
     private inner class AppGridAdapter(private val isStartMenu: Boolean) : BaseAdapter() {
-        override fun getCount(): Int = if (isStartMenu) visibleApps(true).size else pinnedApps().size
-        override fun getItem(position: Int): LaunchableApp = if (isStartMenu) visibleApps(true)[position] else pinnedApps()[position]
-        override fun getItemId(position: Int): Long = getItem(position).packageName.hashCode().toLong()
+        // Cache the visible rows. GridView calls getCount/getItem repeatedly while scrolling;
+        // rebuilding/filtering the whole app list for every recycled cell causes jank on low-RAM devices.
+        private var items: List<LaunchableApp> = emptyList()
+
+        init {
+            refreshItems()
+        }
+
+        private fun refreshItems() {
+            items = if (isStartMenu) visibleApps(true) else pinnedApps()
+        }
+
+        override fun notifyDataSetChanged() {
+            refreshItems()
+            super.notifyDataSetChanged()
+        }
+
+        override fun getCount(): Int = items.size
+        override fun getItem(position: Int): LaunchableApp = items[position]
+        override fun getItemId(position: Int): Long = items[position].packageName.hashCode().toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
