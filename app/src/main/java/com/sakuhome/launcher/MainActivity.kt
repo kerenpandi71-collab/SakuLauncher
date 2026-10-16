@@ -490,8 +490,9 @@ class MainActivity : Activity() {
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(9), 0, dp(6), 0)
-            background = if (liquidGlass) glassSurface(14) else rounded(cardSurface, 14)
+            setPadding(dp(14), 0, dp(12), 0)
+            background = if (liquidGlass) glassSurface(18) else rounded(cardSurface, 18)
+            elevation = dp(4).toFloat()
         }
         val now = Date()
         val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -500,27 +501,39 @@ class MainActivity : Activity() {
         val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
 
         strip.addView(TextView(this).apply {
-            text = SimpleDateFormat("EEEE, d MMM", Locale("id", "ID")).format(now)
+            text = "☁  18°"
             textSize = 11f
-            setTextColor(primaryText)
+            setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
-            contentDescription = "Tanggal"
+            contentDescription = "Widget cuaca dekoratif"
         }, LinearLayout.LayoutParams(0, -1, 1f))
         strip.addView(TextView(this).apply {
-            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
-            textSize = 11f
-            setTextColor(primaryText)
-            gravity = Gravity.CENTER
-            contentDescription = "Waktu"
-            setPadding(dp(8), 0, dp(8), 0)
-        }, LinearLayout.LayoutParams(-2, -1))
-        strip.addView(TextView(this).apply {
-            text = if (percent != null) "▰ $percent%" else "▰ --%"
+            text = "▰  ${percent?.let { "$it%" } ?: "--%"}"
             textSize = 11f
             setTextColor(primaryText)
             gravity = Gravity.CENTER
             contentDescription = "Persentase baterai"
-            setPadding(dp(8), 0, dp(2), 0)
+            setPadding(dp(8), 0, dp(10), 0)
+        }, LinearLayout.LayoutParams(-2, -1))
+        strip.addView(View(this).apply {
+            background = rounded(if (isDarkTheme) 0x55FFFFFF else 0x22000000, 1)
+        }, LinearLayout.LayoutParams(dp(1), dp(18)))
+        strip.addView(TextView(this).apply {
+            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+            textSize = 12f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            contentDescription = "Waktu"
+            setPadding(dp(10), 0, dp(5), 0)
+        }, LinearLayout.LayoutParams(-2, -1))
+        strip.addView(TextView(this).apply {
+            text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
+            textSize = 10f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER
+            contentDescription = "Tanggal"
+            setPadding(dp(5), 0, 0, 0)
         }, LinearLayout.LayoutParams(-2, -1))
         return strip
     }
@@ -546,39 +559,67 @@ class MainActivity : Activity() {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(7), dp(5), dp(7), dp(5))
-            background = if (liquidGlass) glassSurface(30) else rounded(dockSurface, 30)
-            elevation = dp(12).toFloat()
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = if (liquidGlass) glassSurface(24) else rounded(dockSurface, 24)
+            elevation = dp(14).toFloat()
         }
-        dock.addView(TextView(this).apply {
-            text = "◐"
-            textSize = 27f
+
+        val startButton = TextView(this).apply {
+            text = "⊞"
+            textSize = 29f
             gravity = Gravity.CENTER
-            setTextColor(if (isDarkTheme) Color.WHITE else Color.rgb(35, 91, 190))
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(67, 157, 255), Color.rgb(104, 91, 245))).apply {
-                cornerRadius = dp(14).toFloat()
-            }
-            contentDescription = "Buka menu Start bergaya macOS"
+            setTextColor(Color.rgb(0, 145, 255))
+            background = if (liquidGlass) glassSurface(13) else rounded(cardSurface, 13)
+            contentDescription = "Buka menu Start Windows"
             isClickable = true
             isFocusable = true
             setOnClickListener { toggleStartPanel() }
-        }, LinearLayout.LayoutParams(dp(46), -1))
+            setOnLongClickListener {
+                Toast.makeText(this@MainActivity, "Menu Start", Toast.LENGTH_SHORT).show()
+                true
+            }
+        }
+        dock.addView(startButton, LinearLayout.LayoutParams(dp(44), -1))
 
+        val centeredArea = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
         val icons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), 0, dp(5), 0)
+            setPadding(dp(7), 0, dp(7), 0)
         }
-        pinnedApps().take(5).forEachIndexed { index, app ->
-            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp), -1))
+        pinnedApps().take(6).forEachIndexed { index, app ->
+            icons.addView(dockIcon(app, index).apply {
+                background = if (liquidGlass) glassSurface(12) else rounded(cardSurface, 12)
+                setPadding(dp(7), dp(6), dp(7), dp(6))
+            }, LinearLayout.LayoutParams(dp(iconSizeDp), -1).apply {
+                marginStart = dp(2)
+                marginEnd = dp(2)
+            })
         }
-        scroll.addView(icons)
-        dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+        scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
+        centeredArea.addView(scroll, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER))
+        dock.addView(centeredArea, LinearLayout.LayoutParams(0, -1, 1f))
+
+        val trayButton = TextView(this).apply {
+            text = "⋯"
+            textSize = 23f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            background = if (liquidGlass) glassSurface(13) else rounded(cardSurface, 13)
+            contentDescription = "Area notifikasi"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showStartPanel() }
+        }
+        dock.addView(trayButton, LinearLayout.LayoutParams(dp(38), -1))
         return dock
     }
 
