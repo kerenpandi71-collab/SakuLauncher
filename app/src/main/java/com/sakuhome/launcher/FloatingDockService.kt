@@ -87,6 +87,8 @@ class FloatingDockService : Service() {
 
     private fun showDock() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val accentColor = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
+        val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
             prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
         } else loadApps().take(5).map { it.packageName }
@@ -96,7 +98,7 @@ class FloatingDockService : Service() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(7), dp(5), dp(7), dp(5))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(31, 37, 52))
+                setColor(if (darkTheme) Color.rgb(31, 37, 52) else Color.rgb(247, 249, 253))
                 cornerRadius = dp(22).toFloat()
             }
             elevation = dp(12).toFloat()
@@ -105,8 +107,8 @@ class FloatingDockService : Service() {
             text = "▦"
             textSize = 20f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = rounded(Color.rgb(91, 132, 224), 17)
+            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+            background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
             setOnClickListener {
                 val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
@@ -139,7 +141,7 @@ class FloatingDockService : Service() {
             text = "⋯"
             textSize = 20f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(200, 207, 221))
+            setTextColor(if (darkTheme) Color.rgb(200, 207, 221) else Color.rgb(83, 96, 120))
             contentDescription = "Pengaturan dock"
             setOnClickListener {
                 val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
@@ -211,5 +213,7 @@ class FloatingDockService : Service() {
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+        private const val KEY_ACCENT = "accent_color"
+        private const val KEY_DARK_THEME = "dark_theme"
     }
 }

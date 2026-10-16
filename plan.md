@@ -9,6 +9,7 @@ Saku Launcher beralih menjadi **Saku Dock**, shell desktop Android yang berpusat
 - Beranda menjadi workspace yang lega dan menunjukkan pintasan terpilih; daftar semua aplikasi hanya dibuka dari tombol Start.
 - Dock bawah memuat Start, aplikasi favorit, dan pengaturan. Mode drawer dan dock tidak saling menumpuk.
 - Favorit dapat dipin/dilepas dan disusun dengan interaksi sentuh.
+- Pengguna dapat memilih tema gelap/cerah, warna aksen, dan wallpaper beranda.
 - Dock mengambang di atas aplikasi adalah opsi terpisah; hanya minta izin `SYSTEM_ALERT_WINDOW` ketika pengguna mengaktifkannya.
 - Peluncuran freeform memakai batas jendela publik bila perangkat/layar mendukungnya; fallback selalu peluncuran normal. UI tidak menjanjikan dukungan universal.
 - Shizuku/root bukan prasyarat. Integrasi tersebut hanya ditambahkan untuk aksi istimewa konkret yang tidak dapat dicapai melalui API biasa; tidak meminta root luas demi kosmetik.

@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
@@ -58,13 +60,14 @@ class MainActivity : Activity() {
     private var searchQuery = ""
     private var showingAllApps = true
 
-    private val backgroundTop = Color.rgb(24, 31, 48)
-    private val backgroundBottom = Color.rgb(37, 47, 68)
-    private val dockSurface = Color.rgb(34, 41, 57)
-    private val cardSurface = Color.rgb(43, 51, 69)
-    private val primaryText = Color.rgb(246, 247, 251)
-    private val secondaryText = Color.rgb(179, 188, 207)
-    private val accent = Color.rgb(110, 151, 245)
+    private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
+    private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(24, 31, 48) else Color.rgb(229, 235, 246)
+    private val backgroundBottom: Int get() = if (isDarkTheme) Color.rgb(37, 47, 68) else Color.rgb(204, 215, 235)
+    private val dockSurface: Int get() = if (isDarkTheme) Color.rgb(34, 41, 57) else Color.rgb(241, 244, 250)
+    private val cardSurface: Int get() = if (isDarkTheme) Color.rgb(43, 51, 69) else Color.rgb(224, 230, 241)
+    private val primaryText: Int get() = if (isDarkTheme) Color.rgb(246, 247, 251) else Color.rgb(29, 38, 55)
+    private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(179, 188, 207) else Color.rgb(83, 96, 120)
+    private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -93,6 +96,21 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
     }
 
+    @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_WALLPAPER || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            preferences.edit().putString(KEY_WALLPAPER_URI, uri.toString()).apply()
+            buildScreen()
+            Toast.makeText(this, "Wallpaper diperbarui", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Wallpaper tidak dapat digunakan", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (!::preferences.isInitialized) return
@@ -119,6 +137,15 @@ class MainActivity : Activity() {
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(backgroundTop, backgroundBottom)
             )
+        }
+        loadWallpaper()?.let { bitmap ->
+            rootFrame.addView(ImageView(this).apply {
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            }, FrameLayout.LayoutParams(-1, -1))
+            rootFrame.addView(View(this).apply {
+                setBackgroundColor(if (isDarkTheme) 0x550D1420 else 0x260D1420)
+            }, FrameLayout.LayoutParams(-1, -1))
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -247,7 +274,7 @@ class MainActivity : Activity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = rounded(Color.rgb(31, 38, 54), 26)
+            background = rounded(if (isDarkTheme) Color.rgb(31, 38, 54) else Color.rgb(247, 249, 253), 26)
             elevation = dp(16).toFloat()
         }
         val header = LinearLayout(this).apply {
@@ -451,13 +478,26 @@ class MainActivity : Activity() {
     private fun showSettings() {
         val overlayState = if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Aktif" else "Nonaktif"
         val pinnedState = "${pinnedApps().size} aplikasi"
-        val options = arrayOf("Dock mengambang di atas aplikasi — $overlayState", "Kelola pin aplikasi — $pinnedState", "Tentang izin & mode jendela")
+        val themeState = if (isDarkTheme) "Gelap" else "Cerah"
+        val options = arrayOf(
+            "Dock mengambang di atas aplikasi — $overlayState",
+            "Kelola pin aplikasi — $pinnedState",
+            "Mode tampilan — $themeState",
+            "Warna aksen",
+            "Pilih wallpaper beranda",
+            "Reset wallpaper",
+            "Tentang izin & mode jendela"
+        )
         AlertDialog.Builder(this).setTitle("Pengaturan Saku Dock")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> toggleOverlay()
                     1 -> managePins()
-                    2 -> showPermissionInfo()
+                    2 -> toggleTheme()
+                    3 -> chooseAccent()
+                    4 -> chooseWallpaper()
+                    5 -> resetWallpaper()
+                    6 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -524,6 +564,64 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
             .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start dan pin aplikasi bekerja tanpa Shizuku. Jendela bebas dikendalikan Android dan dukungan perangkat; Saku tidak dapat memaksakannya. Shizuku/root hanya akan ditambahkan untuk kontrol sistem tertentu yang benar-benar memerlukannya dan selalu diminta secara terpisah.")
             .setPositiveButton("Mengerti", null).show()
+    }
+
+    private fun toggleTheme() {
+        preferences.edit().putBoolean(KEY_DARK_THEME, !isDarkTheme).apply()
+        if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+            startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+        }
+        buildScreen()
+    }
+
+    private fun chooseAccent() {
+        val names = arrayOf("Biru", "Teal", "Koral", "Ungu")
+        val colors = intArrayOf(
+            Color.rgb(110, 151, 245), Color.rgb(43, 184, 168),
+            Color.rgb(232, 112, 91), Color.rgb(165, 127, 236)
+        )
+        AlertDialog.Builder(this).setTitle("Warna aksen")
+            .setItems(names) { _, which ->
+                preferences.edit().putInt(KEY_ACCENT, colors[which]).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
+                buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseWallpaper() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        try {
+            startActivityForResult(picker, REQUEST_WALLPAPER)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Pemilih gambar tidak tersedia", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun resetWallpaper() {
+        preferences.edit().remove(KEY_WALLPAPER_URI).apply()
+        buildScreen()
+    }
+
+    private fun loadWallpaper(): Bitmap? {
+        val uri = preferences.getString(KEY_WALLPAPER_URI, null)?.let(Uri::parse) ?: return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val largestSide = maxOf(bounds.outWidth, bounds.outHeight)
+            if (largestSide <= 0) return null
+            var sampleSize = 1
+            while (largestSide / sampleSize > 2200) sampleSize *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun updateClock() {
@@ -599,6 +697,10 @@ class MainActivity : Activity() {
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
+        private const val KEY_DARK_THEME = "dark_theme"
+        private const val KEY_ACCENT = "accent_color"
+        private const val KEY_WALLPAPER_URI = "wallpaper_uri"
+        private const val REQUEST_WALLPAPER = 481
         const val EXTRA_OPEN_START = "com.sakuhome.launcher.OPEN_START"
         const val EXTRA_OPEN_SETTINGS = "com.sakuhome.launcher.OPEN_SETTINGS"
     }

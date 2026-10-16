@@ -9,7 +9,7 @@ Shell desktop ringan untuk Android, terinspirasi pola Start/Taskbar Windows, She
 - Tahan ikon di workspace/Start untuk menyematkan atau melepas aplikasi. Urutan favorit disimpan lokal.
 - **Dock mengambang opsional** di atas aplikasi lain. Pengguna memberi izin overlay dari Settings Android; service menampilkan notifikasi permanen yang punya kontrol mematikan dock.
 - Tahan ikon aplikasi untuk membuka menu konteks: buka normal, **coba buka sebagai jendela**, atau sematkan/lepas dari dock.
-- Tema desktop gelap dan layout responsif untuk portrait/landscape.
+- Pilihan tema gelap/cerah, warna aksen, dan wallpaper beranda; layout responsif portrait/landscape.
 
 ## Izin dan batas platform
 
