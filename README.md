@@ -1,29 +1,33 @@
 # Saku Desktop
 
-Launcher desktop Android yang ringan. Desain dan alur fiturnya terinspirasi konsep umum dari Taskbar Android; kode dan aset Taskbar tidak disalin.
+Launcher desktop Android ringan. Rilis **v0.4.0** menyempurnakan swipe halaman, kustomisasi label Drawer, dan efek Liquid Glass di atas fitur workspace, widget, serta kontrol aplikasi yang sudah ada.
 
 ## Fitur
 
-- Workspace desktop dengan jam, tanggal, wallpaper, tema gelap/cerah, dan warna aksen.
-- Start Menu untuk mencari dan membuka aplikasi, dengan tab semua aplikasi atau aplikasi yang disematkan.
-- Dock bawah berisi Start dan aplikasi favorit.
-- Pin/unpin aplikasi dan pengaturan urutan ikon.
-- Dock mengambang opsional di atas aplikasi lain, dengan notifikasi dan kontrol untuk mematikannya.
-- Ketuk ikon untuk membuka aplikasi; tahan ikon untuk mencoba mode jendela bebas.
-- Pilihan fullscreen atau freeform melalui menu konteks aplikasi.
-- Layout menyesuaikan orientasi portrait dan landscape.
+- Workspace multi-halaman; ikon dapat disusun, dipindah antarhalaman, dan dilengkapi widget Android.
+- Dock/taskbar yang dapat disembunyikan dan diatur ukuran ikon, urutan, serta transparansinya.
+- Start Menu untuk mencari, menampilkan daftar aplikasi, atau membuka daftar aplikasi yang disematkan.
+- Label ikon Home dan Drawer dapat diatur **secara terpisah**.
+- Tekan lama aplikasi untuk membuka jendela/freeform atau fullscreen, menambah/menghapus dari Home, memindah posisi/halaman, menyematkan ke dock, membuka info aplikasi/Play Store, atau meminta uninstall melalui konfirmasi Android.
+- Transisi halaman Home dan tab drawer menggunakan slide/fade; swipe vertikal tidak seharusnya berpindah halaman. Pembukaan Start juga memakai animasi.
+- Tema gelap/cerah, warna aksen, wallpaper, jumlah kolom, ukuran ikon, transparansi, aplikasi tersembunyi, dan widget.
+- Liquid Glass menggunakan permukaan translucent. Floating dock memakai blur lintas-jendela pada Android 12+ jika fitur blur tersedia; jika tidak, ada fallback transparan.
+- Floating dock opsional di atas aplikasi, dengan notifikasi kontrol untuk mematikannya.
+- Pengelola proses bersifat opsional: membuka panelnya dapat meminta otorisasi `su` untuk membaca PID; tindakan stop/freeze memerlukan konfirmasi terpisah.
 
-## Perubahan arsitektur
+## Izin dan batas Android
 
-Panel mouse virtual, trackpad, keyboard virtual/IME, layanan aksesibilitas input, dan integrasi Shizuku telah dihapus. Saku sekarang fokus sebagai launcher/taskbar, bukan alat input. Keyboard atau mouse fisik yang disediakan Android tetap menggunakan jalur input sistem biasa.
+Dock mengambang memakai izin **Display over other apps** yang diaktifkan pengguna di Settings Android. Uninstall hanya membuka konfirmasi sistem; aplikasi tidak dihapus diam-diam. Root hanya digunakan oleh panel Pengelola Proses. **Shizuku belum terintegrasi pada branch ini**; fungsi launcher, label, animasi, dan glass UI tidak membutuhkannya.
 
-## Batasan Android
-
-Permintaan freeform menggunakan API publik Android dan dapat diabaikan jika ROM atau aplikasi tidak mendukungnya. Dock mengambang memerlukan izin Display over other apps; izin ini bisa dicabut kapan saja. Fitur dasar launcher, Start Menu, dan pin tidak membutuhkan root atau Shizuku.
+Peluncuran freeform memakai API Android publik dan bisa diabaikan jika perangkat, ROM, atau aplikasi tidak mendukungnya. Efek blur lintas-jendela bergantung Android 12+, dukungan OEM/GPU, dan status sistem; tampilan tetap memakai surface translucent sebagai fallback.
 
 ## Build
 
 - Android SDK Platform 35
 - JDK 17
 
-Jalankan `./gradlew assembleDebug`. APK debug berada di `app/build/outputs/apk/debug/app-debug.apk`. Build CI otomatis berjalan saat ada push ke `main`.
+```bash
+./gradlew assembleDebug
+```
+
+APK debug berada di `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK otomatis saat push ke `main`.

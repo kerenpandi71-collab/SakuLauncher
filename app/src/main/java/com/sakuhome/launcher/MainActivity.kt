@@ -25,6 +25,8 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.AbsListView
 import android.widget.BaseAdapter
@@ -49,7 +51,9 @@ private data class LaunchableApp(
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var rootFrame: FrameLayout
+    private lateinit var shellView: LinearLayout
     private lateinit var startPanel: LinearLayout
+    private lateinit var startScrim: View
     private lateinit var startGrid: GridView
     private lateinit var widgetStrip: LinearLayout
     private lateinit var appWidgetHost: AppWidgetHost
@@ -67,6 +71,9 @@ class MainActivity : Activity() {
     private var showingAllApps = true
     private var homePage = 0
     private var homePageLabel: TextView? = null
+    private var pageTransitionInProgress = false
+    private var isDraggingHomeIcon = false
+    private var panelAnimationToken = 0
 
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
     private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
@@ -77,6 +84,7 @@ class MainActivity : Activity() {
     private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(159, 177, 202) else Color.rgb(82, 101, 130)
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
+    private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, hideLabels)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
 
@@ -102,7 +110,31 @@ class MainActivity : Activity() {
     private fun homePageCount(): Int = maxOf(1, preferences.getInt(KEY_HOME_PAGE_COUNT, 1))
 
     private fun showHomePage(page: Int) {
+        val targetPage = page.coerceIn(0, homePageCount() - 1)
+        if (targetPage == homePage || pageTransitionInProgress) return
+        if (!::desktopGrid.isInitialized || desktopGrid.width == 0) {
+            applyHomePage(targetPage)
+            return
+        }
+        pageTransitionInProgress = true
+        val direction = if (targetPage > homePage) -1 else 1
+        val offset = direction * dp(30)
+        desktopGrid.animate().cancel()
+        desktopGrid.animate().alpha(0.25f).translationX(offset.toFloat())
+            .setDuration(115).setInterpolator(AccelerateInterpolator()).withEndAction {
+                applyHomePage(targetPage)
+                desktopGrid.translationX = -offset.toFloat()
+                desktopGrid.alpha = 0f
+                desktopGrid.animate().alpha(1f).translationX(0f)
+                    .setDuration(235).setInterpolator(DecelerateInterpolator(1.55f)).withEndAction {
+                        pageTransitionInProgress = false
+                    }.start()
+            }.start()
+    }
+
+    private fun applyHomePage(page: Int) {
         homePage = page.coerceIn(0, homePageCount() - 1)
+        preferences.edit().putInt(KEY_LAST_HOME_PAGE, homePage).apply()
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
     }
@@ -152,6 +184,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
+        homePage = preferences.getInt(KEY_LAST_HOME_PAGE, 0).coerceIn(0, homePageCount() - 1)
         apps = loadApps()
         buildScreen()
         restoreWidgets()
@@ -164,6 +197,12 @@ class MainActivity : Activity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_START, false)) showStartPanel()
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
+    }
+
+    @Deprecated("Deprecated in Android; retained for broad device compatibility")
+    override fun onBackPressed() {
+        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+        else super.onBackPressed()
     }
 
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
@@ -233,6 +272,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(15), dp(18), dp(12))
         }
+        shellView = shell
 
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -316,7 +356,10 @@ class MainActivity : Activity() {
         desktopGrid.adapter = pinnedAdapter
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_STARTED -> {
+                    isDraggingHomeIcon = true
+                    event.clipDescription?.hasMimeType("text/plain") == true
+                }
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
@@ -336,17 +379,19 @@ class MainActivity : Activity() {
                     }
                     true
                 }
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; isDraggingHomeIcon = false; true }
                 else -> true
             }
         }
         var downX = 0f
+        var downY = 0f
         desktopGrid.setOnTouchListener { _, event ->
-            when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; false }
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
-                    if (kotlin.math.abs(dx) > dp(72)) {
+                    val dy = event.y - downY
+                    if (!isDraggingHomeIcon && kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
                         showHomePage(homePage + if (dx < 0) 1 else -1)
                         true
                     } else false
@@ -362,6 +407,13 @@ class MainActivity : Activity() {
             })
         }
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        startScrim = View(this).apply {
+            setBackgroundColor(if (isDarkTheme) 0x66070B12 else 0x440E1522)
+            alpha = 0f
+            visibility = View.GONE
+            setOnClickListener { hideStartPanel() }
+        }
+        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
@@ -423,7 +475,7 @@ class MainActivity : Activity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
+            background = if (liquidGlass) glassSurface(28) else rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
             elevation = dp(16).toFloat()
         }
         val header = LinearLayout(this).apply {
@@ -461,17 +513,11 @@ class MainActivity : Activity() {
         }
         pinnedTabButton = chipButton("Disematkan", if (!showingAllApps) accent else cardSurface, primaryText, 15).apply {
             textSize = 12f
-            setOnClickListener {
-                showingAllApps = false
-                refreshStartPanel()
-            }
+            setOnClickListener { switchStartTab(showAllApps = false) }
         }
         allAppsTabButton = chipButton("Semua aplikasi", if (showingAllApps) accent else cardSurface, primaryText, 15).apply {
             textSize = 12f
-            setOnClickListener {
-                showingAllApps = true
-                refreshStartPanel()
-            }
+            setOnClickListener { switchStartTab(showAllApps = true) }
         }
         filters.addView(pinnedTabButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(6) })
         filters.addView(allAppsTabButton, LinearLayout.LayoutParams(0, dp(38), 1f))
@@ -490,6 +536,22 @@ class MainActivity : Activity() {
         }
         startAdapter = AppGridAdapter(isStartMenu = true)
         startGrid.adapter = startAdapter
+        var downX = 0f
+        var downY = 0f
+        startGrid.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                        switchStartTab(showAllApps = dx < 0)
+                        true
+                    } else false
+                }
+                else -> false
+            }
+        }
         panel.addView(startGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         startSearchField.addTextChangedListener(object : TextWatcher {
@@ -509,25 +571,77 @@ class MainActivity : Activity() {
 
     private fun showStartPanel() {
         if (!::startPanel.isInitialized) return
+        if (startPanel.visibility == View.VISIBLE) return
+        panelAnimationToken++
+        startPanel.animate().cancel()
+        startScrim.animate().cancel()
+        startGrid.animate().cancel()
+        startGrid.alpha = 1f
+        startGrid.translationX = 0f
         showingAllApps = true
         startPanel.visibility = View.VISIBLE
+        startScrim.visibility = View.VISIBLE
         startPanel.bringToFront()
         startSearchField.setText("")
         refreshStartPanel()
+        startPanel.alpha = 0f
+        startPanel.translationY = dp(22).toFloat()
+        startPanel.scaleX = 0.985f
+        startPanel.scaleY = 0.985f
+        startScrim.alpha = 0f
+        startScrim.animate().alpha(1f).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
+        startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(250).setInterpolator(DecelerateInterpolator(1.6f)).start()
     }
 
     private fun hideStartPanel() {
-        if (::startPanel.isInitialized) startPanel.visibility = View.GONE
+        if (!::startPanel.isInitialized || startPanel.visibility != View.VISIBLE) return
+        val token = ++panelAnimationToken
+        startPanel.animate().cancel()
+        startScrim.animate().cancel()
+        startPanel.animate().alpha(0f).translationY(dp(14).toFloat()).scaleX(0.99f).scaleY(0.99f)
+            .setDuration(170).setInterpolator(DecelerateInterpolator()).withEndAction {
+                if (token == panelAnimationToken) {
+                    startPanel.visibility = View.GONE
+                    startPanel.alpha = 1f
+                    startPanel.translationY = 0f
+                    startPanel.scaleX = 1f
+                    startPanel.scaleY = 1f
+                    startScrim.visibility = View.GONE
+                    startScrim.alpha = 0f
+                }
+            }.start()
+        startScrim.animate().alpha(0f).setDuration(150).start()
         searchQuery = ""
         if (::startSearchField.isInitialized) startSearchField.setText("")
+        if (::startSearchField.isInitialized) startSearchField.hideKeyboard()
     }
 
     private fun refreshStartPanel() {
-        if (::pinnedTabButton.isInitialized) {
-            pinnedTabButton.background = rounded(if (!showingAllApps) accent else cardSurface, 15)
-            allAppsTabButton.background = rounded(if (showingAllApps) accent else cardSurface, 15)
-        }
+        updateStartTabAppearance()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
+    }
+
+    private fun updateStartTabAppearance() {
+        if (!::pinnedTabButton.isInitialized) return
+        pinnedTabButton.background = rounded(if (!showingAllApps) accent else cardSurface, 15)
+        allAppsTabButton.background = rounded(if (showingAllApps) accent else cardSurface, 15)
+    }
+
+    private fun switchStartTab(showAllApps: Boolean) {
+        if (showingAllApps == showAllApps) return
+        showingAllApps = showAllApps
+        updateStartTabAppearance()
+        if (!::startGrid.isInitialized || !::startAdapter.isInitialized) return
+        val direction = if (showAllApps) 1f else -1f
+        startGrid.animate().cancel()
+        startGrid.animate().alpha(0f).translationX(-direction * dp(20).toFloat())
+            .setDuration(105).setInterpolator(AccelerateInterpolator()).withEndAction {
+                startAdapter.notifyDataSetChanged()
+                startGrid.translationX = direction * dp(20).toFloat()
+                startGrid.animate().alpha(1f).translationX(0f)
+                    .setDuration(190).setInterpolator(DecelerateInterpolator(1.5f)).start()
+            }.start()
     }
 
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
@@ -552,10 +666,10 @@ class MainActivity : Activity() {
         // When the bottom taskbar is hidden, there is no dock view to rebuild.
         if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         // Rebuild only the dock; keep the open Start panel and its scroll position intact.
-        val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
-        val dockIndex = shell.childCount - 1
-        shell.removeViewAt(dockIndex)
-        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
+        val dockIndex = shellView.childCount - 1
+        if (dockIndex < 0) return
+        shellView.removeViewAt(dockIndex)
+        shellView.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
     }
 
     private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
@@ -728,6 +842,7 @@ class MainActivity : Activity() {
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
         val labelState = if (hideLabels) "Sembunyi" else "Tampil"
+        val drawerLabelState = if (hideDrawerLabels) "Sembunyi" else "Tampil"
         val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
         val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
         val options = arrayOf(
@@ -747,7 +862,8 @@ class MainActivity : Activity() {
             "ⓘ  Tentang & izin",
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
-            "◉  Pengelola proses aplikasi"
+            "◉  Pengelola proses aplikasi",
+            "◌  Label menu aplikasi · $drawerLabelState"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -764,6 +880,7 @@ class MainActivity : Activity() {
                     3 -> {
                         preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
                         buildScreen()
+                        refreshFloatingDock()
                     }
                     4 -> chooseTransparency()
                     5 -> manageHiddenApps()
@@ -778,6 +895,10 @@ class MainActivity : Activity() {
                     14 -> chooseHomeGrid()
                     15 -> chooseDrawerGrid()
                     16 -> showProcessManager()
+                    17 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
+                        buildScreen()
+                    }
                 }
             }.setNegativeButton("Selesai", null).show()
     }
@@ -1306,7 +1427,7 @@ class MainActivity : Activity() {
 
     private fun showPermissionInfo() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
-            .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start, pin aplikasi, dan dock tidak membutuhkan root atau Shizuku. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
+            .setMessage("Dock di atas aplikasi memakai izin overlay Android. Fitur dasar launcher tidak memerlukan root. Jika Pengelola Proses dibuka, Saku mencoba membaca PID melalui su; perintah hentikan/freeze baru dijalankan setelah konfirmasi di aplikasi dan tetap memerlukan persetujuan root. Shizuku belum terintegrasi pada versi ini. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
             .setPositiveButton("Mengerti", null).show()
     }
 
@@ -1444,12 +1565,12 @@ class MainActivity : Activity() {
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(0, dp(5), 0, 0)
-                    visibility = if (hideLabels) View.GONE else View.VISIBLE
+                    visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(-1, -2))
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
-            cell.findViewById<TextView>(android.R.id.text1).visibility = if (hideLabels) View.GONE else View.VISIBLE
+            cell.findViewById<TextView>(android.R.id.text1).visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
@@ -1477,6 +1598,7 @@ class MainActivity : Activity() {
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
+        private const val KEY_LAST_HOME_PAGE = "last_home_screen_page"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
@@ -1484,6 +1606,7 @@ class MainActivity : Activity() {
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val KEY_HIDE_TASKBAR = "hide_bottom_taskbar"
         private const val KEY_HIDE_LABELS = "hide_app_labels"
+        private const val KEY_HIDE_DRAWER_LABELS = "hide_drawer_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"

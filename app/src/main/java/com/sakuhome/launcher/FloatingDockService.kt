@@ -91,6 +91,7 @@ class FloatingDockService : Service() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val accentColor = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
+        val liquidGlass = prefs.getBoolean(KEY_LIQUID_GLASS, true)
         val transparency = prefs.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
         val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
@@ -170,22 +171,38 @@ class FloatingDockService : Service() {
             dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize), dp(48)))
         }
 
+        val blurSupported = liquidGlass && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && windowManager.isCrossWindowBlurEnabled()
+        var windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        if (blurSupported) windowFlags = windowFlags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             dp(58),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            windowFlags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = dp(28)
+            if (blurSupported) setBlurBehindRadius(dp(28))
         }
         try {
             windowManager.addView(dock, params)
             dockView = dock
         } catch (_: Exception) {
-            Toast.makeText(this, "Tidak dapat menampilkan dock di atas aplikasi", Toast.LENGTH_SHORT).show()
-            stopSelf()
+            if (blurSupported) {
+                try {
+                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+                    params.setBlurBehindRadius(0)
+                    windowManager.addView(dock, params)
+                    dockView = dock
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Tidak dapat menampilkan dock di atas aplikasi", Toast.LENGTH_SHORT).show()
+                    stopSelf()
+                }
+            } else {
+                Toast.makeText(this, "Tidak dapat menampilkan dock di atas aplikasi", Toast.LENGTH_SHORT).show()
+                stopSelf()
+            }
         }
     }
 
@@ -235,5 +252,6 @@ class FloatingDockService : Service() {
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
+        private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
     }
 }
