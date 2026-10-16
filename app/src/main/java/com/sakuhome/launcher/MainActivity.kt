@@ -46,7 +46,7 @@ class MainActivity : Activity() {
     private lateinit var startPanel: LinearLayout
     private lateinit var startGrid: GridView
     private lateinit var desktopGrid: GridView
-    private lateinit var startSearch: EditText
+    private lateinit var startSearchField: EditText
     private lateinit var pinnedTabButton: TextView
     private lateinit var allAppsTabButton: TextView
     private lateinit var clockText: TextView
@@ -106,7 +106,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        startSearch.hideKeyboard()
+        startSearchField.hideKeyboard()
     }
 
     private fun buildScreen() {
@@ -265,7 +265,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
         panel.addView(header)
 
-        startSearch = EditText(this).apply {
+        startSearchField = EditText(this).apply {
             hint = "Cari aplikasi"
             textSize = 14f
             setSingleLine(true)
@@ -276,7 +276,7 @@ class MainActivity : Activity() {
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             contentDescription = "Cari aplikasi di menu Start"
         }
-        panel.addView(startSearch, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
 
         val filters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -313,7 +313,7 @@ class MainActivity : Activity() {
         startGrid.adapter = startAdapter
         panel.addView(startGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        startSearch.addTextChangedListener(object : TextWatcher {
+        startSearchField.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
@@ -333,14 +333,14 @@ class MainActivity : Activity() {
         showingAllApps = true
         startPanel.visibility = View.VISIBLE
         startPanel.bringToFront()
-        startSearch.setText("")
+        startSearchField.setText("")
         refreshStartPanel()
     }
 
     private fun hideStartPanel() {
         if (::startPanel.isInitialized) startPanel.visibility = View.GONE
         searchQuery = ""
-        if (::startSearch.isInitialized) startSearch.setText("")
+        if (::startSearchField.isInitialized) startSearchField.setText("")
     }
 
     private fun refreshStartPanel() {
