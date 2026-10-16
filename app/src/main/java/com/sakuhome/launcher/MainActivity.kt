@@ -828,17 +828,41 @@ class MainActivity : Activity() {
         if (!::widgetStrip.isInitialized) return
         val view = appWidgetHost.createView(this, id, info)
         view.setAppWidget(id, info)
+        val sizeKey = KEY_WIDGET_HEIGHT_PREFIX + id
+        val heightDp = preferences.getInt(sizeKey, 150).coerceIn(90, 280)
+        view.tag = id
         view.setOnLongClickListener {
+            val choices = arrayOf("Perkecil widget", "Perbesar widget", "Pindahkan ke atas", "Pindahkan ke bawah", "Hapus widget")
             AlertDialog.Builder(this).setTitle(info.loadLabel(packageManager))
-                .setItems(arrayOf("Hapus widget")) { _, _ ->
-                    widgetStrip.removeView(view)
-                    appWidgetHost.deleteAppWidgetId(id)
-                    val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() && it != id.toString() }
-                    preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+                .setItems(choices) { _, selected ->
+                    when (selected) {
+                        0, 1 -> {
+                            val currentHeight = preferences.getInt(sizeKey, 150).coerceIn(90, 280)
+                            val nextHeight = (currentHeight + if (selected == 1) 40 else -40).coerceIn(90, 280)
+                            preferences.edit().putInt(sizeKey, nextHeight).apply()
+                            view.layoutParams = LinearLayout.LayoutParams(-1, dp(nextHeight)).apply { bottomMargin = dp(8) }
+                        }
+                        2, 3 -> {
+                            val from = widgetStrip.indexOfChild(view)
+                            val to = from + if (selected == 2) -1 else 1
+                            if (to in 0 until widgetStrip.childCount) {
+                                widgetStrip.removeView(view)
+                                widgetStrip.addView(view, to)
+                                val ids = (0 until widgetStrip.childCount).mapNotNull { widgetStrip.getChildAt(it).tag as? Int }
+                                preferences.edit().putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+                            }
+                        }
+                        4 -> {
+                            widgetStrip.removeView(view)
+                            appWidgetHost.deleteAppWidgetId(id)
+                            val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() && it != id.toString() }
+                            preferences.edit().remove(sizeKey).putString(KEY_WIDGET_IDS, ids.joinToString(",")).apply()
+                        }
+                    }
                 }.setNegativeButton("Batal", null).show()
             true
         }
-        widgetStrip.addView(view, LinearLayout.LayoutParams(-1, dp(150)).apply { bottomMargin = dp(8) })
+        widgetStrip.addView(view, LinearLayout.LayoutParams(-1, dp(heightDp)).apply { bottomMargin = dp(8) })
         if (persist) {
             val ids = preferences.getString(KEY_WIDGET_IDS, "").orEmpty().split(",").filter { it.isNotBlank() }.toMutableList()
             if (!ids.contains(id.toString())) ids.add(id.toString())
