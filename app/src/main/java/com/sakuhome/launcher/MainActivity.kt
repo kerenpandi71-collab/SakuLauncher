@@ -321,13 +321,16 @@ class MainActivity : Activity() {
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
                     grid.alpha = 1f
-                    val sourcePackage = event.clipData?.getItemAt(0)?.text?.toString()
+                    val sourcePackage = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
                     val targetPosition = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
                     val order = homePackages()
                     val from = order.indexOf(sourcePackage)
-                    if (from >= 0 && targetPosition in order.indices) {
+                    val targetPackage = pinnedAdapter.getItemOrNull(targetPosition)?.packageName
+                    val targetIndex = if (targetPackage != null) order.indexOf(targetPackage) else -1
+                    if (from >= 0) {
                         val moving = order.removeAt(from)
-                        order.add(targetPosition.coerceIn(0, order.size), moving)
+                        val insertAt = if (targetIndex >= 0) targetIndex.coerceAtMost(order.size) else order.size
+                        order.add(insertAt, moving)
                         saveHomePackages(order)
                         pinnedAdapter.notifyDataSetChanged()
                     }
@@ -880,8 +883,9 @@ class MainActivity : Activity() {
 
     private fun showWidgetInfo() {
         AlertDialog.Builder(this).setTitle("Widget Android")
-            .setMessage("Widget interaktif belum aktif di versi ini. Integrasi yang benar membutuhkan AppWidgetHost, pemilih widget Android, izin binding, dan penyimpanan posisi widget di workspace.")
-            .setPositiveButton("Mengerti", null).show()
+            .setMessage("Tambahkan widget asli dari aplikasi yang terpasang. Widget interaktif mengikuti provider Android dan dapat diperbesar, diperkecil, diurutkan, atau dihapus.")
+            .setPositiveButton("Pilih widget") { _, _ -> pickWidget() }
+            .setNegativeButton("Batal", null).show()
     }
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable().apply {
@@ -1416,6 +1420,7 @@ class MainActivity : Activity() {
         override fun getCount(): Int = items.size
         override fun getItem(position: Int): LaunchableApp = items[position]
         override fun getItemId(position: Int): Long = items[position].packageName.hashCode().toLong()
+        fun getItemOrNull(position: Int): LaunchableApp? = items.getOrNull(position)
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
