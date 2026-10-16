@@ -398,7 +398,7 @@ class MainActivity : Activity() {
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4
+            numColumns = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
             verticalSpacing = dp(5)
             horizontalSpacing = dp(4)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -639,7 +639,8 @@ class MainActivity : Activity() {
             "▧  Pilih wallpaper",
             "↺  Reset wallpaper",
             "ⓘ  Tentang & izin",
-            "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom"
+            "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
+            "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -668,6 +669,7 @@ class MainActivity : Activity() {
                     12 -> resetWallpaper()
                     13 -> showPermissionInfo()
                     14 -> chooseHomeGrid()
+                    15 -> chooseDrawerGrid()
                 }
             }.setNegativeButton("Selesai", null).show()
     }
@@ -728,6 +730,22 @@ class MainActivity : Activity() {
                 rebuildPinnedViews()
             }
             .setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseDrawerGrid() {
+        val options = arrayOf("3 kolom · ikon besar", "4 kolom · seimbang", "5 kolom · lebih banyak aplikasi", "6 kolom · padat")
+        val values = intArrayOf(3, 4, 5, 6)
+        val current = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
+        AlertDialog.Builder(this).setTitle("Kolom menu aplikasi")
+            .setSingleChoiceItems(options, values.indexOf(current).coerceAtLeast(1)) { dialog, which ->
+                preferences.edit().putInt(KEY_DRAWER_GRID_COLUMNS, values[which]).apply()
+                dialog.dismiss()
+                if (::startGrid.isInitialized) {
+                    startGrid.numColumns = values[which]
+                    startAdapter.notifyDataSetChanged()
+                }
+                Toast.makeText(this, "Kolom menu aplikasi diperbarui", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
     }
 
     private fun chooseHomeGrid() {
@@ -1111,6 +1129,7 @@ class MainActivity : Activity() {
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
+        private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
