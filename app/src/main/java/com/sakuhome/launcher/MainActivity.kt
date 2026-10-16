@@ -486,7 +486,6 @@ class MainActivity : Activity() {
         val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
-            "Virtual Mouse + Keyboard",
             "Dock mengambang di atas aplikasi — $overlayState",
             "Kelola pin aplikasi — $pinnedState",
             "Mode tampilan — $themeState",
@@ -498,44 +497,15 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Pengaturan Saku Dock")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> openVirtualControls()
-                    1 -> toggleOverlay()
-                    2 -> managePins()
-                    3 -> toggleTheme()
-                    4 -> chooseAccent()
-                    5 -> chooseWallpaper()
-                    6 -> resetWallpaper()
-                    7 -> showPermissionInfo()
+                    0 -> toggleOverlay()
+                    1 -> managePins()
+                    2 -> toggleTheme()
+                    3 -> chooseAccent()
+                    4 -> chooseWallpaper()
+                    5 -> resetWallpaper()
+                    6 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
-    }
-
-    private fun openVirtualControls() {
-        if (!Settings.canDrawOverlays(this)) {
-            AlertDialog.Builder(this)
-                .setTitle("Izinkan panel virtual")
-                .setMessage("Saku perlu izin tampil di atas aplikasi untuk menampilkan panel touchpad.")
-                .setPositiveButton("Buka pengaturan") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                }
-                .setNegativeButton("Batal", null).show()
-            return
-        }
-        val component = android.content.ComponentName(this, VirtualMouseAccessibilityService::class.java)
-        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
-        if (!enabled.split(':').any { it.equals(component.flattenToString(), ignoreCase = true) }) {
-            AlertDialog.Builder(this)
-                .setTitle("Aktifkan layanan Saku")
-                .setMessage("Aksesibilitas diperlukan untuk mengirim ketukan dan seretan yang kamu minta. Saku tidak membaca isi layar atau merekam ketikan.")
-                .setPositiveButton("Buka Aksesibilitas") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }
-                .setNegativeButton("Batal", null).show()
-            return
-        }
-        val intent = Intent(this, VirtualControlService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
-        Toast.makeText(this, "Panel virtual mouse aktif", Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleOverlay() {
@@ -598,7 +568,7 @@ class MainActivity : Activity() {
 
     private fun showPermissionInfo() {
         AlertDialog.Builder(this).setTitle("Izin dan dukungan")
-            .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start dan pin aplikasi bekerja tanpa Shizuku. Jendela bebas dikendalikan Android dan dukungan perangkat; Saku tidak dapat memaksakannya. Shizuku/root hanya akan ditambahkan untuk kontrol sistem tertentu yang benar-benar memerlukannya dan selalu diminta secara terpisah.")
+            .setMessage("Dock di atas aplikasi memakai izin overlay Android, bukan root. Menu Start, pin aplikasi, dan dock tidak membutuhkan root atau Shizuku. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
             .setPositiveButton("Mengerti", null).show()
     }
 
