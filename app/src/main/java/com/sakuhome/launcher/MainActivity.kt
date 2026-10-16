@@ -314,6 +314,29 @@ class MainActivity : Activity() {
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
+        desktopGrid.setOnDragListener { grid, event ->
+            when (event.action) {
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DROP -> {
+                    grid.alpha = 1f
+                    val sourcePackage = event.clipData?.getItemAt(0)?.text?.toString()
+                    val targetPosition = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
+                    val order = homePackages()
+                    val from = order.indexOf(sourcePackage)
+                    if (from >= 0 && targetPosition in order.indices) {
+                        val moving = order.removeAt(from)
+                        order.add(targetPosition.coerceIn(0, order.size), moving)
+                        saveHomePackages(order)
+                        pinnedAdapter.notifyDataSetChanged()
+                    }
+                    true
+                }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                else -> true
+            }
+        }
         var downX = 0f
         desktopGrid.setOnTouchListener { _, event ->
             when (event.action) {
@@ -376,10 +399,6 @@ class MainActivity : Activity() {
         }
         scroll.addView(icons)
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
-        dock.addView(chipButton("∿", cardSurface, accent, 20).apply {
-            contentDescription = "Layanan dan proses aplikasi"
-            setOnClickListener { showProcessManager() }
-        }, LinearLayout.LayoutParams(dp(43), -1))
         return dock
     }
 
@@ -1429,8 +1448,20 @@ class MainActivity : Activity() {
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
-                showAppMenu(app)
-                true
+                if (!isStartMenu && homePackages().contains(app.packageName)) {
+                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
+                    val shadow = View.DragShadowBuilder(cell)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        cell.startDragAndDrop(clip, shadow, app.packageName, 0)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        cell.startDrag(clip, shadow, app.packageName, 0)
+                    }
+                    true
+                } else {
+                    showAppMenu(app)
+                    true
+                }
             }
             return cell
         }
