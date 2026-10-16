@@ -318,12 +318,6 @@ class MainActivity : Activity() {
             setPadding(dp(4), 0, dp(3), dp(2))
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(TextView(this).apply {
-            text = "Finder"
-            textSize = 11f
-            letterSpacing = 0.02f
-            setTextColor(accent)
-        })
         clockText = TextView(this).apply {
             textSize = 17f
             setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
@@ -405,6 +399,10 @@ class MainActivity : Activity() {
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
+        desktopGrid.setOnLongClickListener {
+            showHomeLayoutOptions()
+            true
+        }
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
                 android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
@@ -485,7 +483,6 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-2, -1))
         }
         item("●", "Menu desktop") { showControlCenter() }
-        item("Finder", "Menu Finder") { showStartPanel() }
         item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showControlCenter() }
         strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
@@ -1807,7 +1804,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = if (isStartMenu) ColorDrawable(Color.TRANSPARENT) else if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(110, 45, 61, 84) else Color.argb(135, 250, 252, 255), 19)
+                background = if (liquidGlass) glassSurface(if (isStartMenu) 16 else 19) else if (isStartMenu) rounded(if (isDarkTheme) Color.argb(170, 45, 61, 84) else Color.argb(205, 250, 252, 255), 16) else rounded(if (isDarkTheme) Color.argb(110, 45, 61, 84) else Color.argb(135, 250, 252, 255), 19)
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 91 else 102))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
@@ -1833,14 +1830,20 @@ class MainActivity : Activity() {
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
                 if (!isStartMenu && homePackages().contains(app.packageName)) {
-                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
-                    val shadow = View.DragShadowBuilder(cell)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        cell.startDragAndDrop(clip, shadow, app.packageName, 0)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        cell.startDrag(clip, shadow, app.packageName, 0)
-                    }
+                    val current = homePackages().toMutableList()
+                    val choices = arrayOf("Pindahkan ke awal layar", "Pindahkan ke akhir layar", "Kelola aplikasi")
+                    AlertDialog.Builder(this@MainActivity).setTitle(app.label)
+                        .setItems(choices) { _, which ->
+                            when (which) {
+                                0, 1 -> {
+                                    current.remove(app.packageName)
+                                    if (which == 0) current.add(0, app.packageName) else current.add(app.packageName)
+                                    saveHomePackages(current)
+                                    pinnedAdapter.notifyDataSetChanged()
+                                }
+                                2 -> showAppMenu(app)
+                            }
+                        }.setNegativeButton("Batal", null).show()
                     true
                 } else {
                     showAppMenu(app)
