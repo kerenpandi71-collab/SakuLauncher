@@ -31,6 +31,10 @@ class VirtualControlService : Service() {
     private lateinit var wm: WindowManager
     private var panel: View? = null
     private var cursor: TextView? = null
+    private var trackpadView: View? = null
+    private var hintView: View? = null
+    private var keyboardView: View? = null
+    private var keyboardVisible = false
     private var foreground = false
     private var cursorX = 0f
     private var cursorY = 0f
@@ -109,10 +113,7 @@ class VirtualControlService : Service() {
             textSize = 11f
             setTextColor(Color.rgb(190, 205, 235))
         }, LinearLayout.LayoutParams(0, dp(36), 1f))
-        toolbar.addView(button("⌨", dp(38)) {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showInputMethodPicker()
-        })
+        toolbar.addView(button("⌨", dp(38)) { toggleKeyboard() })
         toolbar.addView(button(if (dragMode) "Drag✓" else "Drag", dp(48)) { toggleDragMode() })
         toolbar.addView(button("Right", dp(43)) { rightClick() })
         toolbar.addView(button("×", dp(34)) { stopSelf() })
@@ -216,6 +217,7 @@ class VirtualControlService : Service() {
             }
         }
         shell.addView(pad, LinearLayout.LayoutParams(-1, dp(118)).apply { topMargin = dp(5) })
+        trackpadView = pad
         val hint = TextView(this).apply {
             text = "Mouse hardware via Shizuku (jika diaktifkan); Accessibility jadi fallback. Aktifkan Shizuku untuk hover dan scroll mouse asli."
             textSize = 10f
@@ -223,6 +225,7 @@ class VirtualControlService : Service() {
             setPadding(dp(4), dp(5), dp(4), 0)
         }
         shell.addView(hint)
+        hintView = hint
         val panelParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -288,6 +291,146 @@ class VirtualControlService : Service() {
         VirtualMouseAccessibilityService.instance?.longPressAt(cursorX, cursorY)
             ?: Toast.makeText(this, "Klik kanan butuh Shizuku aktif", Toast.LENGTH_SHORT).show()
     }
+
+
+    private fun toggleKeyboard() {
+        val shell = panel as? LinearLayout ?: return
+        val pad = trackpadView ?: return
+        val hint = hintView ?: return
+        if (!keyboardVisible) {
+            val keyboard = buildPcKeyboard()
+            keyboardView = keyboard
+            shell.removeView(pad)
+            shell.removeView(hint)
+            shell.addView(keyboard, LinearLayout.LayoutParams(-1, WindowManager.LayoutParams.WRAP_CONTENT))
+            keyboardVisible = true
+            if (SakuInputBridge.shell == null) {
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                Toast.makeText(this, "Keyboard PC tampil. Untuk input global, sambungkan Shizuku.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            keyboardView?.let { shell.removeView(it) }
+            shell.addView(pad, LinearLayout.LayoutParams(-1, dp(118)).apply { topMargin = dp(5) })
+            shell.addView(hint)
+            keyboardView = null
+            keyboardVisible = false
+        }
+    }
+
+    private fun buildPcKeyboard(): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(1), dp(4), dp(1), dp(1))
+        }
+        val rows = listOf(
+            listOf("Esc","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"),
+            listOf("`","1","2","3","4","5","6","7","8","9","0","-","=","⌫"),
+            listOf("Tab","Q","W","E","R","T","Y","U","I","O","P","[","]"),
+            listOf("Caps","A","S","D","F","G","H","J","K","L",";","'","Enter"),
+            listOf("Shift","\\","Z","X","C","V","B","N","M",",",".","/","Shift"),
+            listOf("Ctrl","Win","Alt","Space","Alt","←","↑","↓","→","Del")
+        )
+        rows.forEach { labels ->
+            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            labels.forEach { label ->
+                val weight = when (label) {
+                    "Space" -> 4f
+                    "Enter", "Shift", "Backspace", "Caps", "Tab", "Ctrl", "Alt", "Win", "⌫", "Del" -> 1.5f
+                    else -> 1f
+                }
+                val key = TextView(this).apply {
+                    text = if (label == "Space") "Spasi" else label
+                    textSize = if (label.length > 3) 8f else 10f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                    background = rounded(Color.rgb(43, 53, 73), 5)
+                    isClickable = true
+                    setOnClickListener { sendPcKey(label) }
+                }
+                line.addView(key, LinearLayout.LayoutParams(0, dp(31), weight).apply {
+                    marginStart = dp(1); marginEnd = dp(1); bottomMargin = dp(3)
+                })
+            }
+            root.addView(line)
+        }
+        return root
+    }
+
+    private fun sendPcKey(label: String) {
+        val bridge = SakuInputBridge.shell
+        if (bridge == null) {
+            Toast.makeText(this, "Aktifkan Shizuku dan izinkan Saku untuk mengetik.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val code = when (label) {
+            "Esc" -> android.view.KeyEvent.KEYCODE_ESCAPE
+            "Tab" -> android.view.KeyEvent.KEYCODE_TAB
+            "Caps" -> android.view.KeyEvent.KEYCODE_CAPS_LOCK
+            "Shift" -> android.view.KeyEvent.KEYCODE_SHIFT_LEFT
+            "Ctrl" -> android.view.KeyEvent.KEYCODE_CTRL_LEFT
+            "Alt" -> android.view.KeyEvent.KEYCODE_ALT_LEFT
+            "Win" -> android.view.KeyEvent.KEYCODE_META_LEFT
+            "Enter" -> android.view.KeyEvent.KEYCODE_ENTER
+            "⌫" -> android.view.KeyEvent.KEYCODE_DEL
+            "Del" -> android.view.KeyEvent.KEYCODE_FORWARD_DEL
+            "←" -> android.view.KeyEvent.KEYCODE_DPAD_LEFT
+            "→" -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+            "↑" -> android.view.KeyEvent.KEYCODE_DPAD_UP
+            "↓" -> android.view.KeyEvent.KEYCODE_DPAD_DOWN
+            "Space" -> android.view.KeyEvent.KEYCODE_SPACE
+            "F1" -> android.view.KeyEvent.KEYCODE_F1
+            "F2" -> android.view.KeyEvent.KEYCODE_F2
+            "F3" -> android.view.KeyEvent.KEYCODE_F3
+            "F4" -> android.view.KeyEvent.KEYCODE_F4
+            "F5" -> android.view.KeyEvent.KEYCODE_F5
+            "F6" -> android.view.KeyEvent.KEYCODE_F6
+            "F7" -> android.view.KeyEvent.KEYCODE_F7
+            "F8" -> android.view.KeyEvent.KEYCODE_F8
+            "F9" -> android.view.KeyEvent.KEYCODE_F9
+            "F10" -> android.view.KeyEvent.KEYCODE_F10
+            "F11" -> android.view.KeyEvent.KEYCODE_F11
+            "F12" -> android.view.KeyEvent.KEYCODE_F12
+            else -> keyCodeForLabel(label)
+        }
+        if (code == android.view.KeyEvent.KEYCODE_UNKNOWN) return
+        val now = SystemClock.uptimeMillis()
+        val meta = when (label) {
+            "Shift" -> android.view.KeyEvent.META_SHIFT_ON
+            "Ctrl" -> android.view.KeyEvent.META_CTRL_ON
+            "Alt" -> android.view.KeyEvent.META_ALT_ON
+            "Win" -> android.view.KeyEvent.META_META_ON
+            else -> 0
+        }
+        try {
+            bridge.injectKey(code, android.view.KeyEvent.ACTION_DOWN, meta, 0)
+            bridge.injectKey(code, android.view.KeyEvent.ACTION_UP, meta, 0)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Gagal mengirim tombol. Periksa koneksi Shizuku.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun keyCodeForLabel(label: String): Int {
+        val c = label.firstOrNull()?.uppercaseChar() ?: return android.view.KeyEvent.KEYCODE_UNKNOWN
+        return when {
+            c in 'A'..'Z' -> android.view.KeyEvent.KEYCODE_A + (c - 'A')
+            c in '1'..'9' -> android.view.KeyEvent.KEYCODE_1 + (c - '1')
+            c == '0' -> android.view.KeyEvent.KEYCODE_0
+            c == ',' -> android.view.KeyEvent.KEYCODE_COMMA
+            c == '.' -> android.view.KeyEvent.KEYCODE_PERIOD
+            c == '/' -> android.view.KeyEvent.KEYCODE_SLASH
+            c == ';' -> android.view.KeyEvent.KEYCODE_SEMICOLON
+            c == '\'' -> android.view.KeyEvent.KEYCODE_APOSTROPHE
+            c == '[' -> android.view.KeyEvent.KEYCODE_LEFT_BRACKET
+            c == ']' -> android.view.KeyEvent.KEYCODE_RIGHT_BRACKET
+            c == '-' -> android.view.KeyEvent.KEYCODE_MINUS
+            c == '=' -> android.view.KeyEvent.KEYCODE_EQUALS
+            c == '\\' -> android.view.KeyEvent.KEYCODE_BACKSLASH
+            c == '`' -> android.view.KeyEvent.KEYCODE_GRAVE
+            else -> android.view.KeyEvent.KEYCODE_UNKNOWN
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun moveCursor() {
         val v = cursor ?: return
