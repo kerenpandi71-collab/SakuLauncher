@@ -249,6 +249,10 @@ class MainActivity : Activity() {
         }
         scroll.addView(icons)
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+        dock.addView(chipButton("⌖", accent, Color.WHITE, 16).apply {
+            contentDescription = "Buka virtual mouse dan keyboard"
+            setOnClickListener { openVirtualControls() }
+        }, LinearLayout.LayoutParams(dp(42), -1))
         dock.addView(chipButton("⋯", cardSurface, secondaryText, 16).apply {
             contentDescription = "Kelola dock"
             setOnClickListener { showSettings() }
@@ -480,6 +484,7 @@ class MainActivity : Activity() {
         val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
+            "Virtual Mouse + Keyboard",
             "Dock mengambang di atas aplikasi — $overlayState",
             "Kelola pin aplikasi — $pinnedState",
             "Mode tampilan — $themeState",
@@ -491,15 +496,44 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Pengaturan Saku Dock")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> toggleOverlay()
-                    1 -> managePins()
-                    2 -> toggleTheme()
-                    3 -> chooseAccent()
-                    4 -> chooseWallpaper()
-                    5 -> resetWallpaper()
-                    6 -> showPermissionInfo()
+                    0 -> openVirtualControls()
+                    1 -> toggleOverlay()
+                    2 -> managePins()
+                    3 -> toggleTheme()
+                    4 -> chooseAccent()
+                    5 -> chooseWallpaper()
+                    6 -> resetWallpaper()
+                    7 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openVirtualControls() {
+        if (!Settings.canDrawOverlays(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("Izinkan panel virtual")
+                .setMessage("Saku perlu izin tampil di atas aplikasi untuk menampilkan panel touchpad.")
+                .setPositiveButton("Buka pengaturan") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                }
+                .setNegativeButton("Batal", null).show()
+            return
+        }
+        val component = android.content.ComponentName(this, VirtualMouseAccessibilityService::class.java)
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        if (!enabled.split(':').any { it.equals(component.flattenToString(), ignoreCase = true) }) {
+            AlertDialog.Builder(this)
+                .setTitle("Aktifkan layanan Saku")
+                .setMessage("Aksesibilitas diperlukan untuk mengirim ketukan dan seretan yang kamu minta. Saku tidak membaca isi layar atau merekam ketikan.")
+                .setPositiveButton("Buka Aksesibilitas") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+                .setNegativeButton("Batal", null).show()
+            return
+        }
+        val intent = Intent(this, VirtualControlService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+        Toast.makeText(this, "Panel virtual mouse aktif", Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleOverlay() {
