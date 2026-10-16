@@ -606,21 +606,24 @@ class MainActivity : Activity() {
         val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
         val labelState = if (hideLabels) "Sembunyi" else "Tampil"
         val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
+        val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
         val options = arrayOf(
-            "Taskbar bawah — $hideTaskbarState",
-            "Ukuran ikon — ${iconSizeDp} dp",
-            "Label aplikasi — $labelState",
-            "Liquid Glass — $glassState",
-            "Dock mengambang di atas aplikasi — $overlayState",
-            "Kelola pin aplikasi — $pinnedState",
-            "Mode tampilan — $themeState",
-            "Warna aksen",
-            "Pilih wallpaper beranda",
-            "Reset wallpaper",
-            "Widget Android (info dukungan)",
-            "Tentang izin & mode jendela"
+            "◧  Taskbar bawah · $hideTaskbarState",
+            "▦  Ukuran ikon · ${iconSizeDp} dp",
+            "◌  Label aplikasi · $labelState",
+            "✧  Liquid Glass · $glassState",
+            "◐  Transparansi · $transparency%",
+            "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
+            "＋  Tambahkan widget",
+            "⌘  Dock mengambang · $overlayState",
+            "▤  Kelola aplikasi dock · $pinnedState",
+            "☾  Mode tampilan · $themeState",
+            "✦  Warna aksen",
+            "▧  Pilih wallpaper",
+            "↺  Reset wallpaper",
+            "ⓘ  Tentang & izin"
         )
-        AlertDialog.Builder(this).setTitle("Pengaturan Saku Dock")
+        AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
@@ -636,18 +639,18 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
                         buildScreen()
                     }
-                    4 -> toggleOverlay()
-                    5 -> managePins()
-                    6 -> toggleTheme()
-                    7 -> chooseAccent()
-                    8 -> chooseWallpaper()
-                    9 -> resetWallpaper()
-                    10 -> showWidgetInfo()
-                    11 -> showPermissionInfo()
+                    4 -> chooseTransparency()
+                    5 -> manageHiddenApps()
+                    6 -> pickWidget()
+                    7 -> toggleOverlay()
+                    8 -> managePins()
+                    9 -> toggleTheme()
+                    10 -> chooseAccent()
+                    11 -> chooseWallpaper()
+                    12 -> resetWallpaper()
+                    13 -> showPermissionInfo()
                 }
-            }.setNegativeButton("Tutup", null).show()
-    }
-
+            }.setNegativeButton("Selesai", null).show()
     private fun toggleOverlay() {
         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
         if (enabled) {
