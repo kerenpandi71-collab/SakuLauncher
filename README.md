@@ -12,6 +12,7 @@ Launcher desktop Android yang ringan. Desain dan alur fiturnya terinspirasi kons
 - Ketuk ikon untuk membuka aplikasi; tahan ikon untuk mencoba mode jendela bebas.
 - Pilihan fullscreen atau freeform melalui menu konteks aplikasi.
 - Layout menyesuaikan orientasi portrait dan landscape.
+- Pintasan keyboard: `Ctrl+Space` membuka Start, `Ctrl+F` mencari aplikasi, `Ctrl+,` membuka pengaturan, `Esc` menutup Start, dan `F5` menyegarkan daftar aplikasi.
 
 ## Perubahan arsitektur
 
@@ -26,4 +27,4 @@ Permintaan freeform menggunakan API publik Android dan dapat diabaikan jika ROM 
 - Android SDK Platform 35
 - JDK 17
 
-Jalankan `./gradlew assembleDebug`. APK debug berada di `app/build/outputs/apk/debug/app-debug.apk`. Build CI otomatis berjalan saat ada push ke `main`.
+Jalankan `./gradlew assembleDebug`. APK debug berada di `app/build/outputs/apk/debug/app-debug.apk`. Build CI otomatis berjalan saat ada push ke `main` atau branch overhaul dan saat pull request ke `main`.
