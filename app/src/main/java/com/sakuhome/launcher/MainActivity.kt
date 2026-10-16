@@ -494,35 +494,34 @@ class MainActivity : Activity() {
             background = if (liquidGlass) glassSurface(14) else rounded(cardSurface, 14)
         }
         val now = Date()
-        fun item(label: String, description: String, action: () -> Unit) {
-            strip.addView(TextView(this).apply {
-                text = label
-                textSize = 11f
-                setTextColor(primaryText)
-                gravity = Gravity.CENTER
-                setPadding(dp(7), 0, dp(7), 0)
-                contentDescription = description
-                setOnClickListener { action() }
-            }, LinearLayout.LayoutParams(-2, -1))
-        }
-        item(SimpleDateFormat("EEE d MMM", Locale("id", "ID")).format(now), "Tanggal hari ini") { showSettings() }
-        strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        val wifiOn = try { (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager).isWifiEnabled } catch (_: Exception) { false }
-        val bluetoothOn = try { android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.isEnabled == true } catch (_: Exception) { false }
         val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
-        val percent = if (level >= 0 && scale > 0) level * 100 / scale else -1
-        item(if (wifiOn) "◉" else "○", "Wi-Fi: buka pengaturan") {
-            try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) } catch (_: Exception) { }
-        }
-        item(if (bluetoothOn) "ᛒ" else "ᛒ", "Bluetooth: buka pengaturan") {
-            try { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) { }
-        }
-        item(if (percent >= 0) "▰ $percent%" else "▰", "Baterai: buka pengaturan") {
-            try { startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } catch (_: Exception) { }
-        }
-        item(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now), "Jam") { showSettings() }
+        val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
+
+        strip.addView(TextView(this).apply {
+            text = SimpleDateFormat("EEEE, d MMM", Locale("id", "ID")).format(now)
+            textSize = 11f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = "Tanggal"
+        }, LinearLayout.LayoutParams(0, -1, 1f))
+        strip.addView(TextView(this).apply {
+            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+            textSize = 11f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            contentDescription = "Waktu"
+            setPadding(dp(8), 0, dp(8), 0)
+        }, LinearLayout.LayoutParams(-2, -1))
+        strip.addView(TextView(this).apply {
+            text = if (percent != null) "▰ $percent%" else "▰ --%"
+            textSize = 11f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            contentDescription = "Persentase baterai"
+            setPadding(dp(8), 0, dp(2), 0)
+        }, LinearLayout.LayoutParams(-2, -1))
         return strip
     }
 
@@ -551,9 +550,18 @@ class MainActivity : Activity() {
             background = if (liquidGlass) glassSurface(30) else rounded(dockSurface, 30)
             elevation = dp(12).toFloat()
         }
-        dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
-            textSize = 20f
-            contentDescription = "Buka menu Start"
+        dock.addView(TextView(this).apply {
+            text = "◐"
+            textSize = 27f
+            gravity = Gravity.CENTER
+            setTextColor(if (isDarkTheme) Color.WHITE else Color.rgb(35, 91, 190))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(67, 157, 255), Color.rgb(104, 91, 245))).apply {
+                cornerRadius = dp(14).toFloat()
+            }
+            contentDescription = "Buka menu Start bergaya macOS"
+            isClickable = true
+            isFocusable = true
             setOnClickListener { toggleStartPanel() }
         }, LinearLayout.LayoutParams(dp(46), -1))
 
@@ -1687,45 +1695,11 @@ class MainActivity : Activity() {
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
                 if (!isStartMenu && homePackages().contains(app.packageName)) {
-                    val current = homePackages().toMutableList()
-                    val choices = arrayOf("✥  Seret ikon ke posisi lain", "⇧  Pindahkan ke atas", "↕  Pindahkan ke tengah", "⇩  Pindahkan ke bawah", "⇤  Pindahkan ke awal layar", "⇥  Pindahkan ke akhir layar", "↗  Pindahkan ke layar lain", "⚙  Kelola aplikasi")
-                    AlertDialog.Builder(this@MainActivity).setTitle("Atur posisi · ${app.label}")
-                        .setItems(choices) { _, which ->
-                            when (which) {
-                                0 -> {
-                                    val clip = android.content.ClipData.newPlainText("saku-app", app.packageName)
-                                    val shadow = View.DragShadowBuilder(cell)
-                                    if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
-                                    else cell.startDrag(clip, shadow, app.packageName, 0)
-                                    Toast.makeText(this@MainActivity, "Seret ikon, lalu lepaskan di posisi baru", Toast.LENGTH_SHORT).show()
-                                }
-                                1, 2, 3 -> {
-                                    current.remove(app.packageName)
-                                    val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, 4).coerceAtLeast(1)
-                                    val target = when (which) { 1 -> 0; 2 -> (current.size / 2 / columns) * columns; else -> current.size }
-                                    current.add(target.coerceIn(0, current.size), app.packageName)
-                                    saveHomePackages(current)
-                                    pinnedAdapter.notifyDataSetChanged()
-                                    Toast.makeText(this@MainActivity, "Posisi ikon disimpan", Toast.LENGTH_SHORT).show()
-                                }
-                                4, 5 -> {
-                                    current.remove(app.packageName)
-                                    if (which == 4) current.add(0, app.packageName) else current.add(app.packageName)
-                                    saveHomePackages(current)
-                                    pinnedAdapter.notifyDataSetChanged()
-                                }
-                                6 -> {
-                                    if (homePageCount() <= 1) Toast.makeText(this@MainActivity, "Tambah layar dulu lewat tombol ⋯", Toast.LENGTH_SHORT).show()
-                                    else {
-                                        val pages = (0 until homePageCount()).map { "Layar ${it + 1}" }.toTypedArray()
-                                        AlertDialog.Builder(this@MainActivity).setTitle("Pindahkan ke layar")
-                                            .setItems(pages) { _, page -> moveHomeAppToPage(app, page); buildScreen() }
-                                            .setNegativeButton("Batal", null).show()
-                                    }
-                                }
-                                7 -> showAppMenu(app)
-                            }
-                        }.setNegativeButton("Batal", null).show()
+                    val clip = android.content.ClipData.newPlainText("saku-app", app.packageName)
+                    val shadow = View.DragShadowBuilder(cell)
+                    if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
+                    else cell.startDrag(clip, shadow, app.packageName, 0)
+                    Toast.makeText(this@MainActivity, "Mode bebas: seret ikon ke posisi yang diinginkan", Toast.LENGTH_SHORT).show()
                     true
                 } else { showAppMenu(app); true }
             }
