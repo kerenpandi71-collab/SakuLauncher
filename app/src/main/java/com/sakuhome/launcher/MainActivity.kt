@@ -86,6 +86,7 @@ class MainActivity : Activity() {
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
+    private val localIconFolder: String get() = preferences.getString(KEY_LOCAL_ICON_FOLDER, "").orEmpty()
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -485,7 +486,8 @@ class MainActivity : Activity() {
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
-            shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
+            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidthDp), dp(dockHeightDp)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = dp(10)
             })
         }
@@ -791,6 +793,25 @@ class MainActivity : Activity() {
 
     private fun loadThemedIcon(info: ResolveInfo): android.graphics.drawable.Drawable {
         val fallback = info.loadIcon(packageManager)
+        if (localIconFolder.isNotBlank()) {
+            try {
+                val tree = Uri.parse(localIconFolder)
+                val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+                val target = info.activityInfo.packageName
+                val names = setOf(target.lowercase(Locale.ROOT), target.replace(".", "_").lowercase(Locale.ROOT), target.substringAfterLast(".").lowercase(Locale.ROOT))
+                contentResolver.query(children, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val name = cursor.getString(1) ?: continue
+                        if (name.substringBeforeLast(".").lowercase(Locale.ROOT) in names && listOf(".png", ".webp", ".jpg").any { name.endsWith(it, true) }) {
+                            val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+                            contentResolver.openInputStream(uri)?.use { stream ->
+                                android.graphics.BitmapFactory.decodeStream(stream)?.let { return android.graphics.drawable.BitmapDrawable(resources, it) }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
         if (iconPackPackage.isBlank()) return fallback
         return try {
             val packResources = packageManager.getResourcesForApplication(iconPackPackage)
@@ -1553,14 +1574,37 @@ class MainActivity : Activity() {
         val labels = (listOf("Ikon bawaan aplikasi") + packs.map { pack ->
             try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pack, 0)).toString() } catch (_: Exception) { pack }
         }).toTypedArray()
+        val menu = (listOf("Ikon bawaan aplikasi") + labels.drop(1) + "Pilih folder ikon dari Download…").toTypedArray()
         AlertDialog.Builder(this).setTitle("Pilih icon pack")
-            .setMessage("Pilih paket ikon yang terpasang. Saku mencoba membaca appfilter.xml milik icon pack; jika formatnya tidak didukung, ikon aplikasi akan tetap memakai ikon bawaan.")
-            .setItems(labels) { _, which ->
+            .setMessage("Paket terpasang dideteksi dari intent tema umum. Kamu juga bisa memilih folder berisi PNG/WebP ikon; nama file sebaiknya nama paket aplikasi atau nama paket dengan titik diganti garis bawah.")
+            .setItems(menu) { _, which ->
+                if (which == menu.lastIndex) { chooseLocalIconFolder(); return@setItems }
                 val selected = if (which == 0) "" else packs[which - 1]
-                preferences.edit().putString(KEY_ICON_PACK, selected).apply()
+                preferences.edit().putString(KEY_ICON_PACK, selected).remove(KEY_LOCAL_ICON_FOLDER).apply()
                 apps = loadApps(); rebuildPinnedViews(); buildScreen()
                 Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih; ikon yang cocok diperbarui", Toast.LENGTH_SHORT).show()
             }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLocalIconFolder() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        try { startActivityForResult(intent, REQUEST_ICON_FOLDER) }
+        catch (_: Exception) { Toast.makeText(this, "Pemilih folder tidak tersedia", Toast.LENGTH_LONG).show() }
+    }
+
+    @Deprecated("Use Activity Result API when modernizing")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ICON_FOLDER && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            preferences.edit().putString(KEY_LOCAL_ICON_FOLDER, uri.toString()).putString(KEY_ICON_PACK, "").apply()
+            apps = loadApps()
+            buildScreen()
+            Toast.makeText(this, "Folder ikon dipilih. Ikon bernama cocok akan digunakan.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun chooseDockSize() {
@@ -1972,6 +2016,8 @@ class MainActivity : Activity() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
+        private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
+        private const val REQUEST_ICON_FOLDER = 7214
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
