@@ -54,9 +54,32 @@ class SakuNavigationAccessibilityService : AccessibilityService() {
             val x = metrics.widthPixels * 0.5f
             val startY = if (scrollDown) metrics.heightPixels * 0.78f else metrics.heightPixels * 0.28f
             val endY = if (scrollDown) metrics.heightPixels * 0.28f else metrics.heightPixels * 0.78f
-            val path = Path().apply { moveTo(x, startY); lineTo(x, endY) }
+            return dispatchSwipe(service, x, startY, x, endY, 420L)
+        }
+
+        /** Dispatches a swipe near the virtual pointer for trackpad two-finger scrolling. */
+        fun performScrollAt(x: Float, y: Float, fingerDeltaY: Int): Boolean {
+            val service = active ?: return false
+            val metrics = service.resources.displayMetrics
+            val safeX = x.coerceIn(2f, metrics.widthPixels - 2f)
+            val safeY = y.coerceIn(2f, metrics.heightPixels - 2f)
+            val distance = fingerDeltaY.coerceIn(-520, 520).toFloat()
+            if (kotlin.math.abs(distance) < 1f) return false
+            val endY = (safeY + distance).coerceIn(2f, metrics.heightPixels - 2f)
+            return dispatchSwipe(service, safeX, safeY, safeX, endY, 300L)
+        }
+
+        private fun dispatchSwipe(
+            service: SakuNavigationAccessibilityService,
+            startX: Float,
+            startY: Float,
+            endX: Float,
+            endY: Float,
+            durationMs: Long
+        ): Boolean {
+            val path = Path().apply { moveTo(startX, startY); lineTo(endX, endY) }
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 420))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
                 .build()
             return service.dispatchGesture(gesture, null, null)
         }
