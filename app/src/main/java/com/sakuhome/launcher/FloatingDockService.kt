@@ -31,6 +31,7 @@ class FloatingDockService : Service() {
     private var dockView: View? = null
     private var drawerView: View? = null
     private var navigationView: View? = null
+    private var dockRevealHandle: View? = null
     private var isForeground = false
     private var lastLandscape: Boolean? = null
 
@@ -93,6 +94,7 @@ class FloatingDockService : Service() {
     }
 
     private fun showDock() {
+        removeDockRevealHandle()
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val accentColor = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
@@ -198,6 +200,9 @@ class FloatingDockService : Service() {
             navButton("□", "Aplikasi terbaru") {
                 if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
                     Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
+            }
+            navButton("⌄", "Sembunyikan bilah navigasi sementara") {
+                hideDockTemporarily()
             }
         }
 
@@ -378,12 +383,65 @@ class FloatingDockService : Service() {
             .map { AppInfo(it.activityInfo.packageName, it.loadLabel(packageManager).toString(), it.loadIcon(packageManager)) }
     }
 
+    private fun hideDockTemporarily() {
+        hideFloatingDrawer()
+        dockView?.let { view ->
+            try { windowManager.removeView(view) } catch (_: Exception) { }
+        }
+        dockView = null
+        removeDockRevealHandle()
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
+        val handle = TextView(this).apply {
+            text = "⌃"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            contentDescription = "Tampilkan kembali bilah navigasi Saku"
+            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+            background = GradientDrawable().apply {
+                setColor(Color.argb(210, if (darkTheme) 31 else 247, if (darkTheme) 37 else 249, if (darkTheme) 52 else 253))
+                setStroke(dp(1), Color.argb(170, 255, 255, 255))
+                cornerRadius = dp(18).toFloat()
+            }
+            elevation = dp(12).toFloat()
+            setOnClickListener {
+                removeDockRevealHandle()
+                showDock()
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            dp(56), dp(28),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(2)
+        }
+        try {
+            windowManager.addView(handle, params)
+            dockRevealHandle = handle
+        } catch (_: Exception) {
+            dockRevealHandle = null
+            showDock()
+        }
+    }
+
+    private fun removeDockRevealHandle() {
+        dockRevealHandle?.let { view ->
+            try { windowManager.removeView(view) } catch (_: Exception) { }
+        }
+        dockRevealHandle = null
+    }
+
     private fun removeDock() {
         hideFloatingDrawer()
         dockView?.let { view ->
             try { windowManager.removeView(view) } catch (_: Exception) { }
         }
         dockView = null
+        removeDockRevealHandle()
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
