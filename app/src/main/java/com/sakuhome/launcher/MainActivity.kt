@@ -1458,6 +1458,14 @@ class MainActivity : Activity() {
             return
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val targetDisplayId = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+        if (targetDisplayId > 0) {
+            runRootDisplayCommand(
+                "Buka " + app.label + " pada display " + targetDisplayId,
+                "am start --display " + targetDisplayId + " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + app.packageName
+            )
+            return
+        }
         try {
             if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) {
                 // Request a bounded desktop window above the virtual trackpad area.
