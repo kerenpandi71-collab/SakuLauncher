@@ -1639,7 +1639,8 @@ class MainActivity : Activity() {
             "Posisi navigasi mengambang · ${dockPositionLabel()}",
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
-            "Tentang & izin"
+            "Tentang & izin",
+            "Display Lab · Virtual Display / Root"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1691,8 +1692,101 @@ class MainActivity : Activity() {
                     }
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
+                    18 -> showDisplayLab()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    /** Fixed, user-confirmed root operations for simulated-display diagnostics. */
+    private fun showDisplayLab() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val savedId = prefs.getInt(KEY_TARGET_DISPLAY_ID, 0)
+        val actions = arrayOf(
+            "Diagnostik display dan izin Root",
+            "Buat simulated overlay display (820x1320)",
+            "Hapus simulated overlay display",
+            "Pilih ID display sasaran · " + if (savedId > 0) savedId else "belum dipilih",
+            "Buka ulang Saku pada display sasaran",
+            "Hapus target display"
+        )
+        AlertDialog.Builder(this).setTitle("Display Lab")
+            .setMessage("Eksperimental: display simulasi tidak menjamin semua aplikasi bisa dipindahkan. Catat ID dari hasil diagnostik.")
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> runRootDisplayCommand("Diagnostik Android",
+                        "id; echo; settings get global overlay_display_devices; echo; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|mBaseDisplayInfo|uniqueId' | head -80; echo; pm list features | grep -E 'FREEFORM|ACTIVITIES_ON_SECONDARY_DISPLAYS' || true")
+                    1 -> confirmDisplayChange("Buat simulated display?",
+                        "Android akan mengubah overlay_display_devices menjadi 820x1320/320. Kamu bisa menghapus konfigurasinya lewat opsi Display Lab.") {
+                        runRootDisplayCommand("Buat simulated display",
+                            "settings put global overlay_display_devices 820x1320/320; sleep 1; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                    }
+                    2 -> confirmDisplayChange("Hapus simulated display?",
+                        "Ini menghapus konfigurasi global overlay_display_devices. Lanjutkan hanya jika konfigurasi ini memang dibuat untuk Saku.") {
+                        runRootDisplayCommand("Hapus simulated display",
+                            "settings delete global overlay_display_devices; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                    }
+                    3 -> {
+                        val input = EditText(this).apply {
+                            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                            setText(if (savedId > 0) savedId.toString() else "")
+                            hint = "Contoh: 7"
+                        }
+                        AlertDialog.Builder(this).setTitle("ID display sasaran")
+                            .setMessage("Masukkan ID display sekunder dari hasil diagnostik. ID 0 adalah layar utama.")
+                            .setView(input).setNegativeButton("Batal", null)
+                            .setPositiveButton("Simpan") { _, _ ->
+                                val id = input.text.toString().toIntOrNull()
+                                if (id == null || id <= 0) {
+                                    Toast.makeText(this, "ID harus angka lebih dari 0", Toast.LENGTH_LONG).show()
+                                } else {
+                                    prefs.edit().putInt(KEY_TARGET_DISPLAY_ID, id).apply()
+                                    Toast.makeText(this, "Target display disimpan: " + id, Toast.LENGTH_SHORT).show()
+                                }
+                            }.show()
+                    }
+                    4 -> if (savedId > 0) {
+                        runRootDisplayCommand("Buka Saku pada display " + savedId,
+                            "am start --display " + savedId + " -n com.sakuhome.launcher/.MainActivity")
+                    } else Toast.makeText(this, "Pilih ID display sekunder terlebih dahulu", Toast.LENGTH_LONG).show()
+                    5 -> {
+                        prefs.edit().remove(KEY_TARGET_DISPLAY_ID).apply()
+                        Toast.makeText(this, "Target display dihapus", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun confirmDisplayChange(title: String, message: String, action: () -> Unit) {
+        AlertDialog.Builder(this).setTitle(title).setMessage(message)
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Lanjutkan") { _, _ -> action() }.show()
+    }
+
+    private fun runRootDisplayCommand(title: String, command: String) {
+        val dialog = AlertDialog.Builder(this).setTitle(title)
+            .setMessage("Meminta izin Root dan menjalankan perintah…")
+            .setPositiveButton("Tutup", null).create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+        Thread {
+            val output = try {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                val code = process.waitFor()
+                "Exit code: " + code + "\n\n" + stdout.trim() +
+                    (if (stderr.isNotBlank()) "\n\nSTDERR:\n" + stderr.trim() else "")
+            } catch (e: Exception) {
+                "Root shell gagal: " + e.javaClass.simpleName + ": " + (e.message ?: "tidak ada detail") +
+                    "\nPastikan Magisk terpasang dan izinkan Root untuk Saku Launcher."
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                dialog.setMessage(output.take(12000))
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                dialog.setTitle(title + " · hasil")
+            }
+        }.start()
     }
 
 
@@ -2827,6 +2921,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val KEY_TRACKPAD_MODE = "saku_virtual_trackpad_mode"
+        private const val KEY_TARGET_DISPLAY_ID = "saku_target_display_id"
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
