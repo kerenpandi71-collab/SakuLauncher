@@ -1040,7 +1040,7 @@ class MainActivity : Activity() {
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         val landscapeDrawer = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val drawerModeKey = if (landscapeDrawer) "drawer_mode_landscape" else "drawer_mode"
-        drawerMode = if (landscapeDrawer) "grid" else (preferences.getString(drawerModeKey, "grid") ?: "grid")
+        drawerMode = preferences.getString(drawerModeKey, "grid") ?: "grid"
         drawerModeButton = chipButton(if (drawerMode == "list") "▦" else "☷", cardSurface, primaryText, 15).apply {
             textSize = 18f
             contentDescription = "Ubah tampilan aplikasi"
@@ -1049,14 +1049,15 @@ class MainActivity : Activity() {
                 val modeKey = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "drawer_mode_landscape" else "drawer_mode"
                 preferences.edit().putString(modeKey, drawerMode).apply()
                 if (::startGrid.isInitialized) {
-                    startGrid.numColumns = if (drawerMode == "list") 1 else drawerColumns()
-                    startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
+                    val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    startGrid.numColumns = if (drawerMode == "list") 1 else if (isLandscape) 6 else drawerColumns()
+                    startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else if (isLandscape) 8 else 10)
                     startAdapter.notifyDataSetChanged()
                 }
                 drawerModeButton.text = if (drawerMode == "list") "▦" else "☷"
             }
         }
-        drawerModeButton.visibility = if (landscapeDrawer) View.GONE else View.VISIBLE
+        drawerModeButton.visibility = View.VISIBLE
         header.addView(drawerModeButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(6) })
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
@@ -1102,8 +1103,8 @@ class MainActivity : Activity() {
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = if (landscapeDrawer) 6 else if (drawerMode == "list") 1 else drawerColumns()
-            verticalSpacing = dp(if (landscapeDrawer) 8 else if (drawerMode == "list") 3 else 10)
+            numColumns = if (drawerMode == "list") 1 else if (landscapeDrawer) 6 else drawerColumns()
+            verticalSpacing = dp(if (drawerMode == "list") 3 else if (landscapeDrawer) 8 else 10)
             horizontalSpacing = dp(if (landscapeDrawer) 10 else 8)
             setPadding(dp(6), dp(8), dp(6), dp(10))
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -2576,12 +2577,12 @@ class MainActivity : Activity() {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
             val landscapeDrawer = isStartMenu && resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val listLayout = isStartMenu && !landscapeDrawer && drawerMode == "list"
+            val listLayout = isStartMenu && drawerMode == "list"
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
                 orientation = if (listLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
                 gravity = if (listLayout) Gravity.CENTER_VERTICAL else Gravity.CENTER
                 setPadding(dp(if (listLayout) 10 else 4), dp(6), dp(4), dp(6))
-                background = if (landscapeDrawer) rounded(cardSurface, 14) else ColorDrawable(Color.TRANSPARENT)
+                background = ColorDrawable(Color.TRANSPARENT)
                 elevation = 0f
                 stateListAnimator = null
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else 92))
