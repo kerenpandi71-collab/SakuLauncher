@@ -139,43 +139,50 @@ class SakuKeyboardService : InputMethodService() {
 
         var currentRow: LinearLayout? = null
         var activePreview: PopupWindow? = null
+        var previewText: TextView? = null
         val previewHandler = Handler(Looper.getMainLooper())
+        var previewDismissRunnable: Runnable? = null
         fun showKeyPreview(anchor: View, label: String) {
-            activePreview?.dismiss()
-            val previewText = TextView(this).apply {
-                text = label
+            // Reuse the popup instead of allocating a new window and drawable for every tap.
+            previewDismissRunnable?.let { previewHandler.removeCallbacks(it) }
+            val text = previewText ?: TextView(this).apply {
                 gravity = Gravity.CENTER
                 textSize = 27f
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 setTextColor(textColor)
                 background = GradientDrawable().apply {
-                    setColor(if (dark) Color.rgb(88, 94, 106) else Color.rgb(255, 255, 255))
+                    setColor(if (dark) Color.rgb(88, 94, 106) else Color.WHITE)
                     cornerRadius = dp(13).toFloat()
                     setStroke(dp(1), if (dark) Color.rgb(120, 128, 143) else Color.rgb(210, 214, 222))
                 }
                 elevation = dp(7).toFloat()
-                alpha = 0f
-                scaleX = 0.72f
-                scaleY = 0.72f
-            }
-            val popup = PopupWindow(previewText, dp(54), dp(62), false).apply {
+            }.also { previewText = it }
+            text.animate().cancel()
+            text.text = label
+            text.alpha = 1f
+            text.scaleX = 0.92f
+            text.scaleY = 0.92f
+            val popup = activePreview ?: PopupWindow(text, dp(54), dp(62), false).apply {
                 isTouchable = false
                 isOutsideTouchable = false
                 isClippingEnabled = true
                 elevation = dp(7).toFloat()
+            }.also { activePreview = it }
+            if (popup.isShowing) {
+                popup.update(anchor, 0, -dp(keyHeight + 66), dp(54), dp(62))
+            } else {
+                popup.showAsDropDown(anchor, 0, -dp(keyHeight + 66))
             }
-            activePreview = popup
-            popup.showAsDropDown(anchor, 0, -dp(keyHeight + 66))
-            previewText.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(85L).start()
-            previewHandler.postDelayed({
-                if (activePreview === popup) {
-                    previewText.animate().alpha(0f).scaleX(0.8f).scaleY(0.8f)
-                        .setDuration(75L).withEndAction {
-                            if (popup.isShowing) popup.dismiss()
-                        }.start()
-                    activePreview = null
-                }
-            }, 170L)
+            // Short, light animation avoids the heavier feel of the previous 170 ms popup.
+            text.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(55L).start()
+            val dismiss = Runnable {
+                text.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f)
+                    .setDuration(55L).withEndAction {
+                        if (popup.isShowing) popup.dismiss()
+                    }.start()
+            }
+            previewDismissRunnable = dismiss
+            previewHandler.postDelayed(dismiss, 115L)
         }
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
             val button = TextView(this).apply {
