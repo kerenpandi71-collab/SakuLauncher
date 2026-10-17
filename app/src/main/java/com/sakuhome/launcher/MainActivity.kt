@@ -208,13 +208,34 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        requestedOrientation = preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        applyDisplayAwareOrientation()
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
         buildScreen()
         restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
+    }
+
+    /**
+     * Keep the phone's main display governed by the user's orientation preference,
+     * but always use the existing landscape desktop layout on a secondary display.
+     * This does not rotate the device or alter the system-wide display settings.
+     */
+    private fun applyDisplayAwareOrientation() {
+        val secondaryDisplay = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            display?.displayId?.let { it != android.view.Display.DEFAULT_DISPLAY } ?: false
+        } else {
+            windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
+        }
+        requestedOrientation = if (secondaryDisplay) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            preferences.getInt(
+                "launcher_orientation",
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            )
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
