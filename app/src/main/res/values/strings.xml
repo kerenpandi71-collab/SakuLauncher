@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="accessibility_service_description">Memungkinkan tombol navigasi desktop Saku menjalankan aksi Kembali dan Aplikasi terbaru saat layanan diaktifkan oleh pengguna.</string>
+    <string name="saku_keyboard_name">Saku Keyboard (iOS style)</string>
+    <string name="saku_keyboard_subtype">Bahasa Indonesia</string>
 </resources>
