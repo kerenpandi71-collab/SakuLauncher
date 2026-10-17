@@ -617,11 +617,12 @@ class MainActivity : Activity() {
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
         val effectiveWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, maxWidth)
-        val effectiveHeight = dockHeightDp
+        val effectiveHeight = if (landscape) dockHeightDp.coerceAtLeast(64) else dockHeightDp
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(3), dp(8), dp(3))
+            setPadding(dp(if (landscape) 10 else 8), dp(3), dp(if (landscape) 10 else 8), dp(3))
+            // Keep the existing liquid-glass treatment; the panel simply encloses the icons more clearly.
             background = if (liquidGlass) glassSurface(24) else rounded(dockSurface, 24)
             elevation = dp(14).toFloat()
             minimumWidth = dp(effectiveWidth)
@@ -689,13 +690,16 @@ class MainActivity : Activity() {
             letterSpacing = -0.02f
         })
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
-        drawerMode = preferences.getString("drawer_mode", "grid") ?: "grid"
+        val landscapeDrawer = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val drawerModeKey = if (landscapeDrawer) "drawer_mode_landscape" else "drawer_mode"
+        drawerMode = preferences.getString(drawerModeKey, if (landscapeDrawer) "list" else "grid") ?: if (landscapeDrawer) "list" else "grid"
         drawerModeButton = chipButton(if (drawerMode == "list") "▦" else "☷", cardSurface, primaryText, 15).apply {
             textSize = 18f
             contentDescription = "Ubah tampilan aplikasi"
             setOnClickListener {
                 drawerMode = if (drawerMode == "grid") "list" else "grid"
-                preferences.edit().putString("drawer_mode", drawerMode).apply()
+                val modeKey = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "drawer_mode_landscape" else "drawer_mode"
+                preferences.edit().putString(modeKey, drawerMode).apply()
                 if (::startGrid.isInitialized) {
                     startGrid.numColumns = if (drawerMode == "list") 1 else drawerColumns()
                     startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
@@ -2126,7 +2130,7 @@ class MainActivity : Activity() {
                 elevation = 0f
                 stateListAnimator = null
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu && drawerMode == "list") 64 else if (isStartMenu) 90 else 92))
-                val startIconSize = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
+                val startIconSize = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
