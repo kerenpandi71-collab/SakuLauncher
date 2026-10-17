@@ -87,6 +87,7 @@ class MainActivity : Activity() {
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
     private val localIconFolder: String get() = preferences.getString(KEY_LOCAL_ICON_FOLDER, "").orEmpty()
+    private val freeformDefault: Boolean get() = preferences.getBoolean(KEY_FREEFORM_DEFAULT, false)
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -909,8 +910,9 @@ class MainActivity : Activity() {
         })
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
+    private fun launch(app: LaunchableApp, asFreeform: Boolean? = null) {
         hideStartPanel()
+        val useFreeform = asFreeform ?: freeformDefault
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
@@ -918,24 +920,32 @@ class MainActivity : Activity() {
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            if (asFreeform) {
-                // Best-effort Android freeform launch. setLaunchBounds is honored only
-                // when the ROM allows freeform/multi-window for the target application.
-                val width = resources.displayMetrics.widthPixels
-                val height = resources.displayMetrics.heightPixels
-                val windowWidth = (width * 0.78f).toInt().coerceAtLeast(dp(280))
-                val windowHeight = (height * 0.68f).toInt().coerceAtLeast(dp(320))
-                val left = ((width - windowWidth) / 2).coerceAtLeast(0)
-                val top = dp(72).coerceAtMost((height - dp(120)).coerceAtLeast(0))
-                val bounds = Rect(left, top, (left + windowWidth).coerceAtMost(width), (top + windowHeight).coerceAtMost(height - dp(48)))
+            if (useFreeform) {
+                // Android only honors freeform when the ROM enables multi-window/freeform.
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                val metrics = android.util.DisplayMetrics()
+                val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
+                val screen = if (android.os.Build.VERSION.SDK_INT >= 30) wm.currentWindowMetrics.bounds else {
+                    @Suppress("DEPRECATION")
+                    run { wm.defaultDisplay.getRealMetrics(metrics); Rect(0, 0, metrics.widthPixels, metrics.heightPixels) }
+                }
+                val windowWidth = (screen.width() * 0.85f).toInt().coerceAtMost(screen.width()).coerceAtLeast(1)
+                val windowHeight = (screen.height() * 0.70f).toInt().coerceAtMost(screen.height()).coerceAtLeast(1)
+                val left = (screen.width() - windowWidth) / 2
+                val top = (screen.height() - windowHeight) / 2
+                val bounds = Rect(left, top, left + windowWidth, top + windowHeight)
                 val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                try {
+                    val method = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                    method.invoke(options, 5)
+                } catch (_: Exception) { /* setLaunchBounds still gives the system a best-effort hint */ }
                 startActivity(launchIntent, options.toBundle())
             } else {
                 startActivity(launchIntent)
             }
         } catch (_: Exception) {
-            if (asFreeform) {
-                Toast.makeText(this, "Mode jendela tidak didukung; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
+            if (useFreeform) {
+                Toast.makeText(this, "Mode Freeform ditolak ROM/aplikasi; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
                 startActivity(launchIntent)
             } else {
                 Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
@@ -1097,6 +1107,7 @@ class MainActivity : Activity() {
             "Transparansi · ${transparencyPercent}%",
             "Kustomisasi ikon & icon pack",
             "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
+            "Mode Freeform default · ${if (freeformDefault) "Aktif" else "Mati"}",
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
@@ -1112,13 +1123,21 @@ class MainActivity : Activity() {
                     3 -> chooseTransparency()
                     4 -> chooseIconCustomization()
                     5 -> chooseDockSize()
-                    6 -> chooseWallpaper()
-                    7 -> resetWallpaper()
-                    8 -> openHomeSettings()
-                    9 -> openOverlaySettings()
-                    10 -> showPermissionInfo()
+                    6 -> toggleFreeformDefault()
+                    7 -> chooseWallpaper()
+                    8 -> resetWallpaper()
+                    9 -> openHomeSettings()
+                    10 -> openOverlaySettings()
+                    11 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun toggleFreeformDefault() {
+        val enabled = !freeformDefault
+        preferences.edit().putBoolean(KEY_FREEFORM_DEFAULT, enabled).apply()
+        Toast.makeText(this, if (enabled) "Freeform default aktif. Ketuk ikon untuk mencoba membuka mengambang." else "Freeform default dimatikan.", Toast.LENGTH_LONG).show()
+        showSettings()
     }
 
     private fun openHomeSettings() {
@@ -2064,6 +2083,7 @@ class MainActivity : Activity() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
+        private const val KEY_FREEFORM_DEFAULT = "freeform_default_enabled"
         private const val REQUEST_ICON_FOLDER = 7214
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
