@@ -836,68 +836,106 @@ class MainActivity : Activity() {
         updateClock()
     }
 
-    /** First milestone: split-workspace UI and touch gesture recognition only. */
+    /** Trackpad prototype: maps pad movement to a visible pointer in the desktop area.
+     * Accessibility gesture injection is used for taps; this is not a hardware mouse.
+     */
     private fun addTrackpadModeControls() {
         val enabled = preferences.getBoolean(KEY_TRACKPAD_MODE, false)
         val toggle = TextView(this).apply {
             text = if (enabled) "✕ Keluar trackpad" else "⌖ Trackpad mode"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            textSize = 12f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
             setPadding(dp(14), dp(9), dp(14), dp(9))
             background = GradientDrawable().apply { setColor(Color.rgb(48, 88, 155)); cornerRadius = dp(18).toFloat() }
             elevation = dp(12).toFloat()
             contentDescription = if (enabled) "Keluar dari mode trackpad" else "Aktifkan mode trackpad virtual"
             setOnClickListener { preferences.edit().putBoolean(KEY_TRACKPAD_MODE, !enabled).apply(); buildScreen() }
         }
-        if (enabled) {
-            val panel = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(12), dp(8), dp(12), dp(10))
-                background = GradientDrawable().apply {
-                    setColor(if (isDarkTheme) Color.rgb(25, 31, 43) else Color.rgb(226, 232, 242))
-                    cornerRadii = floatArrayOf(dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), 0f, 0f, 0f, 0f)
-                    setStroke(dp(1), if (isDarkTheme) Color.rgb(75, 91, 116) else Color.rgb(184, 198, 219))
-                }
-                elevation = dp(16).toFloat()
-            }
-            val label = TextView(this).apply { text = "SAKU TRACKPAD · GESTUR BELUM MENGGERAKKAN KURSOR SISTEM"; textSize = 10f; gravity = Gravity.CENTER; setTextColor(secondaryText); maxLines = 2 }
-            panel.addView(label, LinearLayout.LayoutParams(-1, dp(28)))
-            val pad = TextView(this).apply {
-                text = "Geser satu jari untuk menguji area trackpad\nKetuk untuk menguji respons sentuhan"
-                textSize = 13f; gravity = Gravity.CENTER; setTextColor(primaryText)
-                background = GradientDrawable().apply { setColor(if (isDarkTheme) Color.rgb(39, 48, 64) else Color.rgb(241, 245, 251)); cornerRadius = dp(16).toFloat(); setStroke(dp(1), if (isDarkTheme) Color.rgb(83, 101, 130) else Color.rgb(190, 204, 224)) }
-                var downX = 0f; var downY = 0f
-                setOnTouchListener { view, event ->
-                    when (event.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; true }
-                        android.view.MotionEvent.ACTION_UP -> {
-                            val dx = event.x - downX; val dy = event.y - downY
-                            view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                            label.text = if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(18)) "Gestur geser terdeteksi" else "Ketukan terdeteksi · klik sistem belum dihubungkan"
-                            true
-                        }
-                        else -> true
-                    }
-                }
-            }
-            panel.addView(pad, LinearLayout.LayoutParams(-1, 0, 1f))
-            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-            listOf("Klik kiri", "Klik kanan", "↑", "↓").forEach { actionLabel ->
-                val action = TextView(this).apply { text = actionLabel; textSize = 12f; gravity = Gravity.CENTER; setTextColor(primaryText); background = rounded(cardSurface, 12)
-                    setOnClickListener { label.text = actionLabel + " ditekan · aksi sistem ditambahkan pada langkah berikutnya"; performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY) }
-                }
-                actions.addView(action, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(3); marginEnd = dp(3); topMargin = dp(6) })
-            }
-            panel.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
-            rootFrame.addView(panel, FrameLayout.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.38f).toInt(), Gravity.BOTTOM))
-            rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.TOP or Gravity.END).apply { topMargin = dp(38); marginEnd = dp(12) })
-        } else {
+        if (!enabled) {
             rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(84); marginEnd = dp(12) })
+            return
         }
+        val screenW = resources.displayMetrics.widthPixels.toFloat()
+        val screenH = resources.displayMetrics.heightPixels.toFloat()
+        val padHeight = (screenH * 0.38f).toInt()
+        val desktopBottom = screenH - padHeight
+        var pointerX = screenW * 0.5f
+        var pointerY = desktopBottom * 0.5f
+        val pointer = View(this).apply {
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 214, 10)); setStroke(dp(2), Color.BLACK) }
+            elevation = dp(30).toFloat()
+            contentDescription = "Penunjuk virtual Saku"
+        }
+        val pointerSize = dp(18)
+        fun placePointer() {
+            val lp = pointer.layoutParams as? FrameLayout.LayoutParams
+                ?: FrameLayout.LayoutParams(pointerSize, pointerSize)
+            lp.width = pointerSize; lp.height = pointerSize
+            lp.leftMargin = (pointerX - pointerSize / 2).toInt().coerceIn(0, (screenW - pointerSize).toInt())
+            lp.topMargin = (pointerY - pointerSize / 2).toInt().coerceIn(0, (desktopBottom - pointerSize).toInt().coerceAtLeast(0))
+            lp.gravity = Gravity.TOP or Gravity.START
+            pointer.layoutParams = lp
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(12), dp(8), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(if (isDarkTheme) Color.rgb(25, 31, 43) else Color.rgb(226, 232, 242))
+                cornerRadii = floatArrayOf(dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), 0f, 0f, 0f, 0f)
+                setStroke(dp(1), if (isDarkTheme) Color.rgb(75, 91, 116) else Color.rgb(184, 198, 219))
+            }; elevation = dp(16).toFloat()
+        }
+        val label = TextView(this).apply { text = "SAKU TRACKPAD · gerakkan titik kuning, ketuk untuk klik"; textSize = 10f; gravity = Gravity.CENTER; setTextColor(secondaryText); maxLines = 2 }
+        panel.addView(label, LinearLayout.LayoutParams(-1, dp(28)))
+        val pad = TextView(this).apply {
+            text = "AREA TRACKPAD\nGeser jari untuk memindahkan penunjuk"
+            textSize = 13f; gravity = Gravity.CENTER; setTextColor(primaryText)
+            background = GradientDrawable().apply { setColor(if (isDarkTheme) Color.rgb(39, 48, 64) else Color.rgb(241, 245, 251)); cornerRadius = dp(16).toFloat(); setStroke(dp(1), if (isDarkTheme) Color.rgb(83, 101, 130) else Color.rgb(190, 204, 224)) }
+            var lastX = 0f; var lastY = 0f; var moved = false
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> { lastX = event.x; lastY = event.y; moved = false; true }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val dx = event.x - lastX; val dy = event.y - lastY
+                        if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(2)) moved = true
+                        pointerX = (pointerX + dx * 1.7f).coerceIn(pointerSize.toFloat(), screenW - pointerSize)
+                        pointerY = (pointerY + dy * 1.7f).coerceIn(pointerSize.toFloat(), desktopBottom - pointerSize)
+                        lastX = event.x; lastY = event.y; placePointer(); true
+                    }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        if (!moved) {
+                            val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
+                            label.text = if (ok) "Klik dikirim ke desktop" else "Aktifkan Aksesibilitas Saku untuk mengirim klik"
+                            if (!ok) Toast.makeText(this@MainActivity, "Aktifkan layanan aksesibilitas Saku untuk klik virtual", Toast.LENGTH_SHORT).show()
+                        } else label.text = "Penunjuk dipindahkan"
+                        view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); true
+                    }
+                    android.view.MotionEvent.ACTION_CANCEL -> true
+                    else -> true
+                }
+            }
+        }
+        panel.addView(pad, LinearLayout.LayoutParams(-1, 0, 1f))
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        fun actionButton(title: String, description: String, action: () -> Unit) {
+            val button = TextView(this).apply { text = title; contentDescription = description; textSize = 12f; gravity = Gravity.CENTER; setTextColor(primaryText); background = rounded(cardSurface, 12); setOnClickListener { action() } }
+            actions.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(3); marginEnd = dp(3); topMargin = dp(6) })
+        }
+        actionButton("Klik kiri", "Klik kiri pada posisi penunjuk") {
+            val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
+            label.text = if (ok) "Klik kiri dikirim" else "Aktifkan Aksesibilitas Saku terlebih dahulu"
+        }
+        actionButton("Klik kanan", "Menu klik kanan simulasi") {
+            label.text = "Android tidak menyediakan klik kanan generik; tekan lama di posisi penunjuk"
+            val ok = SakuNavigationAccessibilityService.performLongPress(pointerX, pointerY, 600L)
+            if (!ok) Toast.makeText(this, "Aktifkan layanan aksesibilitas Saku", Toast.LENGTH_SHORT).show()
+        }
+        actionButton("↑", "Gulir ke atas") { val ok = SakuNavigationAccessibilityService.performScroll(false); label.text = if (ok) "Gulir ke atas dikirim" else "Aktifkan Aksesibilitas Saku" }
+        actionButton("↓", "Gulir ke bawah") { val ok = SakuNavigationAccessibilityService.performScroll(true); label.text = if (ok) "Gulir ke bawah dikirim" else "Aktifkan Aksesibilitas Saku" }
+        panel.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
+        rootFrame.addView(panel, FrameLayout.LayoutParams(-1, padHeight, Gravity.BOTTOM))
+        rootFrame.addView(pointer, FrameLayout.LayoutParams(pointerSize, pointerSize))
+        placePointer()
+        rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.TOP or Gravity.END).apply { topMargin = dp(38); marginEnd = dp(12) })
     }
-
     private fun hideStartPanelIfVisible() {
         if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
     }
