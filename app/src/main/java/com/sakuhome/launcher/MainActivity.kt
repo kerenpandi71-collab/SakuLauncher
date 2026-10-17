@@ -81,6 +81,8 @@ class MainActivity : Activity() {
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
+    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
+    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
@@ -598,7 +600,12 @@ class MainActivity : Activity() {
             })
         }
         scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
-        dock.addView(scroll, LinearLayout.LayoutParams(-2, -1))
+        dock.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        dock.minimumHeight = dp(dockHeightDp)
+        dock.minimumWidth = dp(dockWidthDp)
+        dock.layoutParams = LinearLayout.LayoutParams(dp(dockWidthDp), dp(dockHeightDp)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
         return dock
     }
 
@@ -787,8 +794,30 @@ class MainActivity : Activity() {
         if (iconPackPackage.isBlank()) return fallback
         return try {
             val packResources = packageManager.getResourcesForApplication(iconPackPackage)
-            val appName = info.activityInfo.packageName.substringAfterLast(".")
-            val candidates = listOf(info.activityInfo.packageName.replace(".", "_"), appName, "app_" + appName)
+            val targetPackage = info.activityInfo.packageName
+            val targetActivity = info.activityInfo.name
+            val candidates = linkedSetOf<String>()
+            // Common icon-pack appfilter entries use component="ComponentInfo{package/activity}" drawable="icon_name".
+            val xmlId = packResources.getIdentifier("appfilter", "xml", iconPackPackage)
+                .takeIf { it != 0 }
+                ?: packResources.getIdentifier("app_filter", "xml", iconPackPackage).takeIf { it != 0 }
+            if (xmlId != null) {
+                val parser = packResources.getXml(xmlId)
+                try {
+                    while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                        if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
+                            val component = parser.getAttributeValue(null, "component").orEmpty()
+                            val drawable = parser.getAttributeValue(null, "drawable").orEmpty()
+                            if (drawable.isNotBlank() && (component.contains(targetPackage) || component.contains(targetActivity))) {
+                                candidates.add(drawable)
+                            }
+                        }
+                        parser.next()
+                    }
+                } finally { parser.close() }
+            }
+            val shortName = targetPackage.substringAfterLast(".")
+            candidates.addAll(listOf(targetPackage.replace(".", "_"), shortName, "app_" + shortName))
             val id = candidates.firstNotNullOfOrNull { name ->
                 packResources.getIdentifier(name, "drawable", iconPackPackage).takeIf { it != 0 }
                     ?: packResources.getIdentifier(name, "mipmap", iconPackPackage).takeIf { it != 0 }
@@ -806,7 +835,10 @@ class MainActivity : Activity() {
         val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
         val dockIndex = shell.childCount - 1
         shell.removeViewAt(dockIndex)
-        shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
+        shell.addView(buildDock(), LinearLayout.LayoutParams(dockWidthDp.let { dp(it) }, dp(dockHeightDp)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = dp(10)
+        })
     }
 
     private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
@@ -989,6 +1021,7 @@ class MainActivity : Activity() {
             "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
             "Transparansi · ${transparencyPercent}%",
             "Kustomisasi ikon & icon pack",
+            "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
@@ -1003,11 +1036,12 @@ class MainActivity : Activity() {
                     2 -> chooseBackgroundBlur()
                     3 -> chooseTransparency()
                     4 -> chooseIconCustomization()
-                    5 -> chooseWallpaper()
-                    6 -> resetWallpaper()
-                    7 -> openHomeSettings()
-                    8 -> openOverlaySettings()
-                    9 -> showPermissionInfo()
+                    5 -> chooseDockSize()
+                    6 -> chooseWallpaper()
+                    7 -> resetWallpaper()
+                    8 -> openHomeSettings()
+                    9 -> openOverlaySettings()
+                    10 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1511,18 +1545,69 @@ class MainActivity : Activity() {
     }
 
     private fun chooseIconPack() {
-        val packs = packageManager.queryIntentActivities(Intent("org.adw.launcher.THEMES"), PackageManager.MATCH_ALL)
-            .map { it.activityInfo.packageName }.filter { it != packageName }.distinct().sorted()
+        val actions = listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.anddoes.launcher.THEME", "com.teslacoilsw.launcher.THEME")
+        val packs = actions.flatMap { action ->
+            try { packageManager.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL).map { it.activityInfo.packageName } }
+            catch (_: Exception) { emptyList() }
+        }.filter { it != packageName }.distinct().sorted()
         val labels = (listOf("Ikon bawaan aplikasi") + packs.map { pack ->
             try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pack, 0)).toString() } catch (_: Exception) { pack }
         }).toTypedArray()
         AlertDialog.Builder(this).setTitle("Pilih icon pack")
-            .setMessage("Memuat ikon memakai nama resource umum (nama paket dengan garis bawah, nama aplikasi, atau app_nama). Format icon pack yang tidak cocok akan memakai ikon bawaan.")
+            .setMessage("Pilih paket ikon yang terpasang. Saku mencoba membaca appfilter.xml milik icon pack; jika formatnya tidak didukung, ikon aplikasi akan tetap memakai ikon bawaan.")
             .setItems(labels) { _, which ->
                 val selected = if (which == 0) "" else packs[which - 1]
                 preferences.edit().putString(KEY_ICON_PACK, selected).apply()
                 apps = loadApps(); rebuildPinnedViews(); buildScreen()
                 Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih; ikon yang cocok diperbarui", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseDockSize() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val widthLabel = TextView(this).apply {
+            text = "Lebar dock: ${dockWidthDp} dp"
+            textSize = 14f
+            setTextColor(primaryText)
+        }
+        val widthSlider = SeekBar(this).apply {
+            max = 200
+            progress = dockWidthDp - 160
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { widthLabel.text = "Lebar dock: ${progress + 160} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val heightLabel = TextView(this).apply {
+            text = "Tinggi dock: ${dockHeightDp} dp"
+            textSize = 14f
+            setTextColor(primaryText)
+        }
+        val heightSlider = SeekBar(this).apply {
+            max = 52
+            progress = dockHeightDp - 48
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { heightLabel.text = "Tinggi dock: ${progress + 48} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(widthLabel)
+        layout.addView(widthSlider)
+        layout.addView(heightLabel)
+        layout.addView(heightSlider)
+        AlertDialog.Builder(this).setTitle("Ukuran dock").setView(layout)
+            .setPositiveButton("Terapkan") { _, _ ->
+                preferences.edit()
+                    .putInt(KEY_DOCK_WIDTH, widthSlider.progress + 160)
+                    .putInt(KEY_DOCK_HEIGHT, heightSlider.progress + 48)
+                    .apply()
+                buildScreen()
+                refreshFloatingDock()
             }.setNegativeButton("Batal", null).show()
     }
 
@@ -1885,6 +1970,8 @@ class MainActivity : Activity() {
         private const val KEY_HIDE_LABELS = "hide_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_DOCK_WIDTH = "dock_width_dp"
+        private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
