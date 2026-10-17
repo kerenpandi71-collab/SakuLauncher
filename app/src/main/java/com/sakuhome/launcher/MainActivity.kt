@@ -500,7 +500,8 @@ class MainActivity : Activity() {
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
-            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidthDp), dp(dockHeightDp)).apply {
+            val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidthDp.coerceAtMost(availableWidthDp)), dp(dockHeightDp)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = dp(10)
             })
@@ -588,12 +589,18 @@ class MainActivity : Activity() {
     }
 
     private fun buildDock(): View {
+        val effectiveWidth = dockWidthDp.coerceAtMost(
+            ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+        )
+        val effectiveHeight = dockHeightDp
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(5), dp(10), dp(5))
+            setPadding(dp(8), dp(3), dp(8), dp(3))
             background = if (liquidGlass) glassSurface(24) else rounded(dockSurface, 24)
             elevation = dp(14).toFloat()
+            minimumWidth = dp(effectiveWidth)
+            minimumHeight = dp(effectiveHeight)
         }
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -610,15 +617,16 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index).apply {
                 background = ColorDrawable(Color.TRANSPARENT)
                 setPadding(dp(3), dp(4), dp(3), dp(4))
-            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(dockHeightDp - 12) + 2), -1).apply {
+            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(effectiveHeight - 14).coerceAtLeast(24) + 2), -1).apply {
                 marginStart = dp(2)
                 marginEnd = dp(2)
             })
         }
         scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
         dock.addView(scroll, LinearLayout.LayoutParams(-1, -1))
-        dock.minimumHeight = dp(dockHeightDp)
-        dock.minimumWidth = dp(dockWidthDp)
+        dock.layoutParams = LinearLayout.LayoutParams(dp(effectiveWidth), dp(effectiveHeight)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
         return dock
     }
 
@@ -816,11 +824,19 @@ class MainActivity : Activity() {
                 val tree = Uri.parse(localIconFolder)
                 val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
                 val target = info.activityInfo.packageName
-                val names = setOf(target.lowercase(Locale.ROOT), target.replace(".", "_").lowercase(Locale.ROOT), target.substringAfterLast(".").lowercase(Locale.ROOT))
+                val targetActivity = info.activityInfo.name
+                val names = setOf(
+                    target.lowercase(Locale.ROOT),
+                    target.replace(".", "_").lowercase(Locale.ROOT),
+                    target.substringAfterLast(".").lowercase(Locale.ROOT),
+                    targetActivity.substringAfterLast(".").lowercase(Locale.ROOT),
+                    ("app_" + target.substringAfterLast(".")).lowercase(Locale.ROOT)
+                )
                 contentResolver.query(children, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
                     while (cursor.moveToNext()) {
                         val name = cursor.getString(1) ?: continue
-                        if (name.substringBeforeLast(".").lowercase(Locale.ROOT) in names && listOf(".png", ".webp", ".jpg").any { name.endsWith(it, true) }) {
+                        val baseName = name.substringBeforeLast(".").lowercase(Locale.ROOT)
+                        if (baseName in names && listOf(".png", ".webp", ".jpg", ".jpeg").any { name.endsWith(it, true) }) {
                             val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
                             contentResolver.openInputStream(uri)?.use { stream ->
                                 android.graphics.BitmapFactory.decodeStream(stream)?.let { return android.graphics.drawable.BitmapDrawable(resources, it) }
