@@ -8,7 +8,6 @@ import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -18,17 +17,13 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * Saku Keyboard: Gboard-like QWERTY layout with iOS-inspired rounded keys and colours.
- * As an IME it appears above the focused app without needing SYSTEM_ALERT_WINDOW.
+ * Saku Keyboard: Gboard-like QWERTY layout with iOS-inspired rounded keys.
+ * Compact mode stays anchored inside the IME window; never translate the view outside its parent.
  */
 class SakuKeyboardService : InputMethodService() {
     private var shifted = false
     private var symbols = false
     private var floating = true
-    private var dragStartX = 0f
-    private var dragStartY = 0f
-    private var startTranslationX = 0f
-    private var startTranslationY = 0f
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var deleteRepeating = false
     private val deleteRunnable = object : Runnable {
@@ -55,8 +50,6 @@ class SakuKeyboardService : InputMethodService() {
                 setColor(bg)
                 cornerRadius = dp(if (floating) 22 else 12).toFloat()
             }
-            translationX = prefs.getFloat("offset_x", 0f)
-            translationY = prefs.getFloat("offset_y", 0f)
             layoutParams = ViewGroup.LayoutParams(
                 if (floating) (resources.displayMetrics.widthPixels * 0.94f).toInt() else ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -82,33 +75,12 @@ class SakuKeyboardService : InputMethodService() {
             textSize = 12f
             setTextColor(if (dark) Color.LTGRAY else Color.DKGRAY)
             setPadding(dp(12), dp(3), dp(12), dp(5))
-            contentDescription = "Geser untuk memindahkan. Ketuk untuk mengubah mode mengambang."
-            setOnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        dragStartX = event.rawX; dragStartY = event.rawY
-                        startTranslationX = root.translationX; startTranslationY = root.translationY
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        root.translationX = (startTranslationX + event.rawX - dragStartX).coerceIn(-dp(110).toFloat(), dp(110).toFloat())
-                        root.translationY = (startTranslationY + event.rawY - dragStartY).coerceIn(-dp(100).toFloat(), dp(30).toFloat())
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        val moved = kotlin.math.abs(event.rawX - dragStartX) > dp(8) || kotlin.math.abs(event.rawY - dragStartY) > dp(8)
-                        if (!moved) {
-                            floating = !floating
-                            prefs.edit().putBoolean("floating_mode", floating).apply()
-                            prefs.edit().putFloat("offset_x", 0f).putFloat("offset_y", 0f).apply()
-                            rebuild()
-                        } else {
-                            prefs.edit().putFloat("offset_x", root.translationX).putFloat("offset_y", root.translationY).apply()
-                        }
-                        true
-                    }
-                    else -> true
-                }
+            contentDescription = "Ketuk untuk beralih antara mode ringkas dan mode keyboard penuh."
+            isClickable = true
+            setOnClickListener {
+                floating = !floating
+                prefs.edit().putBoolean("floating_mode", floating).apply()
+                rebuild()
             }
         }
         root.addView(handle, LinearLayout.LayoutParams(-1, dp(27)))
