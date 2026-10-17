@@ -73,6 +73,16 @@ class SakuKeyboardService : InputMethodService() {
             val value = if (clip.hasPrimaryClip()) clip.primaryClip?.getItemAt(0)?.coerceToText(this).toString() else ""
             if (value.isNotEmpty()) commit(value) else Toast.makeText(this, "Papan klip kosong", Toast.LENGTH_SHORT).show()
         }
+        fun copySelection() {
+            val connection = currentInputConnection
+            val selectedText = connection?.getSelectedText(0)?.toString().orEmpty()
+            if (selectedText.isNotEmpty()) {
+                clipboard().setPrimaryClip(android.content.ClipData.newPlainText("Teks disalin", selectedText))
+                Toast.makeText(this, "Teks disalin", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Pilih teks dulu, lalu tekan Copy", Toast.LENGTH_SHORT).show()
+            }
+        }
         fun row(): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -133,6 +143,9 @@ class SakuKeyboardService : InputMethodService() {
         }
         toolButton("✕", "Tutup keyboard") {
             requestHideSelf(0)
+        }
+        toolButton("Copy", "Salin teks yang sedang dipilih") {
+            copySelection()
         }
         root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(34)).apply {
             bottomMargin = dp(2)
