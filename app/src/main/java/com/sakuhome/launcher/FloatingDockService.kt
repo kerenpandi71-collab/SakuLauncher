@@ -575,15 +575,21 @@ class FloatingDockService : Service() {
     }
 
     private fun injectTargetDisplayTap(displayId: Int, x: Float, y: Float, screenWidth: Float, desktopHeight: Float): Boolean {
-        val displayX = (x / screenWidth * 820f).toInt().coerceIn(1, 818)
-        val displayY = (y / desktopHeight * 1320f).toInt().coerceIn(1, 1318)
+        val target = (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(displayId) ?: return false
+        val width = target.mode.physicalWidth.coerceAtLeast(2)
+        val height = target.mode.physicalHeight.coerceAtLeast(2)
+        val displayX = (x / screenWidth * width).toInt().coerceIn(1, width - 1)
+        val displayY = (y / desktopHeight * height).toInt().coerceIn(1, height - 1)
         return runRootInputCommand("input -d " + displayId + " tap " + displayX + " " + displayY)
     }
 
     private fun injectTargetDisplaySwipe(displayId: Int, x: Float, y: Float, deltaY: Int, screenWidth: Float, desktopHeight: Float): Boolean {
-        val displayX = (x / screenWidth * 820f).toInt().coerceIn(1, 818)
-        val startY = (y / desktopHeight * 1320f).toInt().coerceIn(2, 1317)
-        val endY = (startY + deltaY * 1320f / desktopHeight).toInt().coerceIn(2, 1318)
+        val target = (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(displayId) ?: return false
+        val width = target.mode.physicalWidth.coerceAtLeast(2)
+        val height = target.mode.physicalHeight.coerceAtLeast(2)
+        val displayX = (x / screenWidth * width).toInt().coerceIn(1, width - 1)
+        val startY = (y / desktopHeight * height).toInt().coerceIn(2, height - 2)
+        val endY = (startY + deltaY * height / desktopHeight).coerceIn(2, height - 2)
         return runRootInputCommand("input -d " + displayId + " swipe " + displayX + " " + startY + " " + displayX + " " + endY + " 300")
     }
 
