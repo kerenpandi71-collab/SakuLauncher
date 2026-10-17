@@ -217,17 +217,6 @@ class MainActivity : Activity() {
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (android.provider.Settings.canDrawOverlays(this)) {
-            try {
-                val serviceIntent = Intent(this, FloatingDockService::class.java)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
-                else startService(serviceIntent)
-            } catch (_: Exception) { }
-        }
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
