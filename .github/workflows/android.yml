@@ -1,8 +1,9 @@
 name: Android CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: ["main", "feature/saku-desktop-overhaul"]
+    branches: ["main", "feature/saku-desktop-overhaul", "feature/saku-trackpad-integration"]
   pull_request:
     branches: ["main"]
 

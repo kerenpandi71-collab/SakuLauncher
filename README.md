@@ -20,3 +20,10 @@ Mode jendela bebas (freeform) sengaja tidak diminta oleh Saku Launcher. Aplikasi
 - `./gradlew assembleDebug`
 
 APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK pada branch `feature/saku-desktop-overhaul`; periksa tab Actions untuk status dan artefak.
+
+
+## DroidOS Trackpad integration
+
+Branch `feature/saku-trackpad-integration` packages the GPLv3 FOSS trackpad implementation as a library module inside SakuLauncher. In Saku settings, select **Mode Trackpad DroidOS · ON/OFF** to open the trackpad setup/service or send its stop command. Android Accessibility, overlay, and Shizuku permissions remain user-controlled.
+
+Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If you redistribute a build containing this GPLv3 module, comply with GPLv3 obligations for the combined derivative work.
