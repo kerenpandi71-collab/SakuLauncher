@@ -32,6 +32,7 @@ class FloatingDockService : Service() {
     private var drawerView: View? = null
     private var navigationView: View? = null
     private var dockRevealHandle: View? = null
+    private var assistiveBubble: View? = null
     private var gestureStartY = 0f
     private var isForeground = false
     private var lastLandscape: Boolean? = null
@@ -57,6 +58,7 @@ class FloatingDockService : Service() {
         val landscapeNow = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         if (dockView != null && lastLandscape != landscapeNow) removeDock()
         if (dockView == null) showDock()
+        showAssistiveBubble()
         return START_STICKY
     }
 
@@ -334,50 +336,38 @@ class FloatingDockService : Service() {
 
     private fun hideDockTemporarily() {
         hideFloatingDrawer()
-        dockView?.let { view ->
-            try { windowManager.removeView(view) } catch (_: Exception) { }
-        }
+        dockView?.let { view -> try { windowManager.removeView(view) } catch (_: Exception) { } }
         dockView = null
         removeDockRevealHandle()
-
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
-        val handle = View(this).apply {
-            contentDescription = "Swipe ke bawah untuk menampilkan kembali navigasi Saku"
-            setBackgroundColor(Color.TRANSPARENT)
-            setOnTouchListener { _, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        val deltaY = event.rawY - gestureStartY
-                        if (deltaY > dp(35)) {
-                            removeDockRevealHandle()
-                            showDock()
-                        }
-                        true
-                    }
-                    else -> true
-                }
-            }
-        }
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, dp(18),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM
-            y = 0
-        }
-        try {
-            windowManager.addView(handle, params)
-            dockRevealHandle = handle
-        } catch (_: Exception) {
-            dockRevealHandle = null
-            showDock()
-        }
+        showAssistiveBubble()
     }
 
+    private fun showAssistiveBubble() {
+        if (assistiveBubble != null || !Settings.canDrawOverlays(this)) return
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val size = prefs.getInt(KEY_BUBBLE_SIZE, 54).coerceIn(40, 80)
+        val accent = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
+        val bubble = TextView(this).apply {
+            text = "S"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            contentDescription = "Saku Dock: ketuk untuk tampilkan atau sembunyikan dock"
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(accent); setStroke(dp(2), Color.argb(190, 255, 255, 255)) }
+            elevation = dp(14).toFloat()
+            setOnClickListener { if (dockView == null) showDock() else hideDockTemporarily() }
+        }
+        val params = WindowManager.LayoutParams(dp(size), dp(size),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; x = dp(12); y = 0 }
+        try { windowManager.addView(bubble, params); assistiveBubble = bubble } catch (_: Exception) { assistiveBubble = null }
+    }
+
+    private fun removeAssistiveBubble() {
+        assistiveBubble?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        assistiveBubble = null
+    }
     private fun removeDockRevealHandle() {
         dockRevealHandle?.let { view ->
             try { windowManager.removeView(view) } catch (_: Exception) { }
@@ -392,6 +382,7 @@ class FloatingDockService : Service() {
         }
         dockView = null
         removeDockRevealHandle()
+        removeAssistiveBubble()
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
@@ -427,5 +418,6 @@ class FloatingDockService : Service() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
+        private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
     }
 }
