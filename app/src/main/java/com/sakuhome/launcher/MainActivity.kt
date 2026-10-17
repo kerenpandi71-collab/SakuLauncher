@@ -324,6 +324,10 @@ class MainActivity : Activity() {
 
     private fun buildScreen() {
         val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (landscapeLayout) {
+            buildKdeLandscapeDesktop()
+            return
+        }
         window.statusBarColor = if (landscapeLayout) Color.TRANSPARENT else backgroundTop
         window.navigationBarColor = backgroundTop
         window.decorView.systemUiVisibility = if (landscapeLayout) 0 else View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -553,6 +557,251 @@ class MainActivity : Activity() {
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
+    }
+
+    /**
+     * Dedicated landscape desktop shell inspired by KDE Plasma.
+     * Portrait intentionally continues through the original buildScreen() path.
+     */
+    private fun buildKdeLandscapeDesktop() {
+        val bgTop = backgroundTop
+        val bgBottom = backgroundBottom
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        }
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+
+        rootFrame = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(bgTop, bgBottom)
+            )
+            clipChildren = false
+            clipToPadding = false
+        }
+        loadWallpaper()?.let { bitmap ->
+            rootFrame.addView(ImageView(this).apply {
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                if (android.os.Build.VERSION.SDK_INT >= 31 && blurRadius > 0f) {
+                    setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP
+                    ))
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
+            rootFrame.addView(View(this).apply {
+                setBackgroundColor(if (isDarkTheme) 0x44080E1B else 0x220D1420)
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(28), dp(12), dp(12))
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        // Plasma-style top panel: app launcher, desktop identity, and system status.
+        val topPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(4), dp(12), dp(4))
+            background = if (liquidGlass) glassSurface(16) else rounded(dockSurface, 16)
+            elevation = dp(8).toFloat()
+        }
+        val launcherButton = TextView(this).apply {
+            text = "▦"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded(accent, 12)
+            contentDescription = "Buka menu aplikasi"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { toggleStartPanel() }
+        }
+        topPanel.addView(launcherButton, LinearLayout.LayoutParams(dp(40), dp(36)))
+        topPanel.addView(TextView(this).apply {
+            text = "  Saku Desktop"
+            textSize = 14f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            setTextColor(primaryText)
+            maxLines = 1
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        val landscapeClock = TextView(this).apply {
+            textSize = 12f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(8), 0)
+            contentDescription = "Waktu dan tanggal"
+            text = SimpleDateFormat("EEE, d MMM  ·  HH:mm", Locale("id", "ID")).format(Date())
+        }
+        topPanel.addView(landscapeClock, LinearLayout.LayoutParams(-2, dp(34)))
+        val batteryIntent = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val batteryLevel = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val batteryScale = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val batteryPercent = if (batteryLevel >= 0 && batteryScale > 0) batteryLevel * 100 / batteryScale else -1
+        topPanel.addView(TextView(this).apply {
+            text = if (batteryPercent >= 0) "▰ $batteryPercent%" else "▰ --%"
+            textSize = 12f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(4), 0)
+            contentDescription = "Persentase baterai"
+        }, LinearLayout.LayoutParams(-2, dp(34)))
+        topPanel.addView(chipButton("⚙", cardSurface, primaryText, 17).apply {
+            contentDescription = "Pengaturan Saku Launcher"
+            setOnClickListener { showSettings() }
+        }, LinearLayout.LayoutParams(dp(38), dp(36)).apply { marginStart = dp(6) })
+        shell.addView(topPanel, LinearLayout.LayoutParams(-1, dp(46)))
+
+        // Desktop workspace: real app shortcuts and optional widgets, not a floating window.
+        widgetStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+            clipChildren = false
+            clipToPadding = false
+        }
+        shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
+        desktopGrid = GridView(this).apply {
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, 7).coerceIn(4, 12)
+            verticalSpacing = dp(8)
+            horizontalSpacing = dp(8)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            setSelector(ColorDrawable(Color.TRANSPARENT))
+            isVerticalScrollBarEnabled = false
+            clipToPadding = false
+            clipChildren = false
+            setPadding(dp(12), dp(18), dp(12), dp(14))
+        }
+        pinnedAdapter = AppGridAdapter(isStartMenu = false)
+        desktopGrid.adapter = pinnedAdapter
+        desktopGrid.setOnDragListener { grid, event ->
+            when (event.action) {
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.9f; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DROP -> {
+                    grid.alpha = 1f
+                    val source = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
+                    val targetPos = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
+                    val order = homePackages()
+                    val from = order.indexOf(source)
+                    val target = pinnedAdapter.getItemOrNull(targetPos)?.packageName?.let { order.indexOf(it) } ?: -1
+                    if (from >= 0) {
+                        val moved = order.removeAt(from)
+                        order.add(if (target >= 0) target.coerceAtMost(order.size) else order.size, moved)
+                        saveHomePackages(order)
+                        pinnedAdapter.notifyDataSetChanged()
+                    }
+                    true
+                }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                else -> true
+            }
+        }
+        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Permanent bottom panel replaces the floating dock in landscape mode.
+        val bottomPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = if (liquidGlass) glassSurface(18) else rounded(dockSurface, 18)
+            elevation = dp(10).toFloat()
+        }
+        val startButton = TextView(this).apply {
+            text = "▦  Menu"
+            textSize = 13f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded(accent, 12)
+            contentDescription = "Buka menu aplikasi"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { toggleStartPanel() }
+        }
+        bottomPanel.addView(startButton, LinearLayout.LayoutParams(dp(92), dp(42)))
+        bottomPanel.addView(View(this).apply {
+            setBackgroundColor(Color.argb(if (isDarkTheme) 70 else 45, 255, 255, 255))
+        }, LinearLayout.LayoutParams(dp(1), dp(26)).apply {
+            marginStart = dp(8); marginEnd = dp(8)
+        })
+        val taskScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false
+        }
+        val taskIcons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        pinnedApps().take(8).forEachIndexed { index, app ->
+            taskIcons.addView(dockIcon(app, index).apply {
+                setPadding(dp(8), dp(5), dp(8), dp(5))
+                background = ColorDrawable(Color.TRANSPARENT)
+            }, LinearLayout.LayoutParams(dp(44), dp(42)).apply {
+                marginStart = dp(2); marginEnd = dp(2)
+            })
+        }
+        taskScroll.addView(taskIcons, ViewGroup.LayoutParams(-2, -1))
+        bottomPanel.addView(taskScroll, LinearLayout.LayoutParams(0, dp(42), 1f))
+        bottomPanel.addView(View(this).apply {
+            setBackgroundColor(Color.argb(if (isDarkTheme) 70 else 45, 255, 255, 255))
+        }, LinearLayout.LayoutParams(dp(1), dp(26)).apply {
+            marginStart = dp(8); marginEnd = dp(8)
+        })
+        fun bottomAction(glyph: String, description: String, action: () -> Unit) =
+            TextView(this).apply {
+                text = glyph
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(primaryText)
+                contentDescription = description
+                isClickable = true
+                isFocusable = true
+                background = ColorDrawable(Color.TRANSPARENT)
+                setOnClickListener { action() }
+            }
+        bottomPanel.addView(bottomAction("◁", "Kembali") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressed()
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        bottomPanel.addView(bottomAction("○", "Beranda") {
+            hideStartPanelIfVisible()
+            showHomePage(0)
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        bottomPanel.addView(bottomAction("□", "Aplikasi terbaru") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) {
+                Toast.makeText(this, "Aktifkan layanan aksesibilitas Saku untuk tombol Recent Apps.", Toast.LENGTH_LONG).show()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        shell.addView(bottomPanel, LinearLayout.LayoutParams(-1, dp(54)).apply {
+            topMargin = dp(8)
+        })
+
+        rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        startPanel = buildStartPanel()
+        val drawerWidth = dp(preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460))
+            .coerceAtMost((resources.displayMetrics.widthPixels - dp(32)).coerceAtLeast(dp(260)))
+        val drawerHeight = (resources.displayMetrics.heightPixels - dp(150)).coerceAtLeast(dp(250))
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(drawerWidth, drawerHeight, Gravity.BOTTOM or Gravity.START).apply {
+            leftMargin = dp(12)
+            bottomMargin = dp(86)
+        })
+        startPanel.visibility = View.GONE
+        setContentView(rootFrame)
+        updateClock()
+    }
+
+    private fun hideStartPanelIfVisible() {
+        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
     }
 
     private fun buildDesktopNavigationBar(): View {
@@ -1415,6 +1664,10 @@ class MainActivity : Activity() {
     }
 
     private fun reconcileOverlay() {
+        if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            stopService(Intent(this, FloatingDockService::class.java))
+            return
+        }
         val pending = preferences.getBoolean(KEY_OVERLAY_PENDING, false)
         if (pending) {
             preferences.edit().putBoolean(KEY_OVERLAY_PENDING, false).apply()
