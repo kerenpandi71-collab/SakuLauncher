@@ -1466,6 +1466,7 @@ class MainActivity : Activity() {
             "Ukuran bola Saku · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
             "Posisi navigasi mengambang · ${dockPositionLabel()}",
             "Mulai otomatis setelah restart",
+            "Izinkan berjalan di latar belakang",
             "Tentang & izin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
@@ -1516,11 +1517,36 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
                         Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
                     }
-                    16 -> showPermissionInfo()
+                    16 -> requestBackgroundRunPermission()
+                    17 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
 
+
+    private fun requestBackgroundRunPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) {
+            Toast.makeText(this, "Pengaturan ini tidak diperlukan pada versi Android ini", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            Toast.makeText(this, "Pembatasan baterai untuk Saku sudah dinonaktifkan", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(request)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Buka Pengaturan Android > Aplikasi > Saku Launcher > Baterai, lalu pilih Tanpa batas", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private fun showLandscapeCustomization() {
         if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
