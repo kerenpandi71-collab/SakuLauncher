@@ -583,7 +583,7 @@ class MainActivity : Activity() {
         }), LinearLayout.LayoutParams(0, -1, 1.15f))
         bar.addView(navButton("◁", "Kembali", {
             if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressedDispatcher.onBackPressed()
+            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressed()
         }), LinearLayout.LayoutParams(0, -1, 1f))
         bar.addView(navButton("○", "Beranda", {
             if (::startPanel.isInitialized) hideStartPanel()
