@@ -186,18 +186,15 @@ class FloatingDockService : Service() {
                     textSize = 22f
                     gravity = Gravity.CENTER
                     setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-                    setOnClickListener { action() }
                     setOnTouchListener { _, event ->
                         when (event.action) {
-                            android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; false }
+                            android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
                             android.view.MotionEvent.ACTION_UP -> {
                                 val deltaY = event.rawY - gestureStartY
-                                if (deltaY < -dp(45)) {
-                                    hideDockTemporarily()
-                                    true
-                                } else false
+                                if (deltaY < -dp(45)) hideDockTemporarily() else action()
+                                true
                             }
-                            else -> false
+                            else -> true
                         }
                     }
                 }
