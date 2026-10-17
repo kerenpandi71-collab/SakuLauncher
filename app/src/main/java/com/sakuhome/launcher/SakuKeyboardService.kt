@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 
@@ -131,6 +132,45 @@ class SakuKeyboardService : InputMethodService() {
         })
 
         var currentRow: LinearLayout? = null
+        var activePreview: PopupWindow? = null
+        val previewHandler = Handler(Looper.getMainLooper())
+        fun showKeyPreview(anchor: View, label: String) {
+            activePreview?.dismiss()
+            val previewText = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                textSize = 27f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(textColor)
+                background = GradientDrawable().apply {
+                    setColor(if (dark) Color.rgb(88, 94, 106) else Color.rgb(255, 255, 255))
+                    cornerRadius = dp(13).toFloat()
+                    setStroke(dp(1), if (dark) Color.rgb(120, 128, 143) else Color.rgb(210, 214, 222))
+                }
+                elevation = dp(7).toFloat()
+                alpha = 0f
+                scaleX = 0.72f
+                scaleY = 0.72f
+            }
+            val popup = PopupWindow(previewText, dp(54), dp(62), false).apply {
+                isTouchable = false
+                isOutsideTouchable = false
+                isClippingEnabled = true
+                elevation = dp(7).toFloat()
+            }
+            activePreview = popup
+            popup.showAsDropDown(anchor, 0, -dp(keyHeight + 66))
+            previewText.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(85L).start()
+            previewHandler.postDelayed({
+                if (activePreview === popup) {
+                    previewText.animate().alpha(0f).scaleX(0.8f).scaleY(0.8f)
+                        .setDuration(75L).withEndAction {
+                            if (popup.isShowing) popup.dismiss()
+                        }.start()
+                    activePreview = null
+                }
+            }, 170L)
+        }
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
             val button = TextView(this).apply {
                 text = label
@@ -144,7 +184,12 @@ class SakuKeyboardService : InputMethodService() {
                 }
                 elevation = dp(1).toFloat()
                 isClickable = true
-                setOnClickListener { action() }
+                setOnClickListener {
+                    if (!special && label != "spasi" && label != "Paste" && label != "🌐" && label != "▤") {
+                        showKeyPreview(this, label)
+                    }
+                    action()
+                }
                 if (label == "⌫") {
                     setOnTouchListener { _, event ->
                         when (event.action) {
