@@ -29,6 +29,8 @@ import android.widget.Toast
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
     private var dockView: View? = null
+    private var drawerView: View? = null
+    private var navigationView: View? = null
     private var isForeground = false
 
     override fun onCreate() {
@@ -119,11 +121,7 @@ class FloatingDockService : Service() {
             background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
             setOnClickListener {
-                val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    putExtra(MainActivity.EXTRA_OPEN_START, true)
-                }
-                startActivity(open)
+                if (drawerView == null) showFloatingDrawer() else hideFloatingDrawer()
             }
         }
         dock.addView(startButton, LinearLayout.LayoutParams(dp(45), dp(48)))
@@ -175,6 +173,149 @@ class FloatingDockService : Service() {
         }
     }
 
+    private fun showFloatingDrawer() {
+        if (!Settings.canDrawOverlays(this)) return
+        hideFloatingDrawer()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dark = prefs.getBoolean(KEY_DARK_THEME, true)
+        val panelColor = if (dark) Color.argb(242, 31, 37, 52) else Color.argb(242, 248, 249, 253)
+        val textColor = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val accent = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                setColor(panelColor)
+                setStroke(dp(1), Color.argb(150, 255, 255, 255))
+                cornerRadius = dp(24).toFloat()
+            }
+            elevation = dp(16).toFloat()
+        }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        header.addView(TextView(this).apply {
+            text = "Aplikasi"
+            textSize = 20f
+            setTextColor(textColor)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        header.addView(TextView(this).apply {
+            text = "×"
+            textSize = 26f
+            gravity = Gravity.CENTER
+            setTextColor(textColor)
+            background = rounded(Color.argb(100, 110, 151, 245), 18)
+            setOnClickListener { hideFloatingDrawer() }
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        panel.addView(header)
+        val search = android.widget.EditText(this).apply {
+            hint = "Cari aplikasi"
+            textSize = 14f
+            setSingleLine(true)
+            setTextColor(textColor)
+            setHintTextColor(Color.GRAY)
+            setPadding(dp(12), 0, dp(12), 0)
+            background = GradientDrawable().apply {
+                setColor(Color.argb(45, 255, 255, 255))
+                setStroke(dp(1), Color.argb(120, 255, 255, 255))
+                cornerRadius = dp(16).toFloat()
+            }
+        }
+        panel.addView(search, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        val scroll = android.widget.ScrollView(this).apply { isFillViewport = true }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val allApps = loadApps().sortedBy { it.label.lowercase() }
+        fun populate(query: String) {
+            list.removeAllViews()
+            allApps.filter { it.label.contains(query, ignoreCase = true) }.forEach { app ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(5), dp(5), dp(5), dp(5))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        val launch = packageManager.getLaunchIntentForPackage(app.packageName)
+                        if (launch != null) {
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try { startActivity(launch); hideFloatingDrawer() } catch (_: Exception) { Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }
+                row.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(42), dp(42)))
+                row.addView(TextView(this).apply {
+                    text = app.label
+                    textSize = 14f
+                    setTextColor(textColor)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(dp(12), 0, 0, 0)
+                }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                list.addView(row, LinearLayout.LayoutParams(-1, dp(50)))
+            }
+        }
+        populate("")
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = populate(s?.toString().orEmpty())
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        scroll.addView(list)
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val panelParams = WindowManager.LayoutParams(
+            dp(300), WindowManager.LayoutParams.MATCH_PARENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.LEFT or Gravity.TOP; x = dp(8); y = dp(8) }
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            background = GradientDrawable().apply {
+                setColor(panelColor)
+                setStroke(dp(1), Color.argb(150, 255, 255, 255))
+                cornerRadius = dp(22).toFloat()
+            }
+            fun button(label: String, desc: String, action: () -> Unit) = TextView(this@FloatingDockService).apply {
+                text = label; contentDescription = desc; textSize = 20f; gravity = Gravity.CENTER
+                setTextColor(textColor); background = GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius = dp(14).toFloat() }
+                setOnClickListener { action() }
+            }
+            addView(button("‹", "Sembunyikan panel aplikasi") { hideFloatingDrawer() }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            addView(button("▦", "Tampilkan semua aplikasi") { if (drawerView == null) showFloatingDrawer() }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            addView(button("◁", "Kembali") {
+                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) Toast.makeText(this@FloatingDockService, "Aktifkan aksesibilitas Navigasi desktop Saku untuk tombol Back", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            addView(button("○", "Beranda") { hideFloatingDrawer(); val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); try { startActivity(i) } catch (_: Exception) { } }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            addView(button("□", "Aplikasi terbaru") {
+                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) Toast.makeText(this@FloatingDockService, "Aktifkan aksesibilitas Navigasi desktop Saku untuk Recent Apps", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        }
+        val navParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT, dp(52),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.BOTTOM; y = dp(4) }
+        try {
+            windowManager.addView(panel, panelParams)
+            drawerView = panel
+            windowManager.addView(nav, navParams)
+            navigationView = nav
+        } catch (_: Exception) {
+            try { windowManager.removeView(panel) } catch (_: Exception) { }
+            drawerView = null
+            Toast.makeText(this, "Drawer overlay tidak dapat ditampilkan", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun hideFloatingDrawer() {
+        navigationView?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        drawerView?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        navigationView = null
+        drawerView = null
+    }
+
     private fun loadApps(): List<AppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
@@ -184,6 +325,7 @@ class FloatingDockService : Service() {
     }
 
     private fun removeDock() {
+        hideFloatingDrawer()
         dockView?.let { view ->
             try { windowManager.removeView(view) } catch (_: Exception) { }
         }
