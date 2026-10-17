@@ -131,6 +131,9 @@ class SakuKeyboardService : InputMethodService() {
             prefs.edit().putBoolean(floatingPref, floating).apply()
             rebuild()
         }
+        toolButton("✕", "Tutup keyboard") {
+            requestHideSelf(0)
+        }
         root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(34)).apply {
             bottomMargin = dp(2)
         })
