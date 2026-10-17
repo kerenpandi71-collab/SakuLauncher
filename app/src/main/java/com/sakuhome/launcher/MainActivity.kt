@@ -376,6 +376,7 @@ class MainActivity : Activity() {
             contentDescription = "Pengaturan Saku Dock"
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        topBar.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
         val statusStrip = buildStatusStrip()
         statusStrip.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
@@ -422,6 +423,7 @@ class MainActivity : Activity() {
             contentDescription = "Opsi tata letak layar utama"
             setOnClickListener { showHomeLayoutOptions() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
+        if (landscapeLayout) pageControls.visibility = View.GONE
         shell.addView(pageControls)
 
         // App search removed from the home screen as requested.
