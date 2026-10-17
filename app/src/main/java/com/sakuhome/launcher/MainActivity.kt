@@ -857,6 +857,14 @@ class MainActivity : Activity() {
         updateClock()
     }
 
+    private fun isOnSecondaryDisplay(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= 30) {
+            display?.displayId?.let { it != android.view.Display.DEFAULT_DISPLAY } ?: false
+        } else {
+            windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
+        }
+    }
+
     /** Trackpad prototype: maps pad movement to a visible pointer in the desktop area.
      * Accessibility gesture injection is used for taps; this is not a hardware mouse.
      */
@@ -889,9 +897,14 @@ class MainActivity : Activity() {
             }
         }
         if (!enabled) {
-            rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(84); marginEnd = dp(12) })
+            // Trackpad is controlled from the phone display; never embed its panel in
+            // the desktop Activity when that Activity is running on a secondary display.
+            if (!isOnSecondaryDisplay()) {
+                rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(84); marginEnd = dp(12) })
+            }
             return
         }
+        if (isOnSecondaryDisplay()) return
         val screenW = resources.displayMetrics.widthPixels.toFloat()
         val screenH = resources.displayMetrics.heightPixels.toFloat()
         val padHeight = (screenH * 0.38f).toInt()
