@@ -219,8 +219,10 @@ class FloatingDockService : Service() {
                 android.view.MotionEvent.ACTION_POINTER_UP -> {
                     if (twoFinger && kotlin.math.abs(scrollDistance) > dp(8)) {
                         val delta = (scrollDistance * 2.2f).toInt().coerceIn(-520, 520)
-                        val ok = SakuNavigationAccessibilityService.performScrollAt(trackpadPointerX, trackpadPointerY, delta)
-                        label.text = if (ok) "Scroll dua jari dikirim" else "Aktifkan Aksesibilitas Saku untuk scroll"
+                        val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+                        val ok = if (targetId > 0) injectTargetDisplaySwipe(targetId, trackpadPointerX, trackpadPointerY, delta, screenW, screenH - padHeight)
+                            else SakuNavigationAccessibilityService.performScrollAt(trackpadPointerX, trackpadPointerY, delta)
+                        label.text = if (ok) "Scroll dua jari dikirim" else if (targetId > 0) "Input Root gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk scroll"
                     }
                     true
                 }
@@ -228,8 +230,10 @@ class FloatingDockService : Service() {
                     if (twoFinger) {
                         twoFinger = false
                     } else if (!moved) {
-                        val ok = SakuNavigationAccessibilityService.performTap(trackpadPointerX, trackpadPointerY, 80L)
-                        label.text = if (ok) "Klik dikirim" else "Aktifkan Aksesibilitas Saku untuk klik"
+                        val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+                        val ok = if (targetId > 0) injectTargetDisplayTap(targetId, trackpadPointerX, trackpadPointerY, screenW, screenH - padHeight)
+                            else SakuNavigationAccessibilityService.performTap(trackpadPointerX, trackpadPointerY, 80L)
+                        label.text = if (ok) "Klik dikirim" else if (targetId > 0) "Input Root gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk klik"
                     } else {
                         label.text = "Pointer dipindahkan"
                     }
@@ -497,10 +501,22 @@ class FloatingDockService : Service() {
                     isClickable = true
                     isFocusable = true
                     setOnClickListener {
-                        val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                        if (launch != null) {
-                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            try { startActivity(launch); hideFloatingDrawer() } catch (_: Exception) { Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show() }
+                        val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+                        if (targetId > 0) {
+                            Thread {
+                                val ok = runRootInputCommand("am start --display " + targetId +
+                                    " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + app.packageName)
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    if (ok) hideFloatingDrawer()
+                                    else Toast.makeText(this@FloatingDockService, "Gagal membuka aplikasi pada display " + targetId, Toast.LENGTH_LONG).show()
+                                }
+                            }.start()
+                        } else {
+                            val launch = packageManager.getLaunchIntentForPackage(app.packageName)
+                            if (launch != null) {
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                try { startActivity(launch); hideFloatingDrawer() } catch (_: Exception) { Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show() }
+                            }
                         }
                     }
                 }
@@ -538,6 +554,30 @@ class FloatingDockService : Service() {
             drawerView = null
             Toast.makeText(this, "Drawer overlay tidak dapat ditampilkan", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun injectTargetDisplayTap(displayId: Int, x: Float, y: Float, screenWidth: Float, desktopHeight: Float): Boolean {
+        val displayX = (x / screenWidth * 820f).toInt().coerceIn(1, 818)
+        val displayY = (y / desktopHeight * 1320f).toInt().coerceIn(1, 1318)
+        return runRootInputCommand("input -d " + displayId + " tap " + displayX + " " + displayY)
+    }
+
+    private fun injectTargetDisplaySwipe(displayId: Int, x: Float, y: Float, deltaY: Int, screenWidth: Float, desktopHeight: Float): Boolean {
+        val displayX = (x / screenWidth * 820f).toInt().coerceIn(1, 818)
+        val startY = (y / desktopHeight * 1320f).toInt().coerceIn(2, 1317)
+        val endY = (startY + deltaY * 1320f / desktopHeight).toInt().coerceIn(2, 1318)
+        return runRootInputCommand("input -d " + displayId + " swipe " + displayX + " " + startY + " " + displayX + " " + endY + " 300")
+    }
+
+    /** Runs only internally constructed input/launch commands after the user selected a target display. */
+    private fun runRootInputCommand(command: String): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val stdout = process.inputStream.bufferedReader().use { it.readText() }
+            val stderr = process.errorStream.bufferedReader().use { it.readText() }
+            process.waitFor() == 0 && !stderr.contains("Error", ignoreCase = true) &&
+                !stdout.contains("Error", ignoreCase = true) && !stdout.contains("Exception", ignoreCase = true)
+        } catch (_: Exception) { false }
     }
 
     private fun hideFloatingDrawer() {
@@ -770,5 +810,6 @@ class FloatingDockService : Service() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
+        private const val KEY_TARGET_DISPLAY_ID = "saku_target_display_id"
     }
 }
