@@ -106,6 +106,8 @@ class FloatingDockService : Service() {
         val dockWidth = prefs.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
         val dockHeight = prefs.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val dockPosition = prefs.getString(KEY_DOCK_POSITION, "bottom") ?: "bottom"
+        val sideDock = dockPosition == "left" || dockPosition == "right"
         lastLandscape = landscape
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
@@ -113,7 +115,7 @@ class FloatingDockService : Service() {
         } else loadApps().take(5).map { it.packageName }
         val apps = loadApps().associateBy { it.packageName }
         val dock = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (sideDock) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(7), dp(5), dp(7), dp(5))
             background = GradientDrawable().apply {
@@ -122,16 +124,6 @@ class FloatingDockService : Service() {
                 cornerRadius = dp(22).toFloat()
             }
             elevation = dp(12).toFloat()
-            setOnTouchListener { _, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        val deltaY = event.rawY - gestureStartY
-                        if (deltaY < -dp(45)) { hideDockTemporarily(); true } else false
-                    }
-                    else -> true
-                }
-            }
         }
         val startButton = TextView(this).apply {
             text = "▦"
@@ -169,19 +161,9 @@ class FloatingDockService : Service() {
                     textSize = 22f
                     gravity = Gravity.CENTER
                     setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-                    setOnTouchListener { _, event ->
-                        when (event.action) {
-                            android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
-                            android.view.MotionEvent.ACTION_UP -> {
-                                val deltaY = event.rawY - gestureStartY
-                                if (deltaY < -dp(45)) hideDockTemporarily() else action()
-                                true
-                            }
-                            else -> true
-                        }
-                    }
+                    setOnClickListener { action() }
                 }
-                dock.addView(button, LinearLayout.LayoutParams(dp(48), -1))
+                dock.addView(button, if (sideDock) LinearLayout.LayoutParams(-1, dp(48)) else LinearLayout.LayoutParams(dp(48), -1))
             }
             navButton("‹", "Kembali") {
                 if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
@@ -196,10 +178,9 @@ class FloatingDockService : Service() {
                     Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
             }
 
-        val dockPosition = prefs.getString(KEY_DOCK_POSITION, "bottom") ?: "bottom"
         val params = WindowManager.LayoutParams(
-            dp(if (dockPosition == "left" || dockPosition == "right") dockWidth.coerceAtLeast(112) else if (landscape) 300 else 280),
-            dp(if (dockPosition == "left" || dockPosition == "right") dockHeight.coerceAtLeast(220) else dockHeight),
+            dp(if (sideDock) 76 else if (landscape) 300 else 280),
+            dp(if (sideDock) 280 else dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
