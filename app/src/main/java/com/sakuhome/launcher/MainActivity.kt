@@ -890,25 +890,67 @@ class MainActivity : Activity() {
             textSize = 13f; gravity = Gravity.CENTER; setTextColor(primaryText)
             background = GradientDrawable().apply { setColor(if (isDarkTheme) Color.rgb(39, 48, 64) else Color.rgb(241, 245, 251)); cornerRadius = dp(16).toFloat(); setStroke(dp(1), if (isDarkTheme) Color.rgb(83, 101, 130) else Color.rgb(190, 204, 224)) }
             var lastX = 0f; var lastY = 0f; var moved = false
+            var twoFingerStartY = 0f
+            var twoFingerLastY = 0f
+            var twoFingerScrollDistance = 0f
+            var twoFingerGesture = false
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> { lastX = event.x; lastY = event.y; moved = false; true }
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        lastX = event.x; lastY = event.y; moved = false
+                        twoFingerGesture = false; twoFingerScrollDistance = 0f
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_POINTER_DOWN -> {
+                        if (event.pointerCount >= 2) {
+                            twoFingerGesture = true
+                            twoFingerStartY = (event.getY(0) + event.getY(1)) / 2f
+                            twoFingerLastY = twoFingerStartY
+                            twoFingerScrollDistance = 0f
+                            moved = true
+                            label.text = "Dua jari: geser untuk menggulir"
+                        }
+                        true
+                    }
                     android.view.MotionEvent.ACTION_MOVE -> {
-                        val dx = event.x - lastX; val dy = event.y - lastY
-                        if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(2)) moved = true
-                        pointerX = (pointerX + dx * 1.7f).coerceIn(pointerSize.toFloat(), screenW - pointerSize)
-                        pointerY = (pointerY + dy * 1.7f).coerceIn(pointerSize.toFloat(), desktopBottom - pointerSize)
-                        lastX = event.x; lastY = event.y; placePointer(); true
+                        if (event.pointerCount >= 2 && twoFingerGesture) {
+                            val avgY = (event.getY(0) + event.getY(1)) / 2f
+                            twoFingerScrollDistance += avgY - twoFingerLastY
+                            twoFingerLastY = avgY
+                            if (kotlin.math.abs(twoFingerScrollDistance) > dp(8)) {
+                                label.text = "Menggulir dengan dua jari…"
+                            }
+                            true
+                        } else {
+                            val dx = event.x - lastX; val dy = event.y - lastY
+                            if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(2)) moved = true
+                            pointerX = (pointerX + dx * 1.7f).coerceIn(pointerSize.toFloat(), screenW - pointerSize)
+                            pointerY = (pointerY + dy * 1.7f).coerceIn(pointerSize.toFloat(), desktopBottom - pointerSize)
+                            lastX = event.x; lastY = event.y; placePointer(); true
+                        }
+                    }
+                    android.view.MotionEvent.ACTION_POINTER_UP -> {
+                        if (twoFingerGesture && kotlin.math.abs(twoFingerScrollDistance) > dp(12)) {
+                            val distance = (twoFingerScrollDistance * 2.2f).toInt().coerceIn(-520, 520)
+                            val ok = SakuNavigationAccessibilityService.performScrollAt(pointerX, pointerY, distance)
+                            label.text = if (ok) "Gulir dua jari dikirim" else "Aktifkan Aksesibilitas Saku untuk scrolling"
+                        }
+                        true
                     }
                     android.view.MotionEvent.ACTION_UP -> {
-                        if (!moved) {
-                            val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
-                            label.text = if (ok) "Klik dikirim ke desktop" else "Aktifkan Aksesibilitas Saku untuk mengirim klik"
-                            if (!ok) Toast.makeText(this@MainActivity, "Aktifkan layanan aksesibilitas Saku untuk klik virtual", Toast.LENGTH_SHORT).show()
-                        } else label.text = "Penunjuk dipindahkan"
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); true
+                        if (twoFingerGesture) {
+                            twoFingerGesture = false
+                            true
+                        } else {
+                            if (!moved) {
+                                val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
+                                label.text = if (ok) "Klik dikirim ke desktop" else "Aktifkan Aksesibilitas Saku untuk mengirim klik"
+                                if (!ok) Toast.makeText(this@MainActivity, "Aktifkan layanan aksesibilitas Saku untuk klik virtual", Toast.LENGTH_SHORT).show()
+                            } else label.text = "Penunjuk dipindahkan"
+                            view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); true
+                        }
                     }
-                    android.view.MotionEvent.ACTION_CANCEL -> true
+                    android.view.MotionEvent.ACTION_CANCEL -> { twoFingerGesture = false; true }
                     else -> true
                 }
             }
