@@ -67,6 +67,11 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <activity
+            android:name=".TrackpadWorkspaceActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"
