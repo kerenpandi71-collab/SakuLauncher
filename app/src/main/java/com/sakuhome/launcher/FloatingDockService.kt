@@ -459,6 +459,5 @@ class FloatingDockService : Service() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
-        private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
     }
 }
