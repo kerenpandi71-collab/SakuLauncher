@@ -1178,6 +1178,7 @@ class MainActivity : Activity() {
             "Jadikan launcher default",
             (if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Nonaktifkan dock dan navigasi mengambang" else "Aktifkan dock dan navigasi mengambang"),
             "Ukuran bola Saku · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
+            "Posisi navigasi mengambang · ${dockPositionLabel()}",
             "Mulai otomatis setelah restart",
             "Tentang & izin"
         )
@@ -1223,12 +1224,13 @@ class MainActivity : Activity() {
                         }
                     }
                     13 -> chooseBubbleSize()
-                    14 -> {
+                    14 -> chooseDockNavigationPosition()
+                    15 -> {
                         val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
                         preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
                         Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
                     }
-                    15 -> showPermissionInfo()
+                    16 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1954,6 +1956,33 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
+    private fun dockPositionLabel(): String = when (preferences.getString(KEY_DOCK_POSITION, "bottom")) {
+        "left" -> "Kiri"
+        "right" -> "Kanan"
+        "top" -> "Atas"
+        else -> "Bawah (standar Android)"
+    }
+
+    private fun chooseDockNavigationPosition() {
+        val values = arrayOf("Bawah — standar Android", "Kiri", "Kanan", "Atas")
+        val keys = arrayOf("bottom", "left", "right", "top")
+        val current = preferences.getString(KEY_DOCK_POSITION, "bottom") ?: "bottom"
+        val selected = keys.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Posisi navigasi mengambang")
+            .setSingleChoiceItems(values, selected) { dialog, which ->
+                preferences.edit().putString(KEY_DOCK_POSITION, keys[which]).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
+                dialog.dismiss()
+                Toast.makeText(this, "Posisi navigasi: ${values[which].substringBefore(" —")}", Toast.LENGTH_SHORT).show()
+                buildScreen()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
     private fun chooseBubbleSize() {
         val current = preferences.getInt(KEY_BUBBLE_SIZE, 54).coerceIn(40, 80)
         val slider = android.widget.SeekBar(this).apply { max = 40; progress = current - 40 }
@@ -2314,6 +2343,7 @@ class MainActivity : Activity() {
         private const val KEY_HOME_ICON_POSITION = "home_icon_position"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
+        private const val KEY_DOCK_POSITION = "dock_navigation_position"
         private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
