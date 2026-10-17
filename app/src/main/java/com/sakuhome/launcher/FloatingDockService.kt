@@ -129,7 +129,24 @@ class FloatingDockService : Service() {
                 if (drawerView == null) showFloatingDrawer() else hideFloatingDrawer()
             }
         }
-        dock.addView(startButton, LinearLayout.LayoutParams(dp(45), dp(48)))
+        dock.addView(startButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 45), dp(48)))
+        val settingsButton = TextView(this).apply {
+            text = "⚙"
+            textSize = 21f
+            gravity = Gravity.CENTER
+            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+            contentDescription = "Pengaturan Saku Launcher"
+            setOnClickListener {
+                val openSettings = Intent(this@FloatingDockService, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+                }
+                try { startActivity(openSettings) } catch (_: Exception) {
+                    Toast.makeText(this@FloatingDockService, "Pengaturan Saku Launcher tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dock.addView(settingsButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 40), dp(48)))
         if (!landscape) pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
             val icon = ImageView(this).apply {
                 setImageDrawable(app.icon)
@@ -185,7 +202,7 @@ class FloatingDockService : Service() {
         }
 
         val params = WindowManager.LayoutParams(
-            dp(if (landscape) 210 else dockWidth),
+            dp(if (landscape) 248 else dockWidth),
             dp(dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -319,6 +336,13 @@ class FloatingDockService : Service() {
             addView(button("○", "Beranda") { hideFloatingDrawer(); val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); try { startActivity(i) } catch (_: Exception) { } }, LinearLayout.LayoutParams(0, dp(42), 1f))
             addView(button("□", "Aplikasi terbaru") {
                 if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) Toast.makeText(this@FloatingDockService, "Aktifkan aksesibilitas Navigasi desktop Saku untuk Recent Apps", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            addView(button("⚙", "Pengaturan Saku Launcher") {
+                val openSettings = Intent(this@FloatingDockService, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+                }
+                try { startActivity(openSettings) } catch (_: Exception) { }
             }, LinearLayout.LayoutParams(0, dp(42), 1f))
         }
         val navParams = WindowManager.LayoutParams(

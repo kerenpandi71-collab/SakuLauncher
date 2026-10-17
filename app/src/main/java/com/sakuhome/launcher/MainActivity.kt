@@ -589,7 +589,12 @@ class MainActivity : Activity() {
         bar.addView(navButton("‹", "Tampilkan atau sembunyikan panel aplikasi", {
             toggleStartPanel()
         }), LinearLayout.LayoutParams(0, -1, 0.8f))
-        bar.addView(navButton("●●●", "Buka menu aplikasi", { toggleStartPanel() }), LinearLayout.LayoutParams(0, -1, 1.15f))
+        bar.addView(navButton("⚙", "Pengaturan Saku Launcher", {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_OPEN_SETTINGS, true)
+            })
+        }), LinearLayout.LayoutParams(0, -1, 1f))
         bar.addView(navButton("▦", "Semua aplikasi", {
             showingAllApps = true
             if (::startPanel.isInitialized) { showStartPanel(); refreshStartPanel() }
