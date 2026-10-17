@@ -939,7 +939,7 @@ class MainActivity : Activity() {
                 var modeRequested = false
                 try {
                     // Hidden API on some Android builds; if blocked, launch bounds remain a best-effort hint.
-                    val method = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                    val method = ActivityOptions::class.java.getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType!!)
                     method.isAccessible = true
                     method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
                     modeRequested = true
