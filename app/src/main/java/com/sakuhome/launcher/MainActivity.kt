@@ -254,13 +254,12 @@ class MainActivity : Activity() {
         } else {
             windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
         }
+        // Saku desktop is landscape only on a non-default (secondary/virtual) display.
+        // Keep ordinary phone use portrait regardless of the saved legacy orientation preference.
         requestedOrientation = if (secondaryDisplay) {
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
-            preferences.getInt(
-                "launcher_orientation",
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            )
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
