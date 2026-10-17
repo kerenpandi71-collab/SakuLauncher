@@ -349,7 +349,6 @@ class FloatingDockService : Service() {
             elevation = dp(14).toFloat()
             setOnClickListener { if (dockView == null) showDock() else hideDockTemporarily() }
         }
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val savedX = prefs.getInt(KEY_BUBBLE_X, -1)
         val savedY = prefs.getInt(KEY_BUBBLE_Y, -1)
         val params = WindowManager.LayoutParams(dp(size), dp(size),
