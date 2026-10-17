@@ -3,7 +3,6 @@ package com.sakuhome.launcher
 import android.content.ClipboardManager
 import android.content.res.Configuration
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
@@ -15,7 +14,6 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
-import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 
@@ -138,59 +136,12 @@ class SakuKeyboardService : InputMethodService() {
         })
 
         var currentRow: LinearLayout? = null
-        var activePreview: PopupWindow? = null
-        var previewText: TextView? = null
-        val previewHandler = Handler(Looper.getMainLooper())
-        var previewDismissRunnable: Runnable? = null
-        fun showKeyPreview(anchor: View, label: String) {
-            // Reuse the popup instead of allocating a new window and drawable for every tap.
-            previewDismissRunnable?.let { previewHandler.removeCallbacks(it) }
-            val text = previewText ?: TextView(this).apply {
-                gravity = Gravity.CENTER
-                textSize = 27f
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setTextColor(textColor)
-                background = GradientDrawable().apply {
-                    setColor(if (dark) Color.rgb(88, 94, 106) else Color.WHITE)
-                    cornerRadius = dp(13).toFloat()
-                    setStroke(dp(1), if (dark) Color.rgb(120, 128, 143) else Color.rgb(210, 214, 222))
-                }
-                elevation = dp(7).toFloat()
-            }.also { previewText = it }
-            text.animate().cancel()
-            text.text = label
-            text.alpha = 1f
-            text.scaleX = 0.92f
-            text.scaleY = 0.92f
-            val popup = activePreview ?: PopupWindow(text, dp(54), dp(62), false).apply {
-                isTouchable = false
-                isOutsideTouchable = false
-                isClippingEnabled = true
-                elevation = dp(7).toFloat()
-            }.also { activePreview = it }
-            if (popup.isShowing) {
-                popup.update(anchor, 0, -dp(keyHeight + 66), dp(54), dp(62))
-            } else {
-                popup.showAsDropDown(anchor, 0, -dp(keyHeight + 66))
-            }
-            // Short, light animation avoids the heavier feel of the previous 170 ms popup.
-            text.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(55L).start()
-            val dismiss = Runnable {
-                text.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f)
-                    .setDuration(55L).withEndAction {
-                        if (popup.isShowing) popup.dismiss()
-                    }.start()
-            }
-            previewDismissRunnable = dismiss
-            previewHandler.postDelayed(dismiss, 115L)
-        }
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
             val button = TextView(this).apply {
                 text = label
                 gravity = Gravity.CENTER
                 textSize = if (label.length > 2) 13f else 20f
                 setTextColor(if (special && label != "⇧") Color.WHITE else textColor)
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
                 background = GradientDrawable().apply {
                     setColor(if (special) accent else keyBg)
                     cornerRadius = dp(9).toFloat()
@@ -198,9 +149,6 @@ class SakuKeyboardService : InputMethodService() {
                 elevation = dp(1).toFloat()
                 isClickable = true
                 setOnClickListener {
-                    if (!special && label != "spasi" && label != "Paste" && label != "🌐" && label != "▤") {
-                        showKeyPreview(this, label)
-                    }
                     action()
                 }
                 if (label == "⌫") {
