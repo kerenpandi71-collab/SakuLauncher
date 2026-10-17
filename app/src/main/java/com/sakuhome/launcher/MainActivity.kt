@@ -217,6 +217,17 @@ class MainActivity : Activity() {
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            try {
+                val serviceIntent = Intent(this, FloatingDockService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+                else startService(serviceIntent)
+            } catch (_: Exception) { }
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -1171,7 +1182,7 @@ class MainActivity : Activity() {
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
-            "Izin tampil di atas aplikasi",
+            "Aktifkan dock & navigasi mengambang",
             "Tentang & izin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
@@ -1189,7 +1200,16 @@ class MainActivity : Activity() {
                     9 -> chooseWallpaper()
                     10 -> resetWallpaper()
                     11 -> openHomeSettings()
-                    12 -> openOverlaySettings()
+                    12 -> {
+                        if (android.provider.Settings.canDrawOverlays(this)) {
+                            try {
+                                val serviceIntent = Intent(this, FloatingDockService::class.java)
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+                                else startService(serviceIntent)
+                                Toast.makeText(this, "Dock dan navigasi mengambang diaktifkan", Toast.LENGTH_SHORT).show()
+                            } catch (_: Exception) { openOverlaySettings() }
+                        } else openOverlaySettings()
+                    }
                     13 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
