@@ -154,29 +154,52 @@ class FloatingDockService : Service() {
             }
         }
         dock.addView(settingsButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 40), dp(48)))
+        // One UI-inspired navigation cluster: separate hit targets and subtle dividers
+        // reduce accidental taps while keeping the dock compact.
+        fun navDivider() {
+            val divider = View(this).apply {
+                setBackgroundColor(Color.argb(if (darkTheme) 72 else 55, if (darkTheme) 255 else 25, if (darkTheme) 255 else 31, if (darkTheme) 255 else 48))
+                isClickable = false
+                isFocusable = false
+            }
+            dock.addView(divider, if (sideDock) {
+                LinearLayout.LayoutParams(dp(28), dp(1)).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(3); bottomMargin = dp(3) }
+            } else {
+                LinearLayout.LayoutParams(dp(1), dp(28)).apply { gravity = Gravity.CENTER_VERTICAL; marginStart = dp(3); marginEnd = dp(3) }
+            })
+        }
         fun navButton(label: String, description: String, action: () -> Unit) {
-                val button = TextView(this).apply {
-                    text = label
-                    contentDescription = description
-                    textSize = 22f
-                    gravity = Gravity.CENTER
-                    setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-                    setOnClickListener { action() }
+            val button = TextView(this).apply {
+                text = label
+                contentDescription = description
+                textSize = 23f
+                gravity = Gravity.CENTER
+                setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+                background = GradientDrawable().apply {
+                    setColor(Color.argb(if (darkTheme) 24 else 18, if (darkTheme) 255 else 20, if (darkTheme) 255 else 28, if (darkTheme) 255 else 42))
+                    cornerRadius = dp(15).toFloat()
                 }
-                dock.addView(button, if (sideDock) LinearLayout.LayoutParams(-1, dp(48)) else LinearLayout.LayoutParams(dp(48), -1))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
             }
-            navButton("‹", "Kembali") {
-                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
-                    Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
-            }
-            navButton("○", "Beranda") {
-                hideFloatingDrawer()
-                try { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
-            }
-            navButton("□", "Aplikasi terbaru") {
-                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
-                    Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
-            }
+            dock.addView(button, if (sideDock) LinearLayout.LayoutParams(dp(56), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(2); bottomMargin = dp(2) } else LinearLayout.LayoutParams(dp(44), dp(48)).apply { gravity = Gravity.CENTER_VERTICAL; marginStart = dp(2); marginEnd = dp(2) })
+        }
+        navDivider()
+        navButton("‹", "Kembali") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+                Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
+        }
+        navDivider()
+        navButton("⌂", "Beranda") {
+            hideFloatingDrawer()
+            try { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
+        }
+        navDivider()
+        navButton("▤", "Aplikasi terbaru") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
+                Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
+        }
 
         val params = WindowManager.LayoutParams(
             dp(if (sideDock) 76 else if (landscape) 300 else 280),
