@@ -1726,12 +1726,12 @@ class MainActivity : Activity() {
                     1 -> confirmDisplayChange("Buat simulated display?",
                         "Android akan mengubah overlay_display_devices menjadi 820x1320/320. Kamu bisa menghapus konfigurasinya lewat opsi Display Lab.") {
                         runRootDisplayCommand("Buat simulated display",
-                            "current=\$(settings get global overlay_display_devices); if [ \"$current\" = \"null\" ] || [ -z \"$current\" ]; then settings put global overlay_display_devices 820x1320/320; elif [ \"$current\" != \"820x1320/320\" ]; then echo \"Refusing to overwrite existing display config: $current\"; fi; sleep 1; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                            "current=\$(settings get global overlay_display_devices); if [ \"\$current\" = \"null\" ] || [ -z \"\$current\" ]; then settings put global overlay_display_devices 820x1320/320; elif [ \"\$current\" != \"820x1320/320\" ]; then echo \"Refusing to overwrite existing display config: \$current\"; fi; sleep 1; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
                     }
                     2 -> confirmDisplayChange("Hapus simulated display?",
                         "Ini menghapus konfigurasi global overlay_display_devices. Lanjutkan hanya jika konfigurasi ini memang dibuat untuk Saku.") {
                         runRootDisplayCommand("Hapus simulated display",
-                            "current=\$(settings get global overlay_display_devices); if [ \"$current\" = \"820x1320/320\" ]; then settings delete global overlay_display_devices; else echo \"Refusing to delete non-matching display config: $current\"; fi; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                            "current=\$(settings get global overlay_display_devices); if [ \"\$current\" = \"820x1320/320\" ]; then settings delete global overlay_display_devices; else echo \"Refusing to delete non-matching display config: \$current\"; fi; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
                     }
                     3 -> {
                         val input = EditText(this).apply {
@@ -2398,7 +2398,7 @@ class MainActivity : Activity() {
         }
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(12), dp(22), dp(4)) }
         val current = preferences.getInt(KEY_BLUR_RADIUS, 0)
-        val value = TextView(this).apply { text = if (current == 0) "Mati" else "$current px"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(primaryText) }
+        val value = TextView(this).apply { text = if (current == 0) "Mati" else "\$current px"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(primaryText) }
         val slider = SeekBar(this).apply {
             max = 30; progress = current
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -2522,7 +2522,7 @@ class MainActivity : Activity() {
         }
         val current = preferences.getInt(KEY_TRANSPARENCY, 88)
         val value = TextView(this).apply {
-            text = "$current%"
+            text = "\$current%"
             textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
@@ -2579,7 +2579,7 @@ class MainActivity : Activity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(4))
-            addView(TextView(this@MainActivity).apply { text = "Ukuran bola: $current dp" })
+            addView(TextView(this@MainActivity).apply { text = "Ukuran bola: \$current dp" })
             addView(slider)
         }
         slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
