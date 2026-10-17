@@ -565,16 +565,17 @@ class KeyboardOverlay(
 
     fun setFocusable(focusable: Boolean) {
         try {
-            if (keyboardContainer == null || keyboardParams == null) return
+            val container = keyboardContainer ?: return
+            val params = keyboardParams ?: return
 
             if (focusable) {
                 // Remove NOT_FOCUSABLE (Make it focusable)
-                keyboardParams?.flags = keyboardParams?.flags?.and(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv())
+                params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
             } else {
                 // Add NOT_FOCUSABLE (Make it click-through for focus purposes)
-                keyboardParams?.flags = keyboardParams?.flags?.or(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             }
-            windowManager.updateViewLayout(keyboardContainer, keyboardParams)
+            windowManager.updateViewLayout(container, params)
         } catch (e: Exception) {
             e.printStackTrace()
         }
