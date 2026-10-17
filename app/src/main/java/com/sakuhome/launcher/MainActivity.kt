@@ -573,11 +573,8 @@ class MainActivity : Activity() {
                 isFocusable = true
                 setOnClickListener { action() }
             }
-        bar.addView(navButton("‹", "Kembali", {
-            if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) {
-                onBackPressedDispatcher.onBackPressed()
-            }
+        bar.addView(navButton("‹", "Tampilkan atau sembunyikan panel aplikasi", {
+            toggleStartPanel()
         }), LinearLayout.LayoutParams(0, -1, 0.8f))
         bar.addView(navButton("●●●", "Buka menu aplikasi", { toggleStartPanel() }), LinearLayout.LayoutParams(0, -1, 1.15f))
         bar.addView(navButton("▦", "Semua aplikasi", {
@@ -586,7 +583,7 @@ class MainActivity : Activity() {
         }), LinearLayout.LayoutParams(0, -1, 1.15f))
         bar.addView(navButton("◁", "Kembali", {
             if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-            else onBackPressedDispatcher.onBackPressed()
+            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressedDispatcher.onBackPressed()
         }), LinearLayout.LayoutParams(0, -1, 1f))
         bar.addView(navButton("○", "Beranda", {
             if (::startPanel.isInitialized) hideStartPanel()
