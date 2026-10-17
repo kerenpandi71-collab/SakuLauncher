@@ -1726,12 +1726,12 @@ class MainActivity : Activity() {
                     1 -> confirmDisplayChange("Buat simulated display?",
                         "Android akan mengubah overlay_display_devices menjadi 820x1320/320. Kamu bisa menghapus konfigurasinya lewat opsi Display Lab.") {
                         runRootDisplayCommand("Buat simulated display",
-                            "settings put global overlay_display_devices 820x1320/320; sleep 1; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                            "current=\$(settings get global overlay_display_devices); if [ \"$current\" = \"null\" ] || [ -z \"$current\" ]; then settings put global overlay_display_devices 820x1320/320; elif [ \"$current\" != \"820x1320/320\" ]; then echo \"Refusing to overwrite existing display config: $current\"; fi; sleep 1; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
                     }
                     2 -> confirmDisplayChange("Hapus simulated display?",
                         "Ini menghapus konfigurasi global overlay_display_devices. Lanjutkan hanya jika konfigurasi ini memang dibuat untuk Saku.") {
                         runRootDisplayCommand("Hapus simulated display",
-                            "settings delete global overlay_display_devices; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
+                            "current=\$(settings get global overlay_display_devices); if [ \"$current\" = \"820x1320/320\" ]; then settings delete global overlay_display_devices; else echo \"Refusing to delete non-matching display config: $current\"; fi; settings get global overlay_display_devices; dumpsys display | grep -E 'DisplayDeviceInfo|mDisplayId|uniqueId' | head -80")
                     }
                     3 -> {
                         val input = EditText(this).apply {
