@@ -87,7 +87,6 @@ class MainActivity : Activity() {
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
     private val localIconFolder: String get() = preferences.getString(KEY_LOCAL_ICON_FOLDER, "").orEmpty()
-    private val freeformDefault: Boolean get() = preferences.getBoolean(KEY_FREEFORM_DEFAULT, false)
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -502,8 +501,11 @@ class MainActivity : Activity() {
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
-            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidthDp.coerceAtMost(availableWidthDp)), dp(dockHeightDp)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
+            val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, availableWidthDp)
+            val dockGravity = if (landscape) currentDockGravity() else Gravity.CENTER_HORIZONTAL
+            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(dockHeightDp)).apply {
+                gravity = dockGravity
                 topMargin = dp(10)
             })
         }
@@ -513,7 +515,8 @@ class MainActivity : Activity() {
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val drawerPosition = preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left"
-        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(if (landscape) 420 else 500))
+        val landscapeDrawerWidth = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460)
+        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(if (landscape) landscapeDrawerWidth else 500))
         val actualPanelHeight = if (landscape) (screenHeightDp - 28).coerceAtLeast(240) else panelHeight
         val panelGravity = if (!landscape) {
             Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -604,9 +607,9 @@ class MainActivity : Activity() {
     }
 
     private fun buildDock(): View {
-        val effectiveWidth = dockWidthDp.coerceAtMost(
-            ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
-        )
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+        val effectiveWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, maxWidth)
         val effectiveHeight = dockHeightDp
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -687,7 +690,7 @@ class MainActivity : Activity() {
                 drawerMode = if (drawerMode == "grid") "list" else "grid"
                 preferences.edit().putString("drawer_mode", drawerMode).apply()
                 if (::startGrid.isInitialized) {
-                    startGrid.numColumns = if (drawerMode == "list") 1 else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, 4)
+                    startGrid.numColumns = if (drawerMode == "list") 1 else drawerColumns()
                     startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
                     startAdapter.notifyDataSetChanged()
                 }
@@ -738,7 +741,7 @@ class MainActivity : Activity() {
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = if (drawerMode == "list") 1 else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
+            numColumns = if (drawerMode == "list") 1 else drawerColumns()
             verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
             horizontalSpacing = dp(8)
             setPadding(dp(2), dp(4), dp(2), dp(8))
@@ -918,15 +921,14 @@ class MainActivity : Activity() {
         val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
         val dockIndex = shell.childCount - 1
         shell.removeViewAt(dockIndex)
-        shell.addView(buildDock(), LinearLayout.LayoutParams(dockWidthDp.let { dp(it) }, dp(dockHeightDp)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
+        shell.addView(buildDock(), LinearLayout.LayoutParams(dp(currentDockWidth()), dp(dockHeightDp)).apply {
+            gravity = currentDockGravity()
             topMargin = dp(10)
         })
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean? = null) {
+    private fun launch(app: LaunchableApp) {
         hideStartPanel()
-        val useFreeform = asFreeform ?: freeformDefault
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
@@ -934,69 +936,9 @@ class MainActivity : Activity() {
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            if (useFreeform) {
-                // Android only honors freeform when the ROM enables multi-window/freeform.
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-                val metrics = android.util.DisplayMetrics()
-                val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
-                val screen = if (android.os.Build.VERSION.SDK_INT >= 30) wm.currentWindowMetrics.bounds else {
-                    @Suppress("DEPRECATION")
-                    run { wm.defaultDisplay.getRealMetrics(metrics); Rect(0, 0, metrics.widthPixels, metrics.heightPixels) }
-                }
-                // Use the actual display bounds (including a non-zero origin on secondary displays).
-                val windowWidth = (screen.width() * 0.85f).toInt().coerceIn(1, screen.width())
-                val windowHeight = (screen.height() * 0.70f).toInt().coerceIn(1, screen.height())
-                val left = screen.left + (screen.width() - windowWidth) / 2
-                val top = screen.top + (screen.height() - windowHeight) / 2
-                val bounds = Rect(left, top, left + windowWidth, top + windowHeight)
-                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                var modeRequested = false
-                try {
-                    // Reflection is the non-root path; Android hidden-API enforcement may reject it.
-                    val method = ActivityOptions::class.java.getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType!!)
-                    method.isAccessible = true
-                    method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
-                    modeRequested = true
-                } catch (_: Exception) { /* Fall through to the system shell path. */ }
-
-                if (!modeRequested && tryLaunchFreeformWithShell(launchIntent, bounds)) {
-                    return
-                }
-                startActivity(launchIntent, options.toBundle())
-                if (!modeRequested) {
-                    Toast.makeText(this, "Freeform dicoba tanpa akses mode khusus. Jika tetap layar penuh, aktifkan dukungan Freeform di sistem Android.", Toast.LENGTH_LONG).show()
-                }
-            } else {
-                startActivity(launchIntent)
-            }
+            startActivity(launchIntent)
         } catch (_: Exception) {
-            if (useFreeform) {
-                Toast.makeText(this, "Mode Freeform ditolak ROM/aplikasi; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
-                startActivity(launchIntent)
-            } else {
-                Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * Uses Android's Activity Manager shell as a fallback when hidden-API reflection is blocked.
-     * This only attempts the requested launch; the ROM still decides whether freeform is supported.
-     */
-    private fun tryLaunchFreeformWithShell(intent: Intent, bounds: Rect): Boolean {
-        val component = intent.component ?: return false
-        val flattened = component.flattenToShortString()
-        if (flattened.any { it.isWhitespace() || it == '\'' || it == '"' || it == ';' || it == '&' || it == '|' }) return false
-        val command = "am start --windowingMode 5 --activity-new-task --activity-multiple-task --bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} -n $flattened"
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val exitCode = process.waitFor()
-            if (exitCode == 0) {
-                Toast.makeText(this, "Permintaan Freeform dikirim melalui shell sistem", Toast.LENGTH_SHORT).show()
-                true
-            } else false
-        } catch (_: Exception) {
-            false
+            Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1006,8 +948,7 @@ class MainActivity : Activity() {
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
-            "Buka layar penuh",
-            "Buka dalam jendela mengambang (Freeform)",
+            "Buka aplikasi",
             homeAction,
             if (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.contains(app.packageName) == true) "Tampilkan aplikasi" else "Sembunyikan aplikasi",
             "Opsi tata letak layar utama",
@@ -1021,26 +962,25 @@ class MainActivity : Activity() {
         )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
-                0 -> launch(app, asFreeform = false)
-                1 -> launch(app, asFreeform = true)
-                2 -> {
+                0 -> launch(app)
+                1 -> {
                     val current = homePackages()
                     if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
                     saveHomePackages(current)
                     pinnedAdapter.notifyDataSetChanged()
                     Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
                 }
-                3 -> {
+                2 -> {
                     val hidden = (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
                     if (hidden.contains(app.packageName)) hidden.remove(app.packageName) else hidden.add(app.packageName)
                     preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
                     rebuildPinnedViews()
                     Toast.makeText(this, if (hidden.contains(app.packageName)) "Aplikasi disembunyikan" else "Aplikasi ditampilkan", Toast.LENGTH_SHORT).show()
                 }
-                4 -> showHomeLayoutOptions()
-                5 -> moveHomeApp(app, -1)
-                6 -> moveHomeApp(app, 1)
-                7 -> {
+                3 -> showHomeLayoutOptions()
+                4 -> moveHomeApp(app, -1)
+                5 -> moveHomeApp(app, 1)
+                6 -> {
                     val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
                     if (pages.isEmpty()) {
                         addHomePage()
@@ -1052,10 +992,10 @@ class MainActivity : Activity() {
                         }.setNegativeButton("Batal", null).show()
                     }
                 }
-                8 -> togglePinned(app)
-                9 -> openAppInfo(app)
-                10 -> openPlayStore(app)
-                11 -> uninstallApp(app)
+                7 -> togglePinned(app)
+                8 -> openAppInfo(app)
+                9 -> openPlayStore(app)
+                10 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1154,7 +1094,7 @@ class MainActivity : Activity() {
             "Transparansi · ${transparencyPercent}%",
             "Kustomisasi ikon & icon pack",
             "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
-            "Mode Freeform default · ${if (freeformDefault) "Aktif" else "Mati"}",
+            "Kustomisasi landscape",
             "Orientasi launcher · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Potret"; else -> "Ikuti sensor" }}",
             "Posisi drawer landscape · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Kanan" else "Kiri"}",
             "Pilih wallpaper",
@@ -1172,7 +1112,7 @@ class MainActivity : Activity() {
                     3 -> chooseTransparency()
                     4 -> chooseIconCustomization()
                     5 -> chooseDockSize()
-                    6 -> toggleFreeformDefault()
+                    6 -> showLandscapeCustomization()
                     7 -> chooseLauncherOrientation()
                     8 -> chooseDrawerPosition()
                     9 -> chooseWallpaper()
@@ -1182,6 +1122,99 @@ class MainActivity : Activity() {
                     13 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+
+    private fun showLandscapeCustomization() {
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            Toast.makeText(this, "Putar perangkat ke landscape untuk mengatur layout landscape.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val items = arrayOf(
+            "Lebar drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340) + " dp",
+            "Kolom drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5),
+            "Ukuran ikon drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42) + " dp",
+            "Dock: " + preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) + " dp · " + preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")
+        )
+        AlertDialog.Builder(this).setTitle("Kustomisasi landscape").setItems(items) { _, which ->
+            when (which) {
+                0 -> chooseLandscapeDrawerWidth()
+                1 -> chooseLandscapeDrawerColumns()
+                2 -> chooseLandscapeDrawerIconSize()
+                3 -> chooseLandscapeDockOptions()
+            }
+        }.show()
+    }
+
+    private fun chooseLandscapeDrawerWidth() {
+        val values = intArrayOf(280, 300, 320, 340, 360, 400, 440, 460)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460)
+        AlertDialog.Builder(this).setTitle("Lebar drawer landscape")
+            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 3 else it }) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_WIDTH, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDrawerColumns() {
+        val values = (3..7).map { it.toString() + " kolom" }.toTypedArray()
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5).coerceIn(3, 7) - 3
+        AlertDialog.Builder(this).setTitle("Kolom drawer landscape")
+            .setSingleChoiceItems(values, current) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_COLUMNS, which + 3).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDrawerIconSize() {
+        val values = intArrayOf(28, 32, 36, 40, 42, 48, 52, 56)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42).coerceIn(28, 56)
+        AlertDialog.Builder(this).setTitle("Ukuran ikon drawer landscape")
+            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 4 else it }) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDockOptions() {
+        val labels = arrayOf("Lebar: 200 dp", "Lebar: 240 dp", "Lebar: 260 dp", "Lebar: 300 dp", "Lebar: 340 dp", "Posisi: kiri", "Posisi: tengah", "Posisi: kanan")
+        AlertDialog.Builder(this).setTitle("Kustomisasi dock landscape").setItems(labels) { _, which ->
+            when (which) {
+                in 0..4 -> preferences.edit().putInt(KEY_LANDSCAPE_DOCK_WIDTH, intArrayOf(200, 240, 260, 300, 340)[which]).apply()
+                5 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "left").apply()
+                6 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "center").apply()
+                7 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "right").apply()
+            }
+            buildScreen()
+            refreshFloatingDock()
+        }.show()
+    }
+
+    private fun currentDockWidth(): Int {
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+        return (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, maxWidth)
+    }
+
+    private fun currentDockGravity(): Int {
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) return Gravity.CENTER_HORIZONTAL
+        return when (preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")) {
+            "left" -> Gravity.START
+            "right" -> Gravity.END
+            else -> Gravity.CENTER_HORIZONTAL
+        }
+    }
+
+    private fun drawerColumns(): Int {
+        return if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+            preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5).coerceIn(3, 7)
+        else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, 4).coerceIn(2, 6)
     }
 
     private fun chooseDrawerPosition() {
@@ -1198,13 +1231,6 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("Batal", null)
             .show()
-    }
-
-    private fun toggleFreeformDefault() {
-        val enabled = !freeformDefault
-        preferences.edit().putBoolean(KEY_FREEFORM_DEFAULT, enabled).apply()
-        Toast.makeText(this, if (enabled) "Freeform default aktif. Ketuk ikon untuk mencoba membuka mengambang." else "Freeform default dimatikan.", Toast.LENGTH_LONG).show()
-        showSettings()
     }
 
     private fun openHomeSettings() {
@@ -2093,11 +2119,12 @@ class MainActivity : Activity() {
                 elevation = 0f
                 stateListAnimator = null
                 layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu && drawerMode == "list") 64 else if (isStartMenu) 90 else 92))
+                val startIconSize = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)).apply {
+                }, LinearLayout.LayoutParams(dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) startIconSize else iconSizeDp), dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) startIconSize else iconSizeDp)).apply {
                     if (isStartMenu && drawerMode == "list") marginEnd = dp(14)
                 })
                 addView(TextView(context).apply {
@@ -2150,7 +2177,11 @@ class MainActivity : Activity() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
-        private const val KEY_FREEFORM_DEFAULT = "freeform_default_enabled"
+        private const val KEY_LANDSCAPE_DRAWER_WIDTH = "landscape_drawer_width_dp"
+        private const val KEY_LANDSCAPE_DRAWER_COLUMNS = "landscape_drawer_columns"
+        private const val KEY_LANDSCAPE_DRAWER_ICON_SIZE = "landscape_drawer_icon_size_dp"
+        private const val KEY_LANDSCAPE_DOCK_WIDTH = "landscape_dock_width_dp"
+        private const val KEY_LANDSCAPE_DOCK_POSITION = "landscape_dock_position"
         private const val REQUEST_ICON_FOLDER = 7214
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
