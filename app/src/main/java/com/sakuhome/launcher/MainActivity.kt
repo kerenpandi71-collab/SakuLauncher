@@ -952,15 +952,19 @@ class MainActivity : Activity() {
                 val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
                 var modeRequested = false
                 try {
-                    // Hidden API on some Android builds; if blocked, launch bounds remain a best-effort hint.
+                    // Reflection is the non-root path; Android hidden-API enforcement may reject it.
                     val method = ActivityOptions::class.java.getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType!!)
                     method.isAccessible = true
                     method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
                     modeRequested = true
-                } catch (_: Exception) { /* ROM may block the hidden API. */ }
+                } catch (_: Exception) { /* Fall through to the system shell path. */ }
+
+                if (!modeRequested && tryLaunchFreeformWithShell(launchIntent, bounds)) {
+                    return
+                }
                 startActivity(launchIntent, options.toBundle())
                 if (!modeRequested) {
-                    Toast.makeText(this, "Permintaan Freeform dikirim, tetapi ROM mungkin mengabaikan mode jendela. Aktifkan dukungan Freeform di sistem.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Freeform dicoba tanpa akses mode khusus. Jika tetap layar penuh, aktifkan dukungan Freeform di sistem Android.", Toast.LENGTH_LONG).show()
                 }
             } else {
                 startActivity(launchIntent)
@@ -972,6 +976,27 @@ class MainActivity : Activity() {
             } else {
                 Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    /**
+     * Uses Android's Activity Manager shell as a fallback when hidden-API reflection is blocked.
+     * This only attempts the requested launch; the ROM still decides whether freeform is supported.
+     */
+    private fun tryLaunchFreeformWithShell(intent: Intent, bounds: Rect): Boolean {
+        val component = intent.component ?: return false
+        val flattened = component.flattenToShortString()
+        if (flattened.any { it.isWhitespace() || it == '\'' || it == '"' || it == ';' || it == '&' || it == '|' }) return false
+        val command = "am start --windowingMode 5 --activity-new-task --activity-multiple-task --bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} -n $flattened"
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                Toast.makeText(this, "Permintaan Freeform dikirim melalui shell sistem", Toast.LENGTH_SHORT).show()
+                true
+            } else false
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -1130,6 +1155,7 @@ class MainActivity : Activity() {
             "Kustomisasi ikon & icon pack",
             "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
             "Mode Freeform default · ${if (freeformDefault) "Aktif" else "Mati"}",
+            "Orientasi launcher · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Potret"; else -> "Ikuti sensor" }}",
             "Posisi drawer landscape · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Kanan" else "Kiri"}",
             "Pilih wallpaper",
             "Reset wallpaper",
@@ -1147,12 +1173,13 @@ class MainActivity : Activity() {
                     4 -> chooseIconCustomization()
                     5 -> chooseDockSize()
                     6 -> toggleFreeformDefault()
-                    7 -> chooseDrawerPosition()
-                    8 -> chooseWallpaper()
-                    9 -> resetWallpaper()
-                    10 -> openHomeSettings()
-                    11 -> openOverlaySettings()
-                    12 -> showPermissionInfo()
+                    7 -> chooseLauncherOrientation()
+                    8 -> chooseDrawerPosition()
+                    9 -> chooseWallpaper()
+                    10 -> resetWallpaper()
+                    11 -> openHomeSettings()
+                    12 -> openOverlaySettings()
+                    13 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
