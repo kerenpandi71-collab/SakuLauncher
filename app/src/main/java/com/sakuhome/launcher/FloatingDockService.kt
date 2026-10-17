@@ -120,6 +120,16 @@ class FloatingDockService : Service() {
                 cornerRadius = dp(22).toFloat()
             }
             elevation = dp(12).toFloat()
+            setOnTouchListener { _, event ->
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        val deltaY = event.rawY - gestureStartY
+                        if (deltaY < -dp(45)) { hideDockTemporarily(); true } else false
+                    }
+                    else -> true
+                }
+            }
         }
         val startButton = TextView(this).apply {
             text = "▦"
@@ -150,35 +160,7 @@ class FloatingDockService : Service() {
             }
         }
         dock.addView(settingsButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 40), dp(48)))
-        if (!landscape) pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
-            val icon = ImageView(this).apply {
-                setImageDrawable(app.icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(7), dp(7), dp(7), dp(7))
-                contentDescription = app.label
-                setOnClickListener {
-                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        try { startActivity(launch) } catch (_: Exception) {
-                            Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-                setOnLongClickListener {
-                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        try { startActivity(launch) } catch (_: Exception) {
-                            Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    true
-                }
-            }
-            dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize.coerceAtMost(dockHeight - 12)), -1))
-        }
-        if (landscape) {
+        {
             fun navButton(label: String, description: String, action: () -> Unit) {
                 val button = TextView(this).apply {
                     text = label
@@ -186,17 +168,7 @@ class FloatingDockService : Service() {
                     textSize = 22f
                     gravity = Gravity.CENTER
                     setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-                    setOnTouchListener { _, event ->
-                        when (event.action) {
-                            android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
-                            android.view.MotionEvent.ACTION_UP -> {
-                                val deltaY = event.rawY - gestureStartY
-                                if (deltaY < -dp(45)) hideDockTemporarily() else action()
-                                true
-                            }
-                            else -> true
-                        }
-                    }
+                    setOnClickListener { action() }
                 }
                 dock.addView(button, LinearLayout.LayoutParams(dp(48), -1))
             }
@@ -215,7 +187,7 @@ class FloatingDockService : Service() {
         }
 
         val params = WindowManager.LayoutParams(
-            dp(if (landscape) 248 else dockWidth),
+            dp(if (landscape) 300 else 280),
             dp(dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
