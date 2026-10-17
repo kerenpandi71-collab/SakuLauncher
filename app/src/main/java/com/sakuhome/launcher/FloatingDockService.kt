@@ -93,6 +93,8 @@ class FloatingDockService : Service() {
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
         val transparency = prefs.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
         val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
+        val dockWidth = prefs.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
+        val dockHeight = prefs.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
             prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
@@ -151,12 +153,12 @@ class FloatingDockService : Service() {
                     true
                 }
             }
-            dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize), dp(48)))
+            dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize.coerceAtMost(dockHeight - 12)), -1))
         }
 
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            dp(58),
+            dp(dockWidth),
+            dp(dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
