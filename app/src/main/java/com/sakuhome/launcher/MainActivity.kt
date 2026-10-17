@@ -569,23 +569,25 @@ class MainActivity : Activity() {
         strip.addView(View(this).apply {
             background = rounded(if (isDarkTheme) 0x55FFFFFF else 0x22000000, 1)
         }, LinearLayout.LayoutParams(dp(1), dp(18)))
-        strip.addView(TextView(this).apply {
-            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
-            textSize = 12f
-            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
-            setTextColor(primaryText)
-            gravity = Gravity.CENTER
-            contentDescription = "Waktu"
-            setPadding(dp(10), 0, dp(5), 0)
-        }, LinearLayout.LayoutParams(-2, -1))
-        strip.addView(TextView(this).apply {
-            text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
-            textSize = 10f
-            setTextColor(secondaryText)
-            gravity = Gravity.CENTER
-            contentDescription = "Tanggal"
-            setPadding(dp(5), 0, 0, 0)
-        }, LinearLayout.LayoutParams(-2, -1))
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            strip.addView(TextView(this).apply {
+                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+                textSize = 12f
+                setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+                setTextColor(primaryText)
+                gravity = Gravity.CENTER
+                contentDescription = "Waktu"
+                setPadding(dp(10), 0, dp(5), 0)
+            }, LinearLayout.LayoutParams(-2, -1))
+            strip.addView(TextView(this).apply {
+                text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
+                textSize = 10f
+                setTextColor(secondaryText)
+                gravity = Gravity.CENTER
+                contentDescription = "Tanggal"
+                setPadding(dp(5), 0, 0, 0)
+            }, LinearLayout.LayoutParams(-2, -1))
+        }
         return strip
     }
 
