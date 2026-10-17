@@ -215,6 +215,32 @@ class MainActivity : Activity() {
         restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
+        if (!isOnSecondaryDisplay()) {
+            rootFrame.post { launchLauncherOnSecondaryDisplayIfAvailable() }
+        }
+    }
+
+    /**
+     * Launch a separate launcher Activity on the available secondary display.
+     * The phone Activity stays on Display 0 to host the final trackpad overlay.
+     */
+    private fun launchLauncherOnSecondaryDisplayIfAvailable() {
+        if (android.os.Build.VERSION.SDK_INT < 26) return
+        val displayManager = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        val targetDisplay = displayManager.displays.firstOrNull { it.displayId != android.view.Display.DEFAULT_DISPLAY }
+        if (targetDisplay == null) return
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        prefs.edit().putInt(KEY_TARGET_DISPLAY_ID, targetDisplay.displayId).apply()
+        try {
+            val options = ActivityOptions.makeBasic().setLaunchDisplayId(targetDisplay.displayId)
+            val launch = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(EXTRA_SECONDARY_DISPLAY_LAUNCH, true)
+            }
+            startActivity(launch, options.toBundle())
+        } catch (_: Exception) {
+            Toast.makeText(this, "Launcher tidak bisa dibuka otomatis di display sekunder. Buka manual dari opsi display.", Toast.LENGTH_LONG).show()
+        }
     }
 
     /**
@@ -868,167 +894,50 @@ class MainActivity : Activity() {
     /** Trackpad prototype: maps pad movement to a visible pointer in the desktop area.
      * Accessibility gesture injection is used for taps; this is not a hardware mouse.
      */
+    /**
+     * Only one trackpad implementation is kept: FloatingDockService's final overlay.
+     * This Activity contributes only the phone-side toggle; no embedded pad/pointer.
+     */
     private fun addTrackpadModeControls() {
+        if (isOnSecondaryDisplay()) return
         val enabled = preferences.getBoolean(KEY_TRACKPAD_MODE, false)
         val toggle = TextView(this).apply {
-            text = if (enabled) "✕ Keluar trackpad" else "⌖ Trackpad mode"
-            textSize = 12f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            text = if (enabled) "✕ Matikan trackpad" else "⌖ Aktifkan trackpad"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
             setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = GradientDrawable().apply { setColor(Color.rgb(48, 88, 155)); cornerRadius = dp(18).toFloat() }
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(48, 88, 155))
+                cornerRadius = dp(18).toFloat()
+            }
             elevation = dp(12).toFloat()
-            contentDescription = if (enabled) "Keluar dari mode trackpad" else "Aktifkan mode trackpad virtual"
+            contentDescription = if (enabled) "Matikan trackpad final" else "Aktifkan trackpad final"
             setOnClickListener {
-                val activate = !enabled
-                preferences.edit().putBoolean(KEY_TRACKPAD_MODE, activate).apply()
+                val activate = !preferences.getBoolean(KEY_TRACKPAD_MODE, false)
                 if (activate && !Settings.canDrawOverlays(this@MainActivity)) {
-                    Toast.makeText(this@MainActivity, "Izinkan Saku tampil di atas aplikasi lain, lalu aktifkan Trackpad mode lagi", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "Izinkan Saku tampil di atas aplikasi lain, lalu aktifkan trackpad lagi", Toast.LENGTH_LONG).show()
                     try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (_: Exception) { }
-                } else {
-                    val action = if (activate) FloatingDockService.ACTION_TRACKPAD_ON else FloatingDockService.ACTION_TRACKPAD_OFF
-                    val serviceIntent = Intent(this@MainActivity, FloatingDockService::class.java).setAction(action)
-                    try {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activate) startForegroundService(serviceIntent)
-                        else startService(serviceIntent)
-                    } catch (_: Exception) {
-                        Toast.makeText(this@MainActivity, "Layanan trackpad tidak dapat dijalankan", Toast.LENGTH_LONG).show()
-                    }
+                    return@setOnClickListener
+                }
+                preferences.edit().putBoolean(KEY_TRACKPAD_MODE, activate).apply()
+                val action = if (activate) FloatingDockService.ACTION_TRACKPAD_ON else FloatingDockService.ACTION_TRACKPAD_OFF
+                val serviceIntent = Intent(this@MainActivity, FloatingDockService::class.java).setAction(action)
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activate) startForegroundService(serviceIntent)
+                    else startService(serviceIntent)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, "Layanan trackpad tidak dapat dijalankan", Toast.LENGTH_LONG).show()
                 }
                 buildScreen()
             }
         }
-        if (!enabled) {
-            // Trackpad is controlled from the phone display; never embed its panel in
-            // the desktop Activity when that Activity is running on a secondary display.
-            if (!isOnSecondaryDisplay()) {
-                rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(84); marginEnd = dp(12) })
-            }
-            return
-        }
-        if (isOnSecondaryDisplay()) return
-        val screenW = resources.displayMetrics.widthPixels.toFloat()
-        val screenH = resources.displayMetrics.heightPixels.toFloat()
-        val padHeight = (screenH * 0.38f).toInt()
-        val desktopBottom = screenH - padHeight
-        var pointerX = screenW * 0.5f
-        var pointerY = desktopBottom * 0.5f
-        val pointer = View(this).apply {
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 214, 10)); setStroke(dp(2), Color.BLACK) }
-            elevation = dp(30).toFloat()
-            contentDescription = "Penunjuk virtual Saku"
-        }
-        val pointerSize = dp(18)
-        fun placePointer() {
-            val lp = pointer.layoutParams as? FrameLayout.LayoutParams
-                ?: FrameLayout.LayoutParams(pointerSize, pointerSize)
-            lp.width = pointerSize; lp.height = pointerSize
-            lp.leftMargin = (pointerX - pointerSize / 2).toInt().coerceIn(0, (screenW - pointerSize).toInt())
-            lp.topMargin = (pointerY - pointerSize / 2).toInt().coerceIn(0, (desktopBottom - pointerSize).toInt().coerceAtLeast(0))
-            lp.gravity = Gravity.TOP or Gravity.START
-            pointer.layoutParams = lp
-        }
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(12), dp(8), dp(12), dp(10))
-            background = GradientDrawable().apply {
-                setColor(if (isDarkTheme) Color.rgb(25, 31, 43) else Color.rgb(226, 232, 242))
-                cornerRadii = floatArrayOf(dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), 0f, 0f, 0f, 0f)
-                setStroke(dp(1), if (isDarkTheme) Color.rgb(75, 91, 116) else Color.rgb(184, 198, 219))
-            }; elevation = dp(16).toFloat()
-        }
-        val label = TextView(this).apply { text = "SAKU TRACKPAD · gerakkan titik kuning, ketuk untuk klik"; textSize = 10f; gravity = Gravity.CENTER; setTextColor(secondaryText); maxLines = 2 }
-        panel.addView(label, LinearLayout.LayoutParams(-1, dp(28)))
-        val pad = TextView(this).apply {
-            text = "AREA TRACKPAD\nGeser jari untuk memindahkan penunjuk"
-            textSize = 13f; gravity = Gravity.CENTER; setTextColor(primaryText)
-            background = GradientDrawable().apply { setColor(if (isDarkTheme) Color.rgb(39, 48, 64) else Color.rgb(241, 245, 251)); cornerRadius = dp(16).toFloat(); setStroke(dp(1), if (isDarkTheme) Color.rgb(83, 101, 130) else Color.rgb(190, 204, 224)) }
-            var lastX = 0f; var lastY = 0f; var moved = false
-            var twoFingerStartY = 0f
-            var twoFingerLastY = 0f
-            var twoFingerScrollDistance = 0f
-            var twoFingerGesture = false
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        lastX = event.x; lastY = event.y; moved = false
-                        twoFingerGesture = false; twoFingerScrollDistance = 0f
-                        true
-                    }
-                    android.view.MotionEvent.ACTION_POINTER_DOWN -> {
-                        if (event.pointerCount >= 2) {
-                            twoFingerGesture = true
-                            twoFingerStartY = (event.getY(0) + event.getY(1)) / 2f
-                            twoFingerLastY = twoFingerStartY
-                            twoFingerScrollDistance = 0f
-                            moved = true
-                            label.text = "Dua jari: geser untuk menggulir"
-                        }
-                        true
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> {
-                        if (event.pointerCount >= 2 && twoFingerGesture) {
-                            val avgY = (event.getY(0) + event.getY(1)) / 2f
-                            twoFingerScrollDistance += avgY - twoFingerLastY
-                            twoFingerLastY = avgY
-                            if (kotlin.math.abs(twoFingerScrollDistance) > dp(8)) {
-                                label.text = "Menggulir dengan dua jari…"
-                            }
-                            true
-                        } else {
-                            val dx = event.x - lastX; val dy = event.y - lastY
-                            if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(2)) moved = true
-                            pointerX = (pointerX + dx * 1.7f).coerceIn(pointerSize.toFloat(), screenW - pointerSize)
-                            pointerY = (pointerY + dy * 1.7f).coerceIn(pointerSize.toFloat(), desktopBottom - pointerSize)
-                            lastX = event.x; lastY = event.y; placePointer(); true
-                        }
-                    }
-                    android.view.MotionEvent.ACTION_POINTER_UP -> {
-                        if (twoFingerGesture && kotlin.math.abs(twoFingerScrollDistance) > dp(12)) {
-                            val distance = (twoFingerScrollDistance * 2.2f).toInt().coerceIn(-520, 520)
-                            val ok = SakuNavigationAccessibilityService.performScrollAt(pointerX, pointerY, distance)
-                            label.text = if (ok) "Gulir dua jari dikirim" else "Aktifkan Aksesibilitas Saku untuk scrolling"
-                        }
-                        true
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        if (twoFingerGesture) {
-                            twoFingerGesture = false
-                            true
-                        } else {
-                            if (!moved) {
-                                val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
-                                label.text = if (ok) "Klik dikirim ke desktop" else "Aktifkan Aksesibilitas Saku untuk mengirim klik"
-                                if (!ok) Toast.makeText(this@MainActivity, "Aktifkan layanan aksesibilitas Saku untuk klik virtual", Toast.LENGTH_SHORT).show()
-                            } else label.text = "Penunjuk dipindahkan"
-                            view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); true
-                        }
-                    }
-                    android.view.MotionEvent.ACTION_CANCEL -> { twoFingerGesture = false; true }
-                    else -> true
-                }
-            }
-        }
-        panel.addView(pad, LinearLayout.LayoutParams(-1, 0, 1f))
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        fun actionButton(title: String, description: String, action: () -> Unit) {
-            val button = TextView(this).apply { text = title; contentDescription = description; textSize = 12f; gravity = Gravity.CENTER; setTextColor(primaryText); background = rounded(cardSurface, 12); setOnClickListener { action() } }
-            actions.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(3); marginEnd = dp(3); topMargin = dp(6) })
-        }
-        actionButton("Klik kiri", "Klik kiri pada posisi penunjuk") {
-            val ok = SakuNavigationAccessibilityService.performTap(pointerX, pointerY, 80L)
-            label.text = if (ok) "Klik kiri dikirim" else "Aktifkan Aksesibilitas Saku terlebih dahulu"
-        }
-        actionButton("Klik kanan", "Menu klik kanan simulasi") {
-            label.text = "Android tidak menyediakan klik kanan generik; tekan lama di posisi penunjuk"
-            val ok = SakuNavigationAccessibilityService.performLongPress(pointerX, pointerY, 600L)
-            if (!ok) Toast.makeText(this, "Aktifkan layanan aksesibilitas Saku", Toast.LENGTH_SHORT).show()
-        }
-        actionButton("↑", "Gulir ke atas") { val ok = SakuNavigationAccessibilityService.performScroll(false); label.text = if (ok) "Gulir ke atas dikirim" else "Aktifkan Aksesibilitas Saku" }
-        actionButton("↓", "Gulir ke bawah") { val ok = SakuNavigationAccessibilityService.performScroll(true); label.text = if (ok) "Gulir ke bawah dikirim" else "Aktifkan Aksesibilitas Saku" }
-        panel.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
-        rootFrame.addView(panel, FrameLayout.LayoutParams(-1, padHeight, Gravity.BOTTOM))
-        rootFrame.addView(pointer, FrameLayout.LayoutParams(pointerSize, pointerSize))
-        placePointer()
-        rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.TOP or Gravity.END).apply { topMargin = dp(38); marginEnd = dp(12) })
+        rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(38)
+            marginEnd = dp(12)
+        })
     }
+
     private fun hideStartPanelIfVisible() {
         if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
     }
@@ -2970,6 +2879,7 @@ class MainActivity : Activity() {
     companion object {
         private const val KEY_TRACKPAD_MODE = "saku_virtual_trackpad_mode"
         private const val KEY_TARGET_DISPLAY_ID = "saku_target_display_id"
+        private const val EXTRA_SECONDARY_DISPLAY_LAUNCH = "com.sakuhome.launcher.EXTRA_SECONDARY_DISPLAY_LAUNCH"
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
