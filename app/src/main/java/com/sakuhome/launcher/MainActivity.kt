@@ -317,10 +317,16 @@ class MainActivity : Activity() {
         startSearchField.hideKeyboard()
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::preferences.isInitialized) buildScreen()
+    }
+
     private fun buildScreen() {
-        window.statusBarColor = backgroundTop
+        val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        window.statusBarColor = if (landscapeLayout) Color.TRANSPARENT else backgroundTop
         window.navigationBarColor = backgroundTop
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN
+        window.decorView.systemUiVisibility = if (landscapeLayout) 0 else View.SYSTEM_UI_FLAG_FULLSCREEN
 
         rootFrame = FrameLayout(this).apply {
             background = GradientDrawable(
@@ -345,7 +351,6 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(3), dp(14), dp(10))
         }
 
-        val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -509,10 +514,16 @@ class MainActivity : Activity() {
             val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, availableWidthDp)
             val dockGravity = if (landscape) currentDockGravity() else Gravity.CENTER_HORIZONTAL
-            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(dockHeightDp)).apply {
+            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(if (landscape) dockHeightDp.coerceAtLeast(64) else dockHeightDp)).apply {
                 gravity = dockGravity
                 topMargin = dp(10)
             })
+            if (landscape) {
+                shell.addView(buildDesktopNavigationBar(), LinearLayout.LayoutParams(-1, dp(46)).apply {
+                    topMargin = dp(8)
+                    bottomMargin = dp(1)
+                })
+            }
         }
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
@@ -540,6 +551,56 @@ class MainActivity : Activity() {
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
+    }
+
+    private fun buildDesktopNavigationBar(): View {
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(5), dp(3), dp(5), dp(3))
+            background = if (liquidGlass) glassSurface(22) else rounded(dockSurface, 22)
+            elevation = dp(12).toFloat()
+        }
+        fun navButton(label: String, description: String, action: () -> Unit): TextView =
+            TextView(this).apply {
+                text = label
+                contentDescription = description
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(primaryText)
+                background = ColorDrawable(Color.TRANSPARENT)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+        bar.addView(navButton("‹", "Kembali", {
+            if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+            else {
+                try { dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK)) } catch (_: Exception) { }
+            }
+        }), LinearLayout.LayoutParams(0, -1, 0.8f))
+        bar.addView(navButton("●●●", "Buka menu aplikasi", { toggleStartPanel() }), LinearLayout.LayoutParams(0, -1, 1.15f))
+        bar.addView(navButton("▦", "Semua aplikasi", {
+            showingAllApps = true
+            if (::startPanel.isInitialized) { showStartPanel(); refreshStartPanel() }
+        }), LinearLayout.LayoutParams(0, -1, 1.15f))
+        bar.addView(navButton("◁", "Kembali", {
+            if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+            else onBackPressedDispatcher.onBackPressed()
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        bar.addView(navButton("○", "Beranda", {
+            if (::startPanel.isInitialized) hideStartPanel()
+            showHomePage(0)
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        bar.addView(navButton("□", "Aplikasi terbaru", {
+            if (SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) return@navButton
+            AlertDialog.Builder(this).setTitle("Izin navigasi")
+                .setMessage("Aktifkan layanan aksesibilitas Saku Launcher agar tombol Aplikasi terbaru dapat membuka layar Recent Apps.")
+                .setPositiveButton("Buka pengaturan") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }.setNegativeButton("Batal", null).show()
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        return bar
     }
 
     private fun buildStatusStrip(): View {
@@ -2002,9 +2063,22 @@ class MainActivity : Activity() {
     }
 
     private fun showPermissionInfo() {
-        AlertDialog.Builder(this).setTitle("Izin dan dukungan")
-            .setMessage("Saku Launcher memakai peran HOME Android untuk menjadi launcher utama. Jika layar Recent menampilkan wallpaper launcher lama, buka ‘Jadikan launcher default’ lalu pilih Saku Launcher lagi. Izin overlay hanya diperlukan untuk dock mengambang di atas aplikasi lain; izin ini terpisah dari peran HOME. Android tidak menyediakan izin universal untuk mengambil alih seluruh Recent Apps atau mengganti wallpaper sistem. Semua izin dapat ditinjau dan dicabut dari Pengaturan Android.")
-            .setPositiveButton("Mengerti", null).show()
+        val items = arrayOf(
+            "Tampil di atas aplikasi lain",
+            "Akses penggunaan aplikasi",
+            "Aksesibilitas untuk tombol Recent Apps",
+            "Jadikan Saku Launcher default"
+        )
+        AlertDialog.Builder(this).setTitle("Izin desktop Saku")
+            .setMessage("Buka tiap pengaturan dan aktifkan izin secara manual. Android tidak mengizinkan aplikasi memberi dirinya sendiri izin khusus secara diam-diam; root tidak diperlukan untuk alur ini.")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> openOverlaySettings()
+                    1 -> try { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) { Toast.makeText(this, "Pengaturan akses penggunaan tidak tersedia", Toast.LENGTH_LONG).show() }
+                    2 -> try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) { Toast.makeText(this, "Pengaturan aksesibilitas tidak tersedia", Toast.LENGTH_LONG).show() }
+                    3 -> openHomeSettings()
+                }
+            }.setNegativeButton("Tutup", null).show()
     }
 
     private fun toggleTheme() {
