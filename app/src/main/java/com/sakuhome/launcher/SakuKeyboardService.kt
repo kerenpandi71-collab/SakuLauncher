@@ -46,7 +46,7 @@ class SakuKeyboardService : InputMethodService() {
         }
         keyboardRoot = root
         val handle = TextView(this).apply {
-            text = "⠿   Saku Keyboard   ⠿"
+            this.text = "⠿   Saku Keyboard   ⠿"
             gravity = Gravity.CENTER
             textSize = 12f
             setTextColor(if (dark) Color.LTGRAY else Color.DKGRAY)
@@ -79,7 +79,7 @@ class SakuKeyboardService : InputMethodService() {
         var currentRow: LinearLayout? = null
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
             val button = TextView(this).apply {
-                text = label
+                this.text = label
                 gravity = Gravity.CENTER
                 textSize = if (label.length > 2) 13f else 20f
                 setTextColor(if (special && !dark) Color.WHITE else text)
