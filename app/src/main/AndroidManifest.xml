@@ -26,6 +26,11 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
+            android:name=".VirtualDisplayTestActivity"
+            android:exported="false"
+            android:label="Saku Virtual Display Test"
+            android:resizeableActivity="true" />
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:resizeableActivity="true"
