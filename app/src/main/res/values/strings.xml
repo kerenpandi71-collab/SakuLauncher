@@ -1,3 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="accessibility_service_description">Memungkinkan tombol navigasi desktop Saku menjalankan aksi Kembali dan Aplikasi terbaru saat layanan diaktifkan oleh pengguna.</string>
 </resources>
