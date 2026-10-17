@@ -606,33 +606,23 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
-        // Plasma-style top panel: app launcher, desktop identity, and system status.
+        // Compact system monitor replaces branding and the duplicate top launcher.
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(4), dp(12), dp(4))
+            setPadding(dp(12), dp(4), dp(12), dp(4))
             background = if (liquidGlass) glassSurface(16) else rounded(dockSurface, 16)
             elevation = dp(8).toFloat()
         }
-        val launcherButton = TextView(this).apply {
-            text = "▦"
-            textSize = 22f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = rounded(accent, 12)
-            contentDescription = "Buka menu aplikasi"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { toggleStartPanel() }
-        }
-        topPanel.addView(launcherButton, LinearLayout.LayoutParams(dp(40), dp(36)))
-        topPanel.addView(TextView(this).apply {
-            text = "  Saku Desktop"
-            textSize = 14f
+        val systemStats = TextView(this).apply {
+            textSize = 12f
             setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
             setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
             maxLines = 1
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+            contentDescription = "FPS launcher, penggunaan CPU, dan proses latar belakang"
+        }
+        topPanel.addView(systemStats, LinearLayout.LayoutParams(0, dp(34), 1f))
         val landscapeClock = TextView(this).apply {
             textSize = 12f
             setTextColor(primaryText)
@@ -659,6 +649,50 @@ class MainActivity : Activity() {
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(38), dp(36)).apply { marginStart = dp(6) })
         shell.addView(topPanel, LinearLayout.LayoutParams(-1, dp(46)))
+        var frameCount = 0
+        var lastFrameTime = 0L
+        var measuredFps = 0
+        val frameCallback = object : android.view.Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                frameCount++
+                if (lastFrameTime == 0L) lastFrameTime = frameTimeNanos
+                val elapsed = frameTimeNanos - lastFrameTime
+                if (elapsed >= 1_000_000_000L) {
+                    measuredFps = (frameCount * 1_000_000_000L / elapsed).toInt()
+                    frameCount = 0
+                    lastFrameTime = frameTimeNanos
+                }
+                android.view.Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+        android.view.Choreographer.getInstance().postFrameCallback(frameCallback)
+        val statsHandler = android.os.Handler(mainLooper)
+        val statsUpdater = object : Runnable {
+            override fun run() {
+                val bgProcesses = try {
+                    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager)
+                        .runningAppProcesses?.count { it.processName != packageName } ?: 0
+                } catch (_: Exception) { 0 }
+                val cpuLabel = try {
+                    val lines = java.io.File("/proc/stat").readLines().first().trim().split(Regex("\\s+"))
+                    val values = lines.drop(1).take(8).mapNotNull { it.toLongOrNull() }
+                    if (values.size >= 4) {
+                        val idle = values[3] + (values.getOrNull(4) ?: 0L)
+                        val total = values.sum()
+                        val previous = preferences.getLong("landscape_cpu_total", -1L)
+                        val previousIdle = preferences.getLong("landscape_cpu_idle", -1L)
+                        preferences.edit().putLong("landscape_cpu_total", total).putLong("landscape_cpu_idle", idle).apply()
+                        if (previous >= 0 && total > previous) {
+                            val usage = (((total - previous) - (idle - previousIdle).coerceAtLeast(0L)) * 100 / (total - previous)).toInt().coerceIn(0, 100)
+                            "$usage%"
+                        } else { "…" }
+                    } else { "—" }
+                } catch (_: Exception) { "—" }
+                systemStats.text = "FPS $measuredFps   ·   CPU $cpuLabel   ·   BG $bgProcesses"
+                statsHandler.postDelayed(this, 1500L)
+            }
+        }
+        statsHandler.post(statsUpdater)
 
         // Desktop workspace: real app shortcuts and optional widgets, not a floating window.
         widgetStrip = LinearLayout(this).apply {
@@ -1006,7 +1040,7 @@ class MainActivity : Activity() {
         header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         val landscapeDrawer = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val drawerModeKey = if (landscapeDrawer) "drawer_mode_landscape" else "drawer_mode"
-        drawerMode = preferences.getString(drawerModeKey, if (landscapeDrawer) "list" else "grid") ?: if (landscapeDrawer) "list" else "grid"
+        drawerMode = if (landscapeDrawer) "grid" else (preferences.getString(drawerModeKey, "grid") ?: "grid")
         drawerModeButton = chipButton(if (drawerMode == "list") "▦" else "☷", cardSurface, primaryText, 15).apply {
             textSize = 18f
             contentDescription = "Ubah tampilan aplikasi"
@@ -1022,6 +1056,7 @@ class MainActivity : Activity() {
                 drawerModeButton.text = if (drawerMode == "list") "▦" else "☷"
             }
         }
+        drawerModeButton.visibility = if (landscapeDrawer) View.GONE else View.VISIBLE
         header.addView(drawerModeButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(6) })
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
@@ -1063,13 +1098,14 @@ class MainActivity : Activity() {
         }
         filters.addView(pinnedTabButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(6) })
         filters.addView(allAppsTabButton, LinearLayout.LayoutParams(0, dp(38), 1f))
+        filters.visibility = if (landscapeDrawer) View.GONE else View.VISIBLE
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = if (drawerMode == "list") 1 else drawerColumns()
-            verticalSpacing = dp(if (drawerMode == "list") 3 else 10)
-            horizontalSpacing = dp(8)
-            setPadding(dp(2), dp(4), dp(2), dp(8))
+            numColumns = if (landscapeDrawer) 6 else if (drawerMode == "list") 1 else drawerColumns()
+            verticalSpacing = dp(if (landscapeDrawer) 8 else if (drawerMode == "list") 3 else 10)
+            horizontalSpacing = dp(if (landscapeDrawer) 10 else 8)
+            setPadding(dp(6), dp(8), dp(6), dp(10))
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
@@ -2539,33 +2575,35 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
+            val landscapeDrawer = isStartMenu && resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val listLayout = isStartMenu && !landscapeDrawer && drawerMode == "list"
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = if (isStartMenu && drawerMode == "list") LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-                gravity = if (isStartMenu && drawerMode == "list") Gravity.CENTER_VERTICAL else Gravity.CENTER
-                setPadding(dp(if (isStartMenu && drawerMode == "list") 10 else 2), dp(4), dp(6), dp(4))
-                // Native macOS/iOS-inspired icon layout: no surrounding bubble, card, or shadow.
-                background = ColorDrawable(Color.TRANSPARENT)
+                orientation = if (listLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                gravity = if (listLayout) Gravity.CENTER_VERTICAL else Gravity.CENTER
+                setPadding(dp(if (listLayout) 10 else 4), dp(6), dp(4), dp(6))
+                background = if (landscapeDrawer) rounded(cardSurface, 14) else ColorDrawable(Color.TRANSPARENT)
                 elevation = 0f
                 stateListAnimator = null
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu && drawerMode == "list") 64 else if (isStartMenu) 90 else 92))
-                val startIconSize = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else 92))
+                val startIconSize = if (landscapeDrawer) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) startIconSize else iconSizeDp), dp(if (isStartMenu && drawerMode == "list") 42 else if (isStartMenu) startIconSize else iconSizeDp)).apply {
-                    if (isStartMenu && drawerMode == "list") marginEnd = dp(14)
+                }, LinearLayout.LayoutParams(dp(if (listLayout) 42 else if (isStartMenu) startIconSize else iconSizeDp), dp(if (listLayout) 42 else if (isStartMenu) startIconSize else iconSizeDp)).apply {
+                    if (listLayout) marginEnd = dp(14)
+                    if (landscapeDrawer) bottomMargin = dp(4)
                 })
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
                     setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
-                    gravity = if (isStartMenu && drawerMode == "list") Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
-                    textSize = if (isStartMenu && drawerMode == "list") 13f else 10.5f
-                    maxLines = 1
+                    gravity = if (listLayout) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+                    textSize = if (listLayout) 13f else if (landscapeDrawer) 11f else 10.5f
+                    maxLines = if (landscapeDrawer) 2 else 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                    setPadding(0, dp(5), 0, 0)
+                    setPadding(0, dp(if (landscapeDrawer) 1 else 5), 0, 0)
                     visibility = if (!isStartMenu && hideLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(-1, -2))
             }
