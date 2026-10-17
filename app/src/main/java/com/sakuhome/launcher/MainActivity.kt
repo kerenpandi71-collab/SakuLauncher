@@ -575,8 +575,8 @@ class MainActivity : Activity() {
             }
         bar.addView(navButton("‹", "Kembali", {
             if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-            else {
-                try { dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK)) } catch (_: Exception) { }
+            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) {
+                onBackPressedDispatcher.onBackPressed()
             }
         }), LinearLayout.LayoutParams(0, -1, 0.8f))
         bar.addView(navButton("●●●", "Buka menu aplikasi", { toggleStartPanel() }), LinearLayout.LayoutParams(0, -1, 1.15f))
