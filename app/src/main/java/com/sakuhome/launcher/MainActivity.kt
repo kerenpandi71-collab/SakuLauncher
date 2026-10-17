@@ -1442,7 +1442,18 @@ class MainActivity : Activity() {
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            startActivity(launchIntent)
+            if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) {
+                // Request a bounded desktop window above the virtual trackpad area.
+                // Android only honors launch bounds when the system supports a compatible
+                // multi-window/freeform mode; otherwise the OS may still use full screen.
+                val metrics = resources.displayMetrics
+                val topHeight = (metrics.heightPixels * 0.62f).toInt().coerceAtLeast(dp(240))
+                val bounds = Rect(0, 0, metrics.widthPixels, topHeight)
+                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                startActivity(launchIntent, options.toBundle())
+            } else {
+                startActivity(launchIntent)
+            }
         } catch (_: Exception) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
         }
