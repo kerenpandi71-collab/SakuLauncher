@@ -929,17 +929,25 @@ class MainActivity : Activity() {
                     @Suppress("DEPRECATION")
                     run { wm.defaultDisplay.getRealMetrics(metrics); Rect(0, 0, metrics.widthPixels, metrics.heightPixels) }
                 }
-                val windowWidth = (screen.width() * 0.85f).toInt().coerceAtMost(screen.width()).coerceAtLeast(1)
-                val windowHeight = (screen.height() * 0.70f).toInt().coerceAtMost(screen.height()).coerceAtLeast(1)
-                val left = (screen.width() - windowWidth) / 2
-                val top = (screen.height() - windowHeight) / 2
+                // Use the actual display bounds (including a non-zero origin on secondary displays).
+                val windowWidth = (screen.width() * 0.85f).toInt().coerceIn(1, screen.width())
+                val windowHeight = (screen.height() * 0.70f).toInt().coerceIn(1, screen.height())
+                val left = screen.left + (screen.width() - windowWidth) / 2
+                val top = screen.top + (screen.height() - windowHeight) / 2
                 val bounds = Rect(left, top, left + windowWidth, top + windowHeight)
                 val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                var modeRequested = false
                 try {
+                    // Hidden API on some Android builds; if blocked, launch bounds remain a best-effort hint.
                     val method = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                    method.invoke(options, 5)
-                } catch (_: Exception) { /* setLaunchBounds still gives the system a best-effort hint */ }
+                    method.isAccessible = true
+                    method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
+                    modeRequested = true
+                } catch (_: Exception) { /* ROM may block the hidden API. */ }
                 startActivity(launchIntent, options.toBundle())
+                if (!modeRequested) {
+                    Toast.makeText(this, "Permintaan Freeform dikirim, tetapi ROM mungkin mengabaikan mode jendela. Aktifkan dukungan Freeform di sistem.", Toast.LENGTH_LONG).show()
+                }
             } else {
                 startActivity(launchIntent)
             }
