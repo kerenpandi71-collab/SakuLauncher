@@ -848,7 +848,24 @@ class MainActivity : Activity() {
             background = GradientDrawable().apply { setColor(Color.rgb(48, 88, 155)); cornerRadius = dp(18).toFloat() }
             elevation = dp(12).toFloat()
             contentDescription = if (enabled) "Keluar dari mode trackpad" else "Aktifkan mode trackpad virtual"
-            setOnClickListener { preferences.edit().putBoolean(KEY_TRACKPAD_MODE, !enabled).apply(); buildScreen() }
+            setOnClickListener {
+                val activate = !enabled
+                preferences.edit().putBoolean(KEY_TRACKPAD_MODE, activate).apply()
+                if (activate && !Settings.canDrawOverlays(this@MainActivity)) {
+                    Toast.makeText(this@MainActivity, "Izinkan Saku tampil di atas aplikasi lain, lalu aktifkan Trackpad mode lagi", Toast.LENGTH_LONG).show()
+                    try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (_: Exception) { }
+                } else {
+                    val action = if (activate) FloatingDockService.ACTION_TRACKPAD_ON else FloatingDockService.ACTION_TRACKPAD_OFF
+                    val serviceIntent = Intent(this@MainActivity, FloatingDockService::class.java).setAction(action)
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activate) startForegroundService(serviceIntent)
+                        else startService(serviceIntent)
+                    } catch (_: Exception) {
+                        Toast.makeText(this@MainActivity, "Layanan trackpad tidak dapat dijalankan", Toast.LENGTH_LONG).show()
+                    }
+                }
+                buildScreen()
+            }
         }
         if (!enabled) {
             rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(84); marginEnd = dp(12) })
