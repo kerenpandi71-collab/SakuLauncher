@@ -2356,7 +2356,7 @@ private var isSoftKeyboardSupport = false
 
         // 2. Try to Launch the Main Activity (Guaranteed to wake app)
         try {
-            val launchIntent = Intent(this, com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity::class.java)
+            val launchIntent = Intent().setClassName(packageName, "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity")
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(launchIntent)
