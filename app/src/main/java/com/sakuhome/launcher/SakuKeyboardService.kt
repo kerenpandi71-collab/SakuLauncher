@@ -18,13 +18,13 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * Saku Keyboard: Gboard-like QWERTY layout with iOS-inspired rounded keys.
- * Compact mode stays anchored inside the IME window; never translate the view outside its parent.
+ * Saku Keyboard: QWERTY keyboard with persistent size and vertical-position controls.
+ * Position controls adjust the keyboard's content inside the IME window; they do not create an overlay.
  */
 class SakuKeyboardService : InputMethodService() {
     private var shifted = false
     private var symbols = false
-    private var floating = true
+    private var floating = false
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var deleteRepeating = false
     private val deleteRunnable = object : Runnable {
@@ -37,16 +37,19 @@ class SakuKeyboardService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         val prefs = getSharedPreferences("saku_keyboard", MODE_PRIVATE)
-        floating = prefs.getBoolean("floating_mode", true)
+        floating = prefs.getBoolean("floating_mode", false)
+        var keyHeight = prefs.getInt("key_height_dp", 48).coerceIn(40, 60)
+        var positionOffset = prefs.getInt("position_offset_dp", 0).coerceIn(0, 60)
         val dark = getSharedPreferences("saku_dock_settings", MODE_PRIVATE).getBoolean("dark_theme", true)
         val bg = if (dark) Color.rgb(35, 38, 45) else Color.rgb(232, 234, 239)
-        val keyBg = if (dark) Color.rgb(73, 77, 86) else Color.rgb(255, 255, 255)
+        val keyBg = if (dark) Color.rgb(73, 77, 86) else Color.WHITE
         val textColor = if (dark) Color.WHITE else Color.rgb(30, 33, 40)
+        val muted = if (dark) Color.LTGRAY else Color.DKGRAY
         val accent = Color.rgb(0, 122, 255)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(if (floating) 8 else 4), dp(7), dp(if (floating) 8 else 4), dp(9))
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(if (floating) 8 else 4), dp(5), dp(if (floating) 8 else 4), dp(5 + positionOffset))
             background = GradientDrawable().apply {
                 setColor(bg)
                 cornerRadius = dp(if (floating) 22 else 12).toFloat()
@@ -62,7 +65,7 @@ class SakuKeyboardService : InputMethodService() {
         fun clipboard(): ClipboardManager = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         fun pasteClipboard() {
             val clip = clipboard()
-            val value = if (clip.hasPrimaryClip()) clip.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty() else ""
+            val value = if (clip.hasPrimaryClip()) clip.primaryClip?.getItemAt(0)?.coerceToText(this).toString() else ""
             if (value.isNotEmpty()) commit(value) else Toast.makeText(this, "Papan klip kosong", Toast.LENGTH_SHORT).show()
         }
         fun row(): LinearLayout = LinearLayout(this).apply {
@@ -70,21 +73,62 @@ class SakuKeyboardService : InputMethodService() {
             gravity = Gravity.CENTER
         }
 
-        val handle = TextView(this).apply {
-            text = if (floating) "⠿   Saku Keyboard   ⤢" else "⠿   Saku Keyboard   ▬"
+        val toolbar = row()
+        val title = TextView(this).apply {
+            text = "Saku Keyboard"
             gravity = Gravity.CENTER
             textSize = 12f
-            setTextColor(if (dark) Color.LTGRAY else Color.DKGRAY)
-            setPadding(dp(12), dp(3), dp(12), dp(5))
-            contentDescription = "Ketuk untuk beralih antara mode ringkas dan mode keyboard penuh."
-            isClickable = true
-            setOnClickListener {
-                floating = !floating
-                prefs.edit().putBoolean("floating_mode", floating).apply()
-                rebuild()
-            }
+            setTextColor(muted)
+            setPadding(dp(4), 0, dp(4), 0)
+            contentDescription = "Keyboard. Tombol panah mengatur posisi, A− dan A+ mengatur tinggi tombol."
         }
-        root.addView(handle, LinearLayout.LayoutParams(-1, dp(27)))
+        toolbar.addView(title, LinearLayout.LayoutParams(0, dp(32), 1f))
+        fun toolButton(label: String, description: String, action: () -> Unit) {
+            val button = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                textSize = 13f
+                setTextColor(textColor)
+                background = GradientDrawable().apply {
+                    setColor(if (dark) Color.rgb(57, 61, 70) else Color.rgb(218, 222, 230))
+                    cornerRadius = dp(8).toFloat()
+                }
+                contentDescription = description
+                isClickable = true
+                setOnClickListener { action() }
+            }
+            toolbar.addView(button, LinearLayout.LayoutParams(dp(37), dp(29)).apply {
+                marginStart = dp(2); marginEnd = dp(2)
+            })
+        }
+        toolButton("↑", "Geser isi keyboard ke atas") {
+            positionOffset = (positionOffset + 8).coerceAtMost(60)
+            prefs.edit().putInt("position_offset_dp", positionOffset).apply()
+            rebuild()
+        }
+        toolButton("↓", "Geser isi keyboard ke bawah") {
+            positionOffset = (positionOffset - 8).coerceAtLeast(0)
+            prefs.edit().putInt("position_offset_dp", positionOffset).apply()
+            rebuild()
+        }
+        toolButton("A−", "Kurangi tinggi tombol") {
+            keyHeight = (keyHeight - 2).coerceAtLeast(40)
+            prefs.edit().putInt("key_height_dp", keyHeight).apply()
+            rebuild()
+        }
+        toolButton("A+", "Tambah tinggi tombol") {
+            keyHeight = (keyHeight + 2).coerceAtMost(60)
+            prefs.edit().putInt("key_height_dp", keyHeight).apply()
+            rebuild()
+        }
+        toolButton("⤢", "Beralih mode ringkas atau keyboard penuh") {
+            floating = !floating
+            prefs.edit().putBoolean("floating_mode", floating).apply()
+            rebuild()
+        }
+        root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(34)).apply {
+            bottomMargin = dp(2)
+        })
 
         var currentRow: LinearLayout? = null
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
@@ -119,14 +163,14 @@ class SakuKeyboardService : InputMethodService() {
                     }
                 }
             }
-            currentRow?.addView(button, LinearLayout.LayoutParams(0, dp(43), flex).apply {
+            currentRow?.addView(button, LinearLayout.LayoutParams(0, dp(keyHeight), flex).apply {
                 marginStart = dp(2); marginEnd = dp(2); topMargin = dp(3); bottomMargin = dp(3)
             })
         }
         fun addRow(block: () -> Unit) {
             currentRow = row()
             block()
-            root.addView(currentRow, LinearLayout.LayoutParams(-1, dp(49)))
+            root.addView(currentRow, LinearLayout.LayoutParams(-1, dp(keyHeight + 6)))
             currentRow = null
         }
 
@@ -141,7 +185,7 @@ class SakuKeyboardService : InputMethodService() {
         }
         addRow {
             key("⇧", 1.25f, true) { shifted = !shifted; symbols = false; rebuild() }
-            (if (symbols) listOf("*","\"","'",":",";","!","?") else listOf("z","x","c","v","b","n","m"))
+            (if (symbols) listOf("*","\\"","'",":",";","!","?") else listOf("z","x","c","v","b","n","m"))
                 .forEach { c -> key(if (shifted && !symbols) c.uppercase() else c) { commit(if (shifted && !symbols) c.uppercase() else c); shifted = false } }
             key("⌫", 1.25f, true) { currentInputConnection?.deleteSurroundingText(1, 0) }
         }
