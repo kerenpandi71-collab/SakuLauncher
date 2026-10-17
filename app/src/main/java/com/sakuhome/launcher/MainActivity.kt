@@ -802,6 +802,13 @@ class MainActivity : Activity() {
             .sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
+    private fun componentMatches(component: String, targetPackage: String, targetActivity: String): Boolean {
+        val normalized = component.replace("ComponentInfo{", "").replace("}", "")
+        val pkg = normalized.substringBefore("/", "")
+        val activity = normalized.substringAfter("/", "")
+        return pkg == targetPackage && (activity.isBlank() || activity == targetActivity || targetActivity.endsWith(activity.removePrefix(".")))
+    }
+
     private fun loadThemedIcon(info: ResolveInfo): android.graphics.drawable.Drawable {
         val fallback = info.loadIcon(packageManager)
         if (localIconFolder.isNotBlank()) {
@@ -830,8 +837,7 @@ class MainActivity : Activity() {
             val targetActivity = info.activityInfo.name
             val candidates = linkedSetOf<String>()
             // Common icon-pack appfilter entries use component="ComponentInfo{package/activity}" drawable="icon_name".
-            val xmlId = packResources.getIdentifier("appfilter", "xml", iconPackPackage)
-                .takeIf { it != 0 }
+            val xmlId = packResources.getIdentifier("appfilter", "xml", iconPackPackage).takeIf { it != 0 }
                 ?: packResources.getIdentifier("app_filter", "xml", iconPackPackage).takeIf { it != 0 }
             if (xmlId != null) {
                 val parser = packResources.getXml(xmlId)
@@ -840,13 +846,27 @@ class MainActivity : Activity() {
                         if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
                             val component = parser.getAttributeValue(null, "component").orEmpty()
                             val drawable = parser.getAttributeValue(null, "drawable").orEmpty()
-                            if (drawable.isNotBlank() && (component.contains(targetPackage) || component.contains(targetActivity))) {
-                                candidates.add(drawable)
-                            }
+                            if (drawable.isNotBlank() && componentMatches(component, targetPackage, targetActivity)) candidates.add(drawable)
                         }
                         parser.next()
                     }
                 } finally { parser.close() }
+            } else {
+                // A few packs ship appfilter.xml in res/raw instead of res/xml.
+                val rawId = packResources.getIdentifier("appfilter", "raw", iconPackPackage).takeIf { it != 0 }
+                if (rawId != null) {
+                    val parser = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
+                    packResources.openRawResource(rawId).use { parser.setInput(it, "UTF-8");
+                        while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                            if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
+                                val component = parser.getAttributeValue(null, "component").orEmpty()
+                                val drawable = parser.getAttributeValue(null, "drawable").orEmpty()
+                                if (drawable.isNotBlank() && componentMatches(component, targetPackage, targetActivity)) candidates.add(drawable)
+                            }
+                            parser.next()
+                        }
+                    }
+                }
             }
             val shortName = targetPackage.substringAfterLast(".")
             candidates.addAll(listOf(targetPackage.replace(".", "_"), shortName, "app_" + shortName))
@@ -1577,7 +1597,7 @@ class MainActivity : Activity() {
     }
 
     private fun chooseIconPack() {
-        val actions = listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.anddoes.launcher.THEME", "com.teslacoilsw.launcher.THEME")
+        val actions = listOf("org.adw.launcher.THEMES", "org.adw.ActivityStarter.THEMES", "com.novalauncher.THEME", "com.anddoes.launcher.THEME", "com.teslacoilsw.launcher.THEME", "com.gau.go.launcherex.theme", "com.dlto.atom.launcher.THEME", "ginlemon.smartlauncher.THEMES", "ch.deletescape.lawnchair.ICONPACK", "com.sonymobile.home.ICON_PACK", "net.oneplus.launcher.icons.ACTION_PICK_ICON")
         val detected = actions.flatMap { action ->
             try { packageManager.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL).map { it.activityInfo.packageName } }
             catch (_: Exception) { emptyList() }
@@ -1655,6 +1675,7 @@ class MainActivity : Activity() {
                     .apply()
                 buildScreen()
                 refreshFloatingDock()
+                Toast.makeText(this, "Ukuran dock diterapkan", Toast.LENGTH_SHORT).show()
             }.setNegativeButton("Batal", null).show()
     }
 
