@@ -919,10 +919,15 @@ class MainActivity : Activity() {
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             if (asFreeform) {
+                // Best-effort Android freeform launch. setLaunchBounds is honored only
+                // when the ROM allows freeform/multi-window for the target application.
                 val width = resources.displayMetrics.widthPixels
                 val height = resources.displayMetrics.heightPixels
-                val margin = dp(24)
-                val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
+                val windowWidth = (width * 0.78f).toInt().coerceAtLeast(dp(280))
+                val windowHeight = (height * 0.68f).toInt().coerceAtLeast(dp(320))
+                val left = ((width - windowWidth) / 2).coerceAtLeast(0)
+                val top = dp(72).coerceAtMost((height - dp(120)).coerceAtLeast(0))
+                val bounds = Rect(left, top, (left + windowWidth).coerceAtMost(width), (top + windowHeight).coerceAtMost(height - dp(48)))
                 val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
                 startActivity(launchIntent, options.toBundle())
             } else {
@@ -945,6 +950,7 @@ class MainActivity : Activity() {
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
             "Buka layar penuh",
+            "Buka dalam jendela mengambang (Freeform)",
             homeAction,
             if (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.contains(app.packageName) == true) "Tampilkan aplikasi" else "Sembunyikan aplikasi",
             "Opsi tata letak layar utama",
@@ -959,24 +965,25 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
                 0 -> launch(app, asFreeform = false)
-                1 -> {
+                1 -> launch(app, asFreeform = true)
+                2 -> {
                     val current = homePackages()
                     if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
                     saveHomePackages(current)
                     pinnedAdapter.notifyDataSetChanged()
                     Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
                 }
-                2 -> {
+                3 -> {
                     val hidden = (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
                     if (hidden.contains(app.packageName)) hidden.remove(app.packageName) else hidden.add(app.packageName)
                     preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
                     rebuildPinnedViews()
                     Toast.makeText(this, if (hidden.contains(app.packageName)) "Aplikasi disembunyikan" else "Aplikasi ditampilkan", Toast.LENGTH_SHORT).show()
                 }
-                3 -> showHomeLayoutOptions()
-                4 -> moveHomeApp(app, -1)
-                5 -> moveHomeApp(app, 1)
-                6 -> {
+                4 -> showHomeLayoutOptions()
+                5 -> moveHomeApp(app, -1)
+                6 -> moveHomeApp(app, 1)
+                7 -> {
                     val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
                     if (pages.isEmpty()) {
                         addHomePage()
@@ -988,10 +995,10 @@ class MainActivity : Activity() {
                         }.setNegativeButton("Batal", null).show()
                     }
                 }
-                7 -> togglePinned(app)
-                8 -> openAppInfo(app)
-                9 -> openPlayStore(app)
-                10 -> uninstallApp(app)
+                8 -> togglePinned(app)
+                9 -> openAppInfo(app)
+                10 -> openPlayStore(app)
+                11 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
