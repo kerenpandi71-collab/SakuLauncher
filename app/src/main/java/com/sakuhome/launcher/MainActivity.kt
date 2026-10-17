@@ -1176,7 +1176,7 @@ class MainActivity : Activity() {
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
-            "Aktifkan dock & navigasi mengambang",
+            (if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Nonaktifkan dock dan navigasi mengambang" else "Aktifkan dock dan navigasi mengambang"),
             "Tentang & izin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
@@ -1195,14 +1195,30 @@ class MainActivity : Activity() {
                     10 -> resetWallpaper()
                     11 -> openHomeSettings()
                     12 -> {
-                        if (android.provider.Settings.canDrawOverlays(this)) {
+                        val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
+                        if (enabled) {
+                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                            try {
+                                startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_STOP))
+                            } catch (_: Exception) {
+                                stopService(Intent(this, FloatingDockService::class.java))
+                            }
+                            Toast.makeText(this, "Dock dan navigasi mengambang dinonaktifkan", Toast.LENGTH_SHORT).show()
+                        } else if (android.provider.Settings.canDrawOverlays(this)) {
+                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, true).apply()
                             try {
                                 val serviceIntent = Intent(this, FloatingDockService::class.java)
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
                                 else startService(serviceIntent)
                                 Toast.makeText(this, "Dock dan navigasi mengambang diaktifkan", Toast.LENGTH_SHORT).show()
-                            } catch (_: Exception) { openOverlaySettings() }
-                        } else openOverlaySettings()
+                            } catch (_: Exception) {
+                                preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                                openOverlaySettings()
+                            }
+                        } else {
+                            preferences.edit().putBoolean(KEY_OVERLAY_PENDING, true).apply()
+                            openOverlaySettings()
+                        }
                     }
                     13 -> showPermissionInfo()
                 }
