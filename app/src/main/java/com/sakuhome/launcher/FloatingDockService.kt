@@ -32,6 +32,7 @@ class FloatingDockService : Service() {
     private var drawerView: View? = null
     private var navigationView: View? = null
     private var isForeground = false
+    private var lastLandscape: Boolean? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +52,8 @@ class FloatingDockService : Service() {
         }
         startAsForeground()
         if (intent?.action == ACTION_REFRESH) removeDock()
+        val landscapeNow = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (dockView != null && lastLandscape != landscapeNow) removeDock()
         if (dockView == null) showDock()
         return START_STICKY
     }
@@ -98,6 +101,7 @@ class FloatingDockService : Service() {
         val dockWidth = prefs.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
         val dockHeight = prefs.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        lastLandscape = landscape
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
             prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
