@@ -185,7 +185,7 @@ class SakuKeyboardService : InputMethodService() {
         }
         addRow {
             key("⇧", 1.25f, true) { shifted = !shifted; symbols = false; rebuild() }
-            (if (symbols) listOf("*","\\"","'",":",";","!","?") else listOf("z","x","c","v","b","n","m"))
+            (if (symbols) listOf("*","\"","'",":",";","!","?") else listOf("z","x","c","v","b","n","m"))
                 .forEach { c -> key(if (shifted && !symbols) c.uppercase() else c) { commit(if (shifted && !symbols) c.uppercase() else c); shifted = false } }
             key("⌫", 1.25f, true) { currentInputConnection?.deleteSurroundingText(1, 0) }
         }
