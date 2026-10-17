@@ -1497,7 +1497,8 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Mode Trackpad DroidOS · ${if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) "ON" else "OFF"}"
+            "Mode Trackpad DroidOS · ${if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) "ON" else "OFF"}",
+            "Buka Workspace Trackpad"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1550,6 +1551,13 @@ class MainActivity : Activity() {
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
                     18 -> toggleTrackpadMode()
+                    19 -> {
+                        if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) {
+                            startActivity(Intent(this, TrackpadWorkspaceActivity::class.java))
+                        } else {
+                            Toast.makeText(this, "Aktifkan Mode Trackpad DroidOS terlebih dahulu", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1568,17 +1576,17 @@ class MainActivity : Activity() {
 
         preferences.edit().putBoolean(KEY_TRACKPAD_MODE, true).apply()
         try {
-            startActivity(Intent(this, DroidOsTrackpadActivity::class.java))
+            startActivity(Intent(this, TrackpadWorkspaceActivity::class.java))
             Toast.makeText(
                 this,
-                "Mode Trackpad aktif. Selesaikan izin DroidOS jika diminta.",
+                "Workspace Trackpad aktif: menu launcher di atas, trackpad di bawah.",
                 Toast.LENGTH_LONG
             ).show()
         } catch (e: Exception) {
             preferences.edit().putBoolean(KEY_TRACKPAD_MODE, false).apply()
             Toast.makeText(
                 this,
-                "Tidak dapat membuka modul trackpad: ${e.localizedMessage ?: "kesalahan tidak diketahui"}",
+                "Tidak dapat membuka Workspace Trackpad: ${e.localizedMessage ?: "kesalahan tidak diketahui"}",
                 Toast.LENGTH_LONG
             ).show()
         }
