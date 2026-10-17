@@ -15,6 +15,7 @@
         <intent><action android:name="com.novalauncher.THEME" /></intent>
         <intent><action android:name="com.anddoes.launcher.THEME" /></intent>
         <intent><action android:name="com.teslacoilsw.launcher.THEME" /></intent>
+        <package android:name="com.italiano.simplyminimal" />
     </queries>
 
     <application
