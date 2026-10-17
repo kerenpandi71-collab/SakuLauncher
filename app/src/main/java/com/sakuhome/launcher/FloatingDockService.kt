@@ -196,15 +196,26 @@ class FloatingDockService : Service() {
                     Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
             }
 
+        val dockPosition = prefs.getString(KEY_DOCK_POSITION, "bottom") ?: "bottom"
         val params = WindowManager.LayoutParams(
-            dp(if (landscape) 300 else 280),
-            dp(dockHeight),
+            dp(if (dockPosition == "left" || dockPosition == "right") dockWidth.coerceAtLeast(112) else if (landscape) 300 else 280),
+            dp(if (dockPosition == "left" || dockPosition == "right") dockHeight.coerceAtLeast(220) else dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(if (landscape) 8 else 28)
+            gravity = when (dockPosition) {
+                "top" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                "left" -> Gravity.LEFT or Gravity.CENTER_VERTICAL
+                "right" -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
+                else -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            }
+            when (dockPosition) {
+                "top" -> y = dp(12)
+                "left" -> x = dp(8)
+                "right" -> x = dp(8)
+                else -> y = dp(if (landscape) 8 else 28)
+            }
         }
         try {
             windowManager.addView(dock, params)
@@ -357,10 +368,56 @@ class FloatingDockService : Service() {
             elevation = dp(14).toFloat()
             setOnClickListener { if (dockView == null) showDock() else hideDockTemporarily() }
         }
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedX = prefs.getInt(KEY_BUBBLE_X, -1)
+        val savedY = prefs.getInt(KEY_BUBBLE_Y, -1)
         val params = WindowManager.LayoutParams(dp(size), dp(size),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; x = dp(12); y = 0 }
+        ).apply {
+            gravity = Gravity.RIGHT or Gravity.TOP
+            x = if (savedX >= 0) savedX else dp(12)
+            y = if (savedY >= 0) savedY else dp(260)
+        }
+        var downRawX = 0f
+        var downRawY = 0f
+        var startX = params.x
+        var startY = params.y
+        var dragged = false
+        bubble.setOnTouchListener { view, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startX = params.x
+                    startY = params.y
+                    dragged = false
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) dragged = true
+                    if (dragged) {
+                        val maxX = (resources.displayMetrics.widthPixels - view.width).coerceAtLeast(0)
+                        val maxY = (resources.displayMetrics.heightPixels - view.height).coerceAtLeast(0)
+                        params.x = (startX - dx.toInt()).coerceIn(0, maxX)
+                        params.y = (startY + dy.toInt()).coerceIn(0, maxY)
+                        try { windowManager.updateViewLayout(view, params) } catch (_: Exception) { }
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (dragged) {
+                        prefs.edit().putInt(KEY_BUBBLE_X, params.x).putInt(KEY_BUBBLE_Y, params.y).apply()
+                    } else {
+                        if (dockView == null) showDock() else hideDockTemporarily()
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
         try { windowManager.addView(bubble, params); assistiveBubble = bubble } catch (_: Exception) { assistiveBubble = null }
     }
 
@@ -412,6 +469,10 @@ class FloatingDockService : Service() {
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_ACCENT = "accent_color"
+        private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
+        private const val KEY_BUBBLE_X = "assistive_bubble_x"
+        private const val KEY_BUBBLE_Y = "assistive_bubble_y"
+        private const val KEY_DOCK_POSITION = "dock_navigation_position"
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
