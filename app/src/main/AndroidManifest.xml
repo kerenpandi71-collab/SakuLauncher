@@ -39,6 +39,18 @@
             </intent-filter>
         </activity>
         <service
+            android:name=".SakuNavigationAccessibilityService"
+            android:label="Navigasi desktop Saku"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/saku_accessibility_service" />
+        </service>
+        <service
             android:name=".FloatingDockService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
