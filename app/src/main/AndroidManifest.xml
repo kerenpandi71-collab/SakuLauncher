@@ -67,6 +67,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <activity
+            android:name=".DroidOSModeActivity"
+            android:exported="false"
+            android:resizeableActivity="true" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"

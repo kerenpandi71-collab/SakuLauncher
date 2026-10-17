@@ -290,7 +290,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         // the service is not running yet, so AM returns false. 
         // But the *Permission* is still granted in Settings, so we check that source of truth.
         return try {
-            val expectedServiceName = "$packageName/.OverlayService"
+            val expectedServiceName = "$packageName/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.OverlayService"
             val enabledServices = Settings.Secure.getString(
                 contentResolver,
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -299,8 +299,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             // Check if our service string exists in the setting
             val colonSplit = enabledServices.split(":")
             colonSplit.any { component ->
-                component.equals(expectedServiceName, ignoreCase = true) || 
-                component.contains("$packageName/")
+                component.equals(expectedServiceName, ignoreCase = true)
             }
         } catch (e: Exception) {
             false
