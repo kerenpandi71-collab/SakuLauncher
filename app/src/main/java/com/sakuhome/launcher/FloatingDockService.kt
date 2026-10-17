@@ -50,6 +50,7 @@ class FloatingDockService : Service() {
     private var trackpadPointerY = 0f
     private var trackpadContext: Context? = null
     private var trackpadWindowManager: WindowManager? = null
+    private var trackpadPointerWindowManager: WindowManager? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -199,7 +200,13 @@ class FloatingDockService : Service() {
             val lp = pointer.layoutParams as? WindowManager.LayoutParams ?: return
             lp.x = trackpadPointerX.toInt()
             lp.y = trackpadPointerY.toInt()
-            try { trackpadWindowManager?.updateViewLayout(pointer, lp) } catch (_: Exception) { }
+            val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+            val target = if (targetId > 0) (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(targetId) else null
+            val targetW = target?.mode?.physicalWidth?.toFloat()?.coerceAtLeast(1f) ?: screenW
+            val targetH = target?.mode?.physicalHeight?.toFloat()?.coerceAtLeast(1f) ?: (screenH - padHeight)
+            lp.x = (trackpadPointerX / screenW.coerceAtLeast(1f) * targetW).toInt().coerceIn(0, (targetW - dp(18)).toInt().coerceAtLeast(0))
+            lp.y = (trackpadPointerY / (screenH - padHeight).coerceAtLeast(1f) * targetH).toInt().coerceIn(0, (targetH - dp(18)).toInt().coerceAtLeast(0))
+            try { trackpadPointerWindowManager?.updateViewLayout(pointer, lp) } catch (_: Exception) { }
         }
         touchArea.setOnTouchListener { view, event ->
             when (event.actionMasked) {
@@ -271,7 +278,15 @@ class FloatingDockService : Service() {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.BOTTOM or Gravity.START }
-        val pointer = View(overlayContext).apply {
+        val targetDisplayId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
+        val targetDisplay = if (targetDisplayId > 0) (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(targetDisplayId) else null
+        val pointerContext = if (Build.VERSION.SDK_INT >= 30 && targetDisplay != null) {
+            try { createDisplayContext(targetDisplay).createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null) }
+            catch (_: Exception) { overlayContext }
+        } else overlayContext
+        val pointerWm = pointerContext.getSystemService(WINDOW_SERVICE) as WindowManager
+        trackpadPointerWindowManager = pointerWm
+        val pointer = View(pointerContext).apply {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 214, 10)); setStroke(dp(2), Color.BLACK) }
             elevation = dp(30).toFloat()
             contentDescription = "Penunjuk virtual Saku"
@@ -283,19 +298,21 @@ class FloatingDockService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = trackpadPointerX.toInt()
-            y = trackpadPointerY.toInt()
+            val targetW = targetDisplay?.mode?.physicalWidth?.toFloat()?.coerceAtLeast(1f) ?: screenW
+            val targetH = targetDisplay?.mode?.physicalHeight?.toFloat()?.coerceAtLeast(1f) ?: (screenH - padHeight)
+            x = (trackpadPointerX / screenW.coerceAtLeast(1f) * targetW).toInt().coerceIn(0, (targetW - dp(18)).toInt().coerceAtLeast(0))
+            y = (trackpadPointerY / (screenH - padHeight).coerceAtLeast(1f) * targetH).toInt().coerceIn(0, (targetH - dp(18)).toInt().coerceAtLeast(0))
         }
         try {
             trackpadWm.addView(pad, panelParams)
             trackpadPanel = pad
-            trackpadWm.addView(pointer, pointerParams)
+            pointerWm.addView(pointer, pointerParams)
             trackpadPointer = pointer
         } catch (_: Exception) {
             try { trackpadWm.removeView(pad) } catch (_: Exception) { }
-            try { trackpadWm.removeView(pointer) } catch (_: Exception) { }
+            try { pointerWm.removeView(pointer) } catch (_: Exception) { }
             trackpadPanel = null; trackpadPointer = null
-            trackpadContext = null; trackpadWindowManager = null
+            trackpadContext = null; trackpadWindowManager = null; trackpadPointerWindowManager = null
             Toast.makeText(this, "Overlay trackpad gagal ditampilkan di layar HP", Toast.LENGTH_LONG).show()
         }
     }
@@ -303,11 +320,12 @@ class FloatingDockService : Service() {
     private fun removeTrackpadOverlay() {
         val wm = trackpadWindowManager ?: windowManager
         trackpadPanel?.let { try { wm.removeView(it) } catch (_: Exception) { } }
-        trackpadPointer?.let { try { wm.removeView(it) } catch (_: Exception) { } }
+        trackpadPointer?.let { try { (trackpadPointerWindowManager ?: wm).removeView(it) } catch (_: Exception) { } }
         trackpadPanel = null
         trackpadPointer = null
         trackpadContext = null
         trackpadWindowManager = null
+        trackpadPointerWindowManager = null
     }
 
     private fun showDock() {
