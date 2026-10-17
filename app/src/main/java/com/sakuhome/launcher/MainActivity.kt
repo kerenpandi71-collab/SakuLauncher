@@ -273,6 +273,20 @@ class MainActivity : Activity() {
             }
             return
         }
+        if (requestCode == REQUEST_ICON_FOLDER) {
+            if (resultCode == RESULT_OK) {
+                val folderUri = data?.data
+                if (folderUri != null) {
+                    try { contentResolver.takePersistableUriPermission(folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+                    preferences.edit().putString(KEY_LOCAL_ICON_FOLDER, folderUri.toString()).putString(KEY_ICON_PACK, "").apply()
+                    apps = loadApps()
+                    buildScreen()
+                    refreshFloatingDock()
+                    Toast.makeText(this, "Folder ikon dipilih", Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         if (requestCode != REQUEST_WALLPAPER || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         try {
@@ -1594,20 +1608,6 @@ class MainActivity : Activity() {
         }
         try { startActivityForResult(intent, REQUEST_ICON_FOLDER) }
         catch (_: Exception) { Toast.makeText(this, "Pemilih folder tidak tersedia", Toast.LENGTH_LONG).show() }
-    }
-
-    @Deprecated("Use Activity Result API when modernizing")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_ICON_FOLDER && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
-            preferences.edit().putString(KEY_LOCAL_ICON_FOLDER, uri.toString()).putString(KEY_ICON_PACK, "").apply()
-            apps = loadApps()
-            buildScreen()
-            refreshFloatingDock()
-            Toast.makeText(this, "Folder ikon dipilih. Ikon bernama cocok akan digunakan.", Toast.LENGTH_LONG).show()
-        }
     }
 
     private fun chooseDockSize() {
