@@ -392,7 +392,7 @@ private var isSoftKeyboardSupport = false
     private var isReorderTapEnabled = true
     
     private val PACKAGE_BLANK = "internal.blank.spacer"
-    private val PACKAGE_TRACKPAD = packageName
+    private val PACKAGE_TRACKPAD: String get() = packageName
     
     private var shellService: IShellService? = null
     private var isBound = false
