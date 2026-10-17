@@ -30,6 +30,24 @@ class SakuNavigationAccessibilityService : AccessibilityService() {
         fun performGlobalAction(action: Int): Boolean =
             active?.performGlobalAction(action) ?: false
 
+        fun performTap(x: Float, y: Float, durationMs: Long = 80L): Boolean {
+            val service = active ?: return false
+            val path = Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(50L, 250L)))
+                .build()
+            return service.dispatchGesture(gesture, null, null)
+        }
+
+        fun performLongPress(x: Float, y: Float, durationMs: Long = 600L): Boolean {
+            val service = active ?: return false
+            val path = Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(400L, 1200L)))
+                .build()
+            return service.dispatchGesture(gesture, null, null)
+        }
+
         fun performScroll(scrollDown: Boolean): Boolean {
             val service = active ?: return false
             val metrics = service.resources.displayMetrics
