@@ -235,9 +235,12 @@ class FloatingDockService : Service() {
                     if (twoFinger && kotlin.math.abs(scrollDistance) > dp(8)) {
                         val delta = (scrollDistance * 2.2f).toInt().coerceIn(-520, 520)
                         val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
-                        val ok = if (targetId > 0) injectTargetDisplaySwipe(targetId, trackpadPointerX, trackpadPointerY, delta, screenW, screenH - padHeight)
-                            else SakuNavigationAccessibilityService.performScrollAt(trackpadPointerX, trackpadPointerY, delta)
-                        label.text = if (ok) "Scroll dua jari dikirim" else if (targetId > 0) "Input Root gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk scroll"
+                        label.text = "Mengirim scroll…"
+                        Thread {
+                            val ok = if (targetId > 0) injectTargetDisplaySwipe(targetId, trackpadPointerX, trackpadPointerY, delta, screenW, screenH - padHeight)
+                                else SakuNavigationAccessibilityService.performScrollAt(trackpadPointerX, trackpadPointerY, delta)
+                            view.post { label.text = if (ok) "Scroll dua jari dikirim" else if (targetId > 0) "Input gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk scroll" }
+                        }.start()
                     }
                     true
                 }
@@ -246,9 +249,12 @@ class FloatingDockService : Service() {
                         twoFinger = false
                     } else if (!moved) {
                         val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
-                        val ok = if (targetId > 0) injectTargetDisplayTap(targetId, trackpadPointerX, trackpadPointerY, screenW, screenH - padHeight)
-                            else SakuNavigationAccessibilityService.performTap(trackpadPointerX, trackpadPointerY, 80L)
-                        label.text = if (ok) "Klik dikirim" else if (targetId > 0) "Input Root gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk klik"
+                        label.text = "Mengirim klik…"
+                        Thread {
+                            val ok = if (targetId > 0) injectTargetDisplayTap(targetId, trackpadPointerX, trackpadPointerY, screenW, screenH - padHeight)
+                                else SakuNavigationAccessibilityService.performTap(trackpadPointerX, trackpadPointerY, 80L)
+                            view.post { label.text = if (ok) "Klik dikirim" else if (targetId > 0) "Input gagal pada display " + targetId else "Aktifkan Aksesibilitas Saku untuk klik" }
+                        }.start()
                     } else {
                         label.text = "Pointer dipindahkan"
                     }
