@@ -320,22 +320,10 @@ class FloatingDockService : Service() {
                     isClickable = true
                     isFocusable = true
                     setOnClickListener {
-                        val targetId = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_TARGET_DISPLAY_ID, 0)
-                        if (targetId > 0) {
-                            Thread {
-                                val ok = runRootInputCommand("am start --display " + targetId +
-                                    " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + app.packageName)
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    if (ok) hideFloatingDrawer()
-                                    else Toast.makeText(this@FloatingDockService, "Gagal membuka aplikasi pada display " + targetId, Toast.LENGTH_LONG).show()
-                                }
-                            }.start()
-                        } else {
-                            val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                            if (launch != null) {
-                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                try { startActivity(launch); hideFloatingDrawer() } catch (_: Exception) { Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show() }
-                            }
+                        val launch = packageManager.getLaunchIntentForPackage(app.packageName)
+                        if (launch != null) {
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try { startActivity(launch); hideFloatingDrawer() } catch (_: Exception) { Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show() }
                         }
                     }
                 }
@@ -600,6 +588,5 @@ class FloatingDockService : Service() {
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
-        private const val KEY_TARGET_DISPLAY_ID = "saku_target_display_id"
     }
 }
