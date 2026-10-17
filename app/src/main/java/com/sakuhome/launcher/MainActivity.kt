@@ -511,9 +511,23 @@ class MainActivity : Activity() {
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
-        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(500))
-        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, dp(panelHeight), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(82)
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val drawerPosition = preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left"
+        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(if (landscape) 420 else 500))
+        val actualPanelHeight = if (landscape) (screenHeightDp - 28).coerceAtLeast(240) else panelHeight
+        val panelGravity = if (!landscape) {
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        } else if (drawerPosition == "right") {
+            Gravity.END or Gravity.CENTER_VERTICAL
+        } else {
+            Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, dp(actualPanelHeight), panelGravity).apply {
+            if (landscape) {
+                if (drawerPosition == "right") marginEnd = dp(14) else marginStart = dp(14)
+            } else {
+                bottomMargin = dp(82)
+            }
         })
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
@@ -1116,6 +1130,7 @@ class MainActivity : Activity() {
             "Kustomisasi ikon & icon pack",
             "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
             "Mode Freeform default · ${if (freeformDefault) "Aktif" else "Mati"}",
+            "Posisi drawer landscape · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Kanan" else "Kiri"}",
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
@@ -1132,13 +1147,30 @@ class MainActivity : Activity() {
                     4 -> chooseIconCustomization()
                     5 -> chooseDockSize()
                     6 -> toggleFreeformDefault()
-                    7 -> chooseWallpaper()
-                    8 -> resetWallpaper()
-                    9 -> openHomeSettings()
-                    10 -> openOverlaySettings()
-                    11 -> showPermissionInfo()
+                    7 -> chooseDrawerPosition()
+                    8 -> chooseWallpaper()
+                    9 -> resetWallpaper()
+                    10 -> openHomeSettings()
+                    11 -> openOverlaySettings()
+                    12 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun chooseDrawerPosition() {
+        val values = arrayOf("Kiri", "Kanan")
+        val current = if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") 1 else 0
+        AlertDialog.Builder(this)
+            .setTitle("Posisi drawer saat landscape")
+            .setSingleChoiceItems(values, current) { dialog, which ->
+                preferences.edit().putString(KEY_DRAWER_POSITION, if (which == 1) "right" else "left").apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+                Toast.makeText(this, "Drawer landscape dipindahkan ke ${values[which].lowercase(Locale.getDefault())}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     private fun toggleFreeformDefault() {
@@ -2097,6 +2129,7 @@ class MainActivity : Activity() {
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
+        private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_BLUR_RADIUS = "background_blur_radius"
         private const val KEY_ICON_PACK = "custom_icon_pack_package"
