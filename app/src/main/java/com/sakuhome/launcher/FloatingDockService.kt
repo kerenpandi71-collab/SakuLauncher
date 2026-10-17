@@ -43,6 +43,10 @@ class FloatingDockService : Service() {
     private var lastLandscape: Boolean? = null
     private var quickMenuView: View? = null
     private var lastBubbleTapAt = 0L
+    private var trackpadPanel: View? = null
+    private var trackpadPointer: View? = null
+    private var trackpadPointerX = 0f
+    private var trackpadPointerY = 0f
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +54,28 @@ class FloatingDockService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_TRACKPAD_ON) {
+            if (!Settings.canDrawOverlays(this)) {
+                Toast.makeText(this, "Izinkan tampil di atas aplikasi lain untuk memakai trackpad", Toast.LENGTH_LONG).show()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            startAsForeground()
+            showTrackpadOverlay()
+            return START_STICKY
+        }
+        if (intent?.action == ACTION_TRACKPAD_OFF) {
+            removeTrackpadOverlay()
+            val overlayEnabled = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_OVERLAY_ENABLED, false)
+            if (!overlayEnabled) {
+                if (isForeground) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
+                    isForeground = false
+                }
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
         if (intent?.action == ACTION_STOP) {
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
@@ -101,6 +127,158 @@ class FloatingDockService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
         isForeground = true
+    }
+
+    /**
+     * Persistent touchpad overlay. It covers the lower part of the screen while other
+     * apps remain visible above it; accessibility gestures target the virtual pointer.
+     * This is a compatibility fallback, not a claim that apps are running inside a
+     * trusted Android VirtualDisplay.
+     */
+    private fun showTrackpadOverlay() {
+        if (trackpadPanel != null || !Settings.canDrawOverlays(this)) return
+        val metrics = resources.displayMetrics
+        val screenW = metrics.widthPixels.toFloat()
+        val screenH = metrics.heightPixels.toFloat()
+        val padHeight = (screenH * 0.38f).toInt().coerceAtLeast(dp(190))
+        trackpadPointerX = screenW * 0.5f
+        trackpadPointerY = (screenH - padHeight) * 0.5f
+        val dark = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, true)
+        val textColor = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val pad = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(8), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(25, 31, 43) else Color.rgb(226, 232, 242))
+                cornerRadii = floatArrayOf(dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), 0f, 0f, 0f, 0f)
+                setStroke(dp(1), if (dark) Color.rgb(75, 91, 116) else Color.rgb(184, 198, 219))
+            }
+            elevation = dp(18).toFloat()
+        }
+        val label = TextView(this).apply {
+            text = "SAKU TRACKPAD · satu jari gerakkan pointer · dua jari scroll"
+            textSize = 10f; gravity = Gravity.CENTER; setTextColor(textColor); maxLines = 2
+        }
+        pad.addView(label, LinearLayout.LayoutParams(-1, dp(30)))
+        val touchArea = TextView(this).apply {
+            text = "AREA TRACKPAD\nGeser untuk menggerakkan pointer"
+            textSize = 13f; gravity = Gravity.CENTER; setTextColor(textColor)
+            background = GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(39, 48, 64) else Color.rgb(241, 245, 251))
+                cornerRadius = dp(16).toFloat()
+                setStroke(dp(1), if (dark) Color.rgb(83, 101, 130) else Color.rgb(190, 204, 224))
+            }
+        }
+        pad.addView(touchArea, LinearLayout.LayoutParams(-1, 0, 1f))
+        var lastX = 0f
+        var lastY = 0f
+        var moved = false
+        var twoFinger = false
+        var lastAverageY = 0f
+        var scrollDistance = 0f
+        fun movePointer(dx: Float, dy: Float) {
+            trackpadPointerX = (trackpadPointerX + dx * 1.7f).coerceIn(dp(10).toFloat(), screenW - dp(10))
+            trackpadPointerY = (trackpadPointerY + dy * 1.7f).coerceIn(dp(10).toFloat(), screenH - padHeight - dp(10))
+            val pointer = trackpadPointer ?: return
+            val lp = pointer.layoutParams as? WindowManager.LayoutParams ?: return
+            lp.x = trackpadPointerX.toInt()
+            lp.y = trackpadPointerY.toInt()
+            try { windowManager.updateViewLayout(pointer, lp) } catch (_: Exception) { }
+        }
+        touchArea.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    lastX = event.x; lastY = event.y; moved = false; twoFinger = false; scrollDistance = 0f
+                    true
+                }
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        twoFinger = true
+                        lastAverageY = (event.getY(0) + event.getY(1)) / 2f
+                        scrollDistance = 0f
+                        moved = true
+                        label.text = "Dua jari: geser untuk menggulir"
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (twoFinger && event.pointerCount >= 2) {
+                        val averageY = (event.getY(0) + event.getY(1)) / 2f
+                        scrollDistance += averageY - lastAverageY
+                        lastAverageY = averageY
+                    } else {
+                        val dx = event.x - lastX
+                        val dy = event.y - lastY
+                        if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > dp(2)) moved = true
+                        movePointer(dx, dy)
+                        lastX = event.x; lastY = event.y
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_POINTER_UP -> {
+                    if (twoFinger && kotlin.math.abs(scrollDistance) > dp(8)) {
+                        val delta = (scrollDistance * 2.2f).toInt().coerceIn(-520, 520)
+                        val ok = SakuNavigationAccessibilityService.performScrollAt(trackpadPointerX, trackpadPointerY, delta)
+                        label.text = if (ok) "Scroll dua jari dikirim" else "Aktifkan Aksesibilitas Saku untuk scroll"
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (twoFinger) {
+                        twoFinger = false
+                    } else if (!moved) {
+                        val ok = SakuNavigationAccessibilityService.performTap(trackpadPointerX, trackpadPointerY, 80L)
+                        label.text = if (ok) "Klik dikirim" else "Aktifkan Aksesibilitas Saku untuk klik"
+                    } else {
+                        label.text = "Pointer dipindahkan"
+                    }
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                    true
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> { twoFinger = false; true }
+                else -> true
+            }
+        }
+        val panelParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT, padHeight,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.BOTTOM or Gravity.START }
+        val pointer = View(this).apply {
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 214, 10)); setStroke(dp(2), Color.BLACK) }
+            elevation = dp(30).toFloat()
+            contentDescription = "Penunjuk virtual Saku"
+        }
+        val pointerParams = WindowManager.LayoutParams(
+            dp(18), dp(18),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = trackpadPointerX.toInt()
+            y = trackpadPointerY.toInt()
+        }
+        try {
+            windowManager.addView(pad, panelParams)
+            trackpadPanel = pad
+            windowManager.addView(pointer, pointerParams)
+            trackpadPointer = pointer
+        } catch (_: Exception) {
+            try { windowManager.removeView(pad) } catch (_: Exception) { }
+            try { windowManager.removeView(pointer) } catch (_: Exception) { }
+            trackpadPanel = null; trackpadPointer = null
+            Toast.makeText(this, "Overlay trackpad gagal ditampilkan", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun removeTrackpadOverlay() {
+        trackpadPanel?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        trackpadPointer?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        trackpadPanel = null
+        trackpadPointer = null
     }
 
     private fun showDock() {
@@ -560,6 +738,7 @@ class FloatingDockService : Service() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        removeTrackpadOverlay()
         removeDock()
         if (isForeground) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
@@ -574,6 +753,8 @@ class FloatingDockService : Service() {
     companion object {
         const val ACTION_REFRESH = "com.sakuhome.launcher.REFRESH_DOCK"
         const val ACTION_STOP = "com.sakuhome.launcher.STOP_DOCK"
+        const val ACTION_TRACKPAD_ON = "com.sakuhome.launcher.TRACKPAD_ON"
+        const val ACTION_TRACKPAD_OFF = "com.sakuhome.launcher.TRACKPAD_OFF"
         private const val NOTIFICATION_ID = 47
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
