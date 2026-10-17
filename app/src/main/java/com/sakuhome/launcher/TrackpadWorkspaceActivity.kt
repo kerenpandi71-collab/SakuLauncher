@@ -2,6 +2,7 @@ package com.sakuhome.launcher
 
 import android.app.Activity
 import android.content.Intent
+import android.content.Context
 import android.content.pm.ResolveInfo
 import android.graphics.Canvas
 import android.graphics.Color
@@ -155,6 +156,7 @@ class TrackpadWorkspaceActivity : Activity() {
         root.addView(padHeader, LinearLayout.LayoutParams(-1, -2))
 
         touchpad = TouchpadSurface(
+            context = this,
             onMove = { dx, dy ->
                 cursorX = (cursorX + dx * 1.45f).coerceIn(0f, max(0, viewport.width - dp(8)).toFloat())
                 cursorY = (cursorY + dy * 1.45f).coerceIn(0f, max(0, viewport.height - dp(8)).toFloat())
@@ -304,12 +306,13 @@ class TrackpadWorkspaceActivity : Activity() {
         }
     }
 
-    private class TouchpadSurface(
+    private inner class TouchpadSurface(
+        context: Context,
         private val onMove: (Float, Float) -> Unit,
         private val onTap: () -> Unit,
         private val onRightClick: () -> Unit,
         private val onScroll: (Float) -> Unit
-    ) : View(null) {
+    ) : View(context) {
         private var lastX = 0f
         private var lastY = 0f
         private var downX = 0f
@@ -317,17 +320,6 @@ class TrackpadWorkspaceActivity : Activity() {
         private var downAt = 0L
         private var moved = false
         private var multiTouch = false
-
-        constructor(
-            context: android.content.Context,
-            onMove: (Float, Float) -> Unit,
-            onTap: () -> Unit,
-            onRightClick: () -> Unit,
-            onScroll: (Float) -> Unit
-        ) : this(onMove, onTap, onRightClick, onScroll) {
-            // Rebind the platform View context through the secondary constructor is not possible;
-            // this constructor exists only to keep call sites explicit.
-        }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
