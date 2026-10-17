@@ -76,6 +76,7 @@ class SakuKeyboardService : InputMethodService() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
+        var currentRow: LinearLayout? = null
         fun key(label: String, flex: Float = 1f, special: Boolean = false, action: () -> Unit) {
             val button = TextView(this).apply {
                 text = label
@@ -95,7 +96,6 @@ class SakuKeyboardService : InputMethodService() {
                 marginStart = dp(2); marginEnd = dp(2); topMargin = dp(3); bottomMargin = dp(3)
             })
         }
-        var currentRow: LinearLayout? = null
         fun addRow(block: () -> Unit) {
             currentRow = row()
             block()
