@@ -141,7 +141,7 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
     // =================================================================================
     private fun requestKeybindsFromLauncher() {
         val intent = Intent("com.katsuyamaki.DroidOSFOSSLauncher.REQUEST_KEYBINDS")
-        intent.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+        intent.setPackage(packageName)
         sendBroadcast(intent)
     }
     // =================================================================================
@@ -1320,7 +1320,7 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
 
 // Request Custom Modifier Key from Launcher
             val syncIntent = Intent("com.katsuyamaki.DroidOSFOSSLauncher.REQUEST_CUSTOM_MOD_SYNC")
-            syncIntent.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+            syncIntent.setPackage(packageName)
             sendBroadcast(syncIntent)
         }
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -4968,7 +4968,7 @@ if (isResize) {
                 createBtMouseCaptureOverlay()
 
                 val intentCycle = Intent("com.katsuyamaki.DroidOSFOSSLauncher.CYCLE_DISPLAY")
-                intentCycle.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+                intentCycle.setPackage(packageName)
                 sendBroadcast(intentCycle)
             } else {
                 prefs.prefVirtualMirrorMode = false
@@ -5001,7 +5001,7 @@ if (isResize) {
             showToast("Mirror Mode OFF")
             
             val intentCycle = Intent("com.katsuyamaki.DroidOSFOSSLauncher.CYCLE_DISPLAY")
-            intentCycle.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+            intentCycle.setPackage(packageName)
             sendBroadcast(intentCycle)
         }
         
@@ -5342,7 +5342,7 @@ if (isResize) {
             
             // 1. Broadcast: Create Virtual Display
             val intentToggle = Intent("com.katsuyamaki.DroidOSFOSSLauncher.TOGGLE_VIRTUAL_DISPLAY")
-            intentToggle.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+            intentToggle.setPackage(packageName)
             sendBroadcast(intentToggle)
 
             showToast("Initializing Virtual Display...")
@@ -5350,14 +5350,14 @@ if (isResize) {
             // 2. Wait for display creation, then Cycle
             handler.postDelayed({
                  val intentCycle = Intent("com.katsuyamaki.DroidOSFOSSLauncher.CYCLE_DISPLAY")
-                 intentCycle.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+                 intentCycle.setPackage(packageName)
                  sendBroadcast(intentCycle)
             }, 1000) // Increased wait time to 1s to be safe
             
         } else {
             // If we are already on Virtual (or other), just cycle back to Main
             val intentCycle = Intent("com.katsuyamaki.DroidOSFOSSLauncher.CYCLE_DISPLAY")
-            intentCycle.setPackage("com.katsuyamaki.DroidOSFOSSLauncher")
+            intentCycle.setPackage(packageName)
             sendBroadcast(intentCycle)
         }
     }

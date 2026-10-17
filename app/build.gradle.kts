@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.sakuhome.launcher"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
         versionCode = 3
         versionName = "0.3.0"
@@ -28,4 +28,5 @@ android {
 
 dependencies {
     implementation(project(":trackpad"))
+    implementation(project(":droidoslauncher"))
 }

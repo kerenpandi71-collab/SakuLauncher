@@ -36,7 +36,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity as DroidOsTrackpadActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1497,7 +1496,7 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Mode Trackpad DroidOS · ${if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) "ON" else "OFF"}"
+            "Masuk Mode Desktop DroidOS · Launcher + Trackpad asli"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1549,39 +1548,9 @@ class MainActivity : Activity() {
                     }
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
-                    18 -> toggleTrackpadMode()
+                    18 -> startActivity(Intent(this, DroidOSModeActivity::class.java))
                 }
             }.setNegativeButton("Tutup", null).show()
-    }
-
-    private fun toggleTrackpadMode() {
-        val enabled = preferences.getBoolean(KEY_TRACKPAD_MODE, false)
-        if (enabled) {
-            preferences.edit().putBoolean(KEY_TRACKPAD_MODE, false).apply()
-            sendBroadcast(
-                Intent("com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.STOP_SERVICE")
-                    .setPackage(packageName)
-            )
-            Toast.makeText(this, "Mode Trackpad DroidOS dimatikan", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        preferences.edit().putBoolean(KEY_TRACKPAD_MODE, true).apply()
-        try {
-            startActivity(Intent(this, DroidOsTrackpadActivity::class.java))
-            Toast.makeText(
-                this,
-                "Mode Trackpad aktif. Selesaikan izin DroidOS jika diminta.",
-                Toast.LENGTH_LONG
-            ).show()
-        } catch (e: Exception) {
-            preferences.edit().putBoolean(KEY_TRACKPAD_MODE, false).apply()
-            Toast.makeText(
-                this,
-                "Tidak dapat membuka modul trackpad: ${e.localizedMessage ?: "kesalahan tidak diketahui"}",
-                Toast.LENGTH_LONG
-            ).show()
-        }
     }
 
     private fun runRootDisplayCommand(title: String, command: String) {
@@ -2779,7 +2748,6 @@ class MainActivity : Activity() {
         private const val KEY_ICON_PACK = "custom_icon_pack_package"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_FROZEN_APPS = "frozen_app_packages"
-        private const val KEY_TRACKPAD_MODE = "droidos_trackpad_mode_enabled"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
         private const val KEY_WIDGET_HEIGHT_PREFIX = "home_widget_height_"
         private const val APP_WIDGET_HOST_ID = 2096
