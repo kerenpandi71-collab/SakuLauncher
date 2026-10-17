@@ -1177,6 +1177,8 @@ class MainActivity : Activity() {
             "Reset wallpaper",
             "Jadikan launcher default",
             (if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Nonaktifkan dock dan navigasi mengambang" else "Aktifkan dock dan navigasi mengambang"),
+            "Ukuran bola Saku · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
+            "Mulai otomatis setelah restart",
             "Tentang & izin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
@@ -1220,7 +1222,13 @@ class MainActivity : Activity() {
                             openOverlaySettings()
                         }
                     }
-                    13 -> showPermissionInfo()
+                    13 -> chooseBubbleSize()
+                    14 -> {
+                        val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
+                        preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
+                        Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    }
+                    15 -> showPermissionInfo()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1946,6 +1954,31 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
+    private fun chooseBubbleSize() {
+        val current = preferences.getInt(KEY_BUBBLE_SIZE, 54).coerceIn(40, 80)
+        val slider = android.widget.SeekBar(this).apply { max = 40; progress = current - 40 }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(4))
+            addView(TextView(this@MainActivity).apply { text = "Ukuran bola: $current dp" })
+            addView(slider)
+        }
+        slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                (container.getChildAt(0) as TextView).text = "Ukuran bola: ${progress + 40} dp"
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
+        })
+        AlertDialog.Builder(this).setTitle("Ukuran bola Saku").setView(container)
+            .setPositiveButton("Simpan") { _, _ ->
+                preferences.edit().putInt(KEY_BUBBLE_SIZE, slider.progress + 40).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
+            }.setNegativeButton("Batal", null).show()
+    }
+
     private fun refreshFloatingDock() {
         if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
             startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
@@ -2280,6 +2313,8 @@ class MainActivity : Activity() {
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_HOME_ICON_POSITION = "home_icon_position"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+        private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
+        private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_ACCENT = "accent_color"
