@@ -1561,16 +1561,21 @@ class MainActivity : Activity() {
         layout.addView(sizeLabel); layout.addView(sizeSlider)
         AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
             .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
-            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen() }
+            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen(); refreshFloatingDock() }
             .setNegativeButton("Tutup", null).show()
     }
 
     private fun chooseIconPack() {
         val actions = listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.anddoes.launcher.THEME", "com.teslacoilsw.launcher.THEME")
-        val packs = actions.flatMap { action ->
+        val detected = actions.flatMap { action ->
             try { packageManager.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL).map { it.activityInfo.packageName } }
             catch (_: Exception) { emptyList() }
-        }.filter { it != packageName }.distinct().sorted()
+        }
+        // Some Play Store packs (including Simply Minimal) don't advertise a standard theme intent.
+        val packs = (detected + listOf("com.italiano.simplyminimal"))
+            .filter { it != packageName }.distinct()
+            .filter { pack -> try { packageManager.getApplicationInfo(pack, 0); true } catch (_: Exception) { false } }
+            .sorted()
         val labels = (listOf("Ikon bawaan aplikasi") + packs.map { pack ->
             try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pack, 0)).toString() } catch (_: Exception) { pack }
         }).toTypedArray()
