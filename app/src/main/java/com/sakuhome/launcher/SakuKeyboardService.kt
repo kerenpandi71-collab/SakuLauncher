@@ -1,6 +1,7 @@
 package com.sakuhome.launcher
 
 import android.content.ClipboardManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -38,9 +39,14 @@ class SakuKeyboardService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         val prefs = getSharedPreferences("saku_keyboard", MODE_PRIVATE)
-        floating = prefs.getBoolean("floating_mode", false)
-        var keyHeight = prefs.getInt("key_height_dp", 48).coerceIn(40, 60)
-        var positionOffset = prefs.getInt("position_offset_dp", 0).coerceIn(0, 60)
+        // Keep portrait and landscape keyboard preferences independent.
+        val orientationKey = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+        val floatingPref = "floating_mode_$orientationKey"
+        val keyHeightPref = "key_height_${orientationKey}_dp"
+        val positionOffsetPref = "position_offset_${orientationKey}_dp"
+        floating = prefs.getBoolean(floatingPref, false)
+        var keyHeight = prefs.getInt(keyHeightPref, 48).coerceIn(40, 60)
+        var positionOffset = prefs.getInt(positionOffsetPref, 0).coerceIn(0, 60)
         val dark = getSharedPreferences("saku_dock_settings", MODE_PRIVATE).getBoolean("dark_theme", true)
         val bg = if (dark) Color.rgb(35, 38, 45) else Color.rgb(232, 234, 239)
         val keyBg = if (dark) Color.rgb(73, 77, 86) else Color.WHITE
@@ -104,27 +110,27 @@ class SakuKeyboardService : InputMethodService() {
         }
         toolButton("↑", "Geser isi keyboard ke atas") {
             positionOffset = (positionOffset + 8).coerceAtMost(60)
-            prefs.edit().putInt("position_offset_dp", positionOffset).apply()
+            prefs.edit().putInt(positionOffsetPref, positionOffset).apply()
             rebuild()
         }
         toolButton("↓", "Geser isi keyboard ke bawah") {
             positionOffset = (positionOffset - 8).coerceAtLeast(0)
-            prefs.edit().putInt("position_offset_dp", positionOffset).apply()
+            prefs.edit().putInt(positionOffsetPref, positionOffset).apply()
             rebuild()
         }
         toolButton("A−", "Kurangi tinggi tombol") {
             keyHeight = (keyHeight - 2).coerceAtLeast(40)
-            prefs.edit().putInt("key_height_dp", keyHeight).apply()
+            prefs.edit().putInt(keyHeightPref, keyHeight).apply()
             rebuild()
         }
         toolButton("A+", "Tambah tinggi tombol") {
             keyHeight = (keyHeight + 2).coerceAtMost(60)
-            prefs.edit().putInt("key_height_dp", keyHeight).apply()
+            prefs.edit().putInt(keyHeightPref, keyHeight).apply()
             rebuild()
         }
         toolButton("⤢", "Beralih mode ringkas atau keyboard penuh") {
             floating = !floating
-            prefs.edit().putBoolean("floating_mode", floating).apply()
+            prefs.edit().putBoolean(floatingPref, floating).apply()
             rebuild()
         }
         root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(34)).apply {
