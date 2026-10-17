@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">DroidOS Trackpad</string>
+    <string name="accessibility_service_description">DroidOS Input Service</string>
+</resources>

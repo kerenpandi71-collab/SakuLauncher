@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <permission
+        android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.permission.INTERNAL_COMMAND"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="com.katsuyamaki.DroidOSFOSSLauncher.permission.INTERNAL_COMMAND" />
+
+    <queries>
+        <package android:name="com.katsuyamaki.DroidOSFOSSLauncher" />
+        <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="rikka.shizuku.ui" />
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VOICE_COMMAND" />
+        </intent>
+        <package android:name="com.google.android.googlequicksearchbox" />
+    </queries>
+
+    <application> 
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|density|smallestScreenSize"
+            android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.CoverScreenTester">
+            
+            <meta-data android:name="android.max_aspect" android:value="4.0" />
+        </activity>
+
+        <activity 
+            android:name=".SettingsActivity"
+            android:exported="false" 
+            android:theme="@style/Theme.CoverScreenTester" />
+
+        <activity 
+            android:name=".ProfilesActivity"
+            android:exported="false" 
+            android:theme="@style/Theme.CoverScreenTester" />
+
+        <activity 
+            android:name=".ManualAdjustActivity"
+            android:exported="false" 
+            android:theme="@style/Theme.CoverScreenTester" />
+            
+        <activity 
+            android:name=".KeyboardActivity"
+            android:exported="false" 
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
+        <activity
+            android:name=".KeyboardPickerActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:exported="false" />
+
+        <service
+            android:name=".OverlayService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+                <action android:name="PREVIEW_UPDATE" />
+                <action android:name="RESET_POSITION" />
+                <action android:name="ROTATE" />
+                <action android:name="SAVE_LAYOUT" />
+                <action android:name="LOAD_LAYOUT" />
+                <action android:name="RELOAD_PREFS" />
+                <action android:name="DELETE_PROFILE" />
+                <action android:name="MANUAL_ADJUST" /> 
+                <action android:name="CYCLE_INPUT_TARGET" />
+                <action android:name="RESET_CURSOR" />
+                <action android:name="TOGGLE_DEBUG" />
+                <action android:name="FORCE_KEYBOARD" />
+                <action android:name="TOGGLE_CUSTOM_KEYBOARD" />
+                <action android:name="SET_TRACKPAD_VISIBILITY" />
+                <action android:name="SET_PREVIEW_MODE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <service
+            android:name=".NullInputMethodService"
+            android:label="DroidOS Null Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+        <!-- =================================================================================
+             INTER-APP COMMAND RECEIVER
+             SUMMARY: Static receiver to handle commands from DroidOS Launcher and ADB.
+                      Allows soft restart, z-order fixes, and virtual display coordination
+                      without requiring the Activity to be in foreground.
+             USAGE (ADB): adb shell am broadcast -a com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.SOFT_RESTART
+             ================================================================================= -->
+                <receiver
+                    android:name=".InterAppCommandReceiver"
+                    android:enabled="true"
+                    android:exported="true"
+                    android:permission="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.permission.INTERNAL_COMMAND">
+                    <intent-filter>
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.SOFT_RESTART" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MOVE_TO_VIRTUAL" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.RETURN_TO_PHYSICAL" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.ENFORCE_ZORDER" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.TOGGLE_VIRTUAL_MIRROR" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.OPEN_DRAWER" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.GET_STATUS" />
+                        <action android:name="com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.STOP_SERVICE" />
+                    </intent-filter>
+                </receiver>
+        <!-- END BLOCK: INTER-APP COMMAND RECEIVER -->
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false" />
+
+    </application>
+
+</manifest>
