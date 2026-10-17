@@ -596,7 +596,7 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index).apply {
                 background = ColorDrawable(Color.TRANSPARENT)
                 setPadding(dp(3), dp(4), dp(3), dp(4))
-            }, LinearLayout.LayoutParams(dp(iconSizeDp + 2), -1).apply {
+            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(dockHeightDp - 12) + 2), -1).apply {
                 marginStart = dp(2)
                 marginEnd = dp(2)
             })
@@ -605,9 +605,6 @@ class MainActivity : Activity() {
         dock.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         dock.minimumHeight = dp(dockHeightDp)
         dock.minimumWidth = dp(dockWidthDp)
-        dock.layoutParams = LinearLayout.LayoutParams(dp(dockWidthDp), dp(dockHeightDp)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
         return dock
     }
 
@@ -1581,13 +1578,13 @@ class MainActivity : Activity() {
         }).toTypedArray()
         val menu = (listOf("Ikon bawaan aplikasi") + labels.drop(1) + "Pilih folder ikon dari Download…").toTypedArray()
         AlertDialog.Builder(this).setTitle("Pilih icon pack")
-            .setMessage("Paket terpasang dideteksi dari intent tema umum. Kamu juga bisa memilih folder berisi PNG/WebP ikon; nama file sebaiknya nama paket aplikasi atau nama paket dengan titik diganti garis bawah.")
+            .setMessage("Icon pack terpasang yang kompatibel akan terdeteksi otomatis. Untuk Simply Minimal, pilih paketnya lalu Terapkan; jika ikon tidak berubah, gunakan folder ikon PNG/WebP yang sudah diekstrak.")
             .setItems(menu) { _, which ->
                 if (which == menu.lastIndex) { chooseLocalIconFolder(); return@setItems }
                 val selected = if (which == 0) "" else packs[which - 1]
                 preferences.edit().putString(KEY_ICON_PACK, selected).remove(KEY_LOCAL_ICON_FOLDER).apply()
-                apps = loadApps(); rebuildPinnedViews(); buildScreen()
-                Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih; ikon yang cocok diperbarui", Toast.LENGTH_SHORT).show()
+                apps = loadApps(); rebuildPinnedViews(); buildScreen(); refreshFloatingDock()
+                Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih: ikon yang tersedia di pack akan diterapkan", Toast.LENGTH_SHORT).show()
             }.setNegativeButton("Batal", null).show()
     }
 
@@ -1608,6 +1605,7 @@ class MainActivity : Activity() {
             preferences.edit().putString(KEY_LOCAL_ICON_FOLDER, uri.toString()).putString(KEY_ICON_PACK, "").apply()
             apps = loadApps()
             buildScreen()
+            refreshFloatingDock()
             Toast.makeText(this, "Folder ikon dipilih. Ikon bernama cocok akan digunakan.", Toast.LENGTH_LONG).show()
         }
     }
