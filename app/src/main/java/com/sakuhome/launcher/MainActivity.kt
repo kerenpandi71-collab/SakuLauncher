@@ -1648,7 +1648,8 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Display Lab · Virtual Display / Root"
+            "Display Lab · Virtual Display / Root",
+            "Uji virtual display minimal"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1701,6 +1702,11 @@ class MainActivity : Activity() {
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
                     18 -> showDisplayLab()
+                    19 -> try {
+                        startActivity(Intent(this, VirtualDisplayTestActivity::class.java))
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Tes virtual display tidak dapat dibuka: ${e.localizedMessage ?: "error"}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }.setNegativeButton("Tutup", null).show()
     }
