@@ -220,6 +220,8 @@ class FloatingDockService : Service() {
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_DOCK_WIDTH = "dock_width_dp"
+        private const val KEY_DOCK_HEIGHT = "dock_height_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
     }
 }
