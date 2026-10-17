@@ -490,7 +490,7 @@ class FloatingDockService : Service() {
                 text = label; textSize = 14f; setTextColor(foreground); gravity = Gravity.CENTER_VERTICAL
                 contentDescription = description
                 setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = GradientDrawable().apply { setColor(Color.argb(if (dark) 24 else 16, 128, 150, 210)); cornerRadius = dp(14).toFloat() }
+                this.background = GradientDrawable().apply { setColor(Color.argb(if (dark) 24 else 16, 128, 150, 210)); cornerRadius = dp(14).toFloat() }
                 isClickable = true; isFocusable = true
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
