@@ -222,7 +222,7 @@ class MainActivity : Activity() {
 
     /**
      * Launch a separate launcher Activity on the available secondary display.
-     * The phone Activity stays on Display 0 to host the final trackpad overlay.
+     * The phone Activity stays on Display 0; the desktop Activity can open on a secondary display.
      */
     private fun launchLauncherOnSecondaryDisplayIfAvailable() {
         if (android.os.Build.VERSION.SDK_INT < 26) return
@@ -601,7 +601,6 @@ class MainActivity : Activity() {
             }
         })
         startPanel.visibility = View.GONE
-        addTrackpadModeControls()
         setContentView(rootFrame)
         updateClock()
     }
@@ -877,7 +876,6 @@ class MainActivity : Activity() {
             bottomMargin = dp(86)
         })
         startPanel.visibility = View.GONE
-        addTrackpadModeControls()
         setContentView(rootFrame)
         updateClock()
     }
@@ -888,53 +886,6 @@ class MainActivity : Activity() {
         } else {
             windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
         }
-    }
-
-    /** Trackpad prototype: maps pad movement to a visible pointer in the desktop area.
-     * Accessibility gesture injection is used for taps; this is not a hardware mouse.
-     */
-    /**
-     * Only one trackpad implementation is kept: FloatingDockService's final overlay.
-     * This Activity contributes only the phone-side toggle; no embedded pad/pointer.
-     */
-    private fun addTrackpadModeControls() {
-        if (isOnSecondaryDisplay()) return
-        val enabled = preferences.getBoolean(KEY_TRACKPAD_MODE, false)
-        val toggle = TextView(this).apply {
-            text = if (enabled) "✕ Matikan trackpad" else "⌖ Aktifkan trackpad"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(48, 88, 155))
-                cornerRadius = dp(18).toFloat()
-            }
-            elevation = dp(12).toFloat()
-            contentDescription = if (enabled) "Matikan trackpad final" else "Aktifkan trackpad final"
-            setOnClickListener {
-                val activate = !preferences.getBoolean(KEY_TRACKPAD_MODE, false)
-                if (activate && !Settings.canDrawOverlays(this@MainActivity)) {
-                    Toast.makeText(this@MainActivity, "Izinkan Saku tampil di atas aplikasi lain, lalu aktifkan trackpad lagi", Toast.LENGTH_LONG).show()
-                    try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (_: Exception) { }
-                    return@setOnClickListener
-                }
-                preferences.edit().putBoolean(KEY_TRACKPAD_MODE, activate).apply()
-                val action = if (activate) FloatingDockService.ACTION_TRACKPAD_ON else FloatingDockService.ACTION_TRACKPAD_OFF
-                val serviceIntent = Intent(this@MainActivity, FloatingDockService::class.java).setAction(action)
-                try {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && activate) startForegroundService(serviceIntent)
-                    else startService(serviceIntent)
-                } catch (_: Exception) {
-                    Toast.makeText(this@MainActivity, "Layanan trackpad tidak dapat dijalankan", Toast.LENGTH_LONG).show()
-                }
-                buildScreen()
-            }
-        }
-        rootFrame.addView(toggle, FrameLayout.LayoutParams(-2, dp(42), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(38)
-            marginEnd = dp(12)
-        })
     }
 
     private fun hideStartPanelIfVisible() {
@@ -1409,18 +1360,7 @@ class MainActivity : Activity() {
             return
         }
         try {
-            if (preferences.getBoolean(KEY_TRACKPAD_MODE, false)) {
-                // Request a bounded desktop window above the virtual trackpad area.
-                // Android only honors launch bounds when the system supports a compatible
-                // multi-window/freeform mode; otherwise the OS may still use full screen.
-                val metrics = resources.displayMetrics
-                val topHeight = (metrics.heightPixels * 0.62f).toInt().coerceAtLeast(dp(240))
-                val bounds = Rect(0, 0, metrics.widthPixels, topHeight)
-                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                startActivity(launchIntent, options.toBundle())
-            } else {
-                startActivity(launchIntent)
-            }
+            startActivity(launchIntent)
         } catch (_: Exception) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
         }
@@ -2876,7 +2816,6 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        private const val KEY_TRACKPAD_MODE = "saku_virtual_trackpad_mode"
         private const val KEY_TARGET_DISPLAY_ID = "saku_target_display_id"
         private const val EXTRA_SECONDARY_DISPLAY_LAUNCH = "com.sakuhome.launcher.EXTRA_SECONDARY_DISPLAY_LAUNCH"
         private const val PREFS_NAME = "saku_dock_settings"
