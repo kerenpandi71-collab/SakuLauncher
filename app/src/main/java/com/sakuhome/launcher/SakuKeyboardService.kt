@@ -128,6 +128,23 @@ class SakuKeyboardService : InputMethodService() {
                 elevation = dp(1).toFloat()
                 isClickable = true
                 setOnClickListener { action() }
+                if (label == "⌫") {
+                    setOnTouchListener { _, event ->
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN -> {
+                                deleteRepeating = true
+                                repeatHandler.postDelayed(deleteRunnable, 380L)
+                                false
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                deleteRepeating = false
+                                repeatHandler.removeCallbacks(deleteRunnable)
+                                false
+                            }
+                            else -> false
+                        }
+                    }
+                }
             }
             currentRow?.addView(button, LinearLayout.LayoutParams(0, dp(43), flex).apply {
                 marginStart = dp(2); marginEnd = dp(2); topMargin = dp(3); bottomMargin = dp(3)
@@ -146,38 +163,14 @@ class SakuKeyboardService : InputMethodService() {
                 .forEach { c -> key(if (shifted && !symbols) c.uppercase() else c) { commit(if (shifted && !symbols) c.uppercase() else c); shifted = false } }
         }
         addRow {
-            key("⇧", 1.15f, true) { shifted = !shifted; symbols = false; rebuild() }
             (if (symbols) listOf("@","#","$","%","&","-","+","(",")") else listOf("a","s","d","f","g","h","j","k","l"))
                 .forEach { c -> key(if (shifted && !symbols) c.uppercase() else c) { commit(if (shifted && !symbols) c.uppercase() else c); shifted = false } }
-            key("⌫", 1.25f, true) { currentInputConnection?.deleteSurroundingText(1, 0) }
-        }
-        // A Gboard-like long-press backspace continuously deletes; release stops it.
-        currentRow?.getChildAt(currentRow!!.childCount - 1)?.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    deleteRepeating = true
-                    repeatHandler.postDelayed(deleteRunnable, 380L)
-                    false
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    deleteRepeating = false
-                    repeatHandler.removeCallbacks(deleteRunnable)
-                    false
-                }
-                else -> false
-            }
         }
         addRow {
+            key("⇧", 1.25f, true) { shifted = !shifted; symbols = false; rebuild() }
             (if (symbols) listOf("*","\"","'",":",";","!","?") else listOf("z","x","c","v","b","n","m"))
                 .forEach { c -> key(if (shifted && !symbols) c.uppercase() else c) { commit(if (shifted && !symbols) c.uppercase() else c); shifted = false } }
-            key("⌫", 1.2f, true) { currentInputConnection?.deleteSurroundingText(1, 0) }
-        }
-        currentRow?.getChildAt(currentRow!!.childCount - 1)?.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> { deleteRepeating = true; repeatHandler.postDelayed(deleteRunnable, 380L); false }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { deleteRepeating = false; repeatHandler.removeCallbacks(deleteRunnable); false }
-                else -> false
-            }
+            key("⌫", 1.25f, true) { currentInputConnection?.deleteSurroundingText(1, 0) }
         }
         addRow {
             key("🌐", 1f) { requestShowSelf(0) }
