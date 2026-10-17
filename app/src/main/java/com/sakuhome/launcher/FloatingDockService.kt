@@ -160,8 +160,7 @@ class FloatingDockService : Service() {
             }
         }
         dock.addView(settingsButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 40), dp(48)))
-        {
-            fun navButton(label: String, description: String, action: () -> Unit) {
+        fun navButton(label: String, description: String, action: () -> Unit) {
                 val button = TextView(this).apply {
                     text = label
                     contentDescription = description
@@ -194,7 +193,6 @@ class FloatingDockService : Service() {
                 if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
                     Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
             }
-        }
 
         val params = WindowManager.LayoutParams(
             dp(if (landscape) 300 else 280),
