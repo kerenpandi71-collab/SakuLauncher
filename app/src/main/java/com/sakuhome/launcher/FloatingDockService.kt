@@ -32,6 +32,7 @@ class FloatingDockService : Service() {
     private var drawerView: View? = null
     private var navigationView: View? = null
     private var dockRevealHandle: View? = null
+    private var gestureStartY = 0f
     private var isForeground = false
     private var lastLandscape: Boolean? = null
 
@@ -186,6 +187,19 @@ class FloatingDockService : Service() {
                     gravity = Gravity.CENTER
                     setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
                     setOnClickListener { action() }
+                    setOnTouchListener { _, event ->
+                        when (event.action) {
+                            android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; false }
+                            android.view.MotionEvent.ACTION_UP -> {
+                                val deltaY = event.rawY - gestureStartY
+                                if (deltaY < -dp(45)) {
+                                    hideDockTemporarily()
+                                    true
+                                } else false
+                            }
+                            else -> false
+                        }
+                    }
                 }
                 dock.addView(button, LinearLayout.LayoutParams(dp(48), -1))
             }
@@ -200,9 +214,6 @@ class FloatingDockService : Service() {
             navButton("□", "Aplikasi terbaru") {
                 if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
                     Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
-            }
-            navButton("⌄", "Sembunyikan bilah navigasi sementara") {
-                hideDockTemporarily()
             }
         }
 
@@ -319,48 +330,9 @@ class FloatingDockService : Service() {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.LEFT or Gravity.TOP; x = dp(8); y = dp(8); softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE }
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-            background = GradientDrawable().apply {
-                setColor(panelColor)
-                setStroke(dp(1), Color.argb(150, 255, 255, 255))
-                cornerRadius = dp(22).toFloat()
-            }
-            fun button(label: String, desc: String, action: () -> Unit) = TextView(this@FloatingDockService).apply {
-                text = label; contentDescription = desc; textSize = 20f; gravity = Gravity.CENTER
-                setTextColor(textColor); background = GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius = dp(14).toFloat() }
-                setOnClickListener { action() }
-            }
-            addView(button("‹", "Sembunyikan panel aplikasi") { hideFloatingDrawer() }, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(button("▦", "Tampilkan semua aplikasi") { if (drawerView == null) showFloatingDrawer() }, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(button("◁", "Kembali") {
-                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) Toast.makeText(this@FloatingDockService, "Aktifkan aksesibilitas Navigasi desktop Saku untuk tombol Back", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(button("○", "Beranda") { hideFloatingDrawer(); val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); try { startActivity(i) } catch (_: Exception) { } }, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(button("□", "Aplikasi terbaru") {
-                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) Toast.makeText(this@FloatingDockService, "Aktifkan aksesibilitas Navigasi desktop Saku untuk Recent Apps", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(42), 1f))
-            addView(button("⚙", "Pengaturan Saku Launcher") {
-                val openSettings = Intent(this@FloatingDockService, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
-                }
-                try { startActivity(openSettings) } catch (_: Exception) { }
-            }, LinearLayout.LayoutParams(0, dp(42), 1f))
-        }
-        val navParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, dp(52),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.BOTTOM; y = dp(4) }
         try {
             windowManager.addView(panel, panelParams)
             drawerView = panel
-            windowManager.addView(nav, navParams)
-            navigationView = nav
         } catch (_: Exception) {
             try { windowManager.removeView(panel) } catch (_: Exception) { }
             drawerView = null
@@ -393,31 +365,32 @@ class FloatingDockService : Service() {
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
-        val handle = TextView(this).apply {
-            text = "⌃"
-            textSize = 20f
-            gravity = Gravity.CENTER
-            contentDescription = "Tampilkan kembali bilah navigasi Saku"
-            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-            background = GradientDrawable().apply {
-                setColor(Color.argb(210, if (darkTheme) 31 else 247, if (darkTheme) 37 else 249, if (darkTheme) 52 else 253))
-                setStroke(dp(1), Color.argb(170, 255, 255, 255))
-                cornerRadius = dp(18).toFloat()
-            }
-            elevation = dp(12).toFloat()
-            setOnClickListener {
-                removeDockRevealHandle()
-                showDock()
+        val handle = View(this).apply {
+            contentDescription = "Swipe ke bawah untuk menampilkan kembali navigasi Saku"
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnTouchListener { _, event ->
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> { gestureStartY = event.rawY; true }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        val deltaY = event.rawY - gestureStartY
+                        if (deltaY > dp(35)) {
+                            removeDockRevealHandle()
+                            showDock()
+                        }
+                        true
+                    }
+                    else -> true
+                }
             }
         }
         val params = WindowManager.LayoutParams(
-            dp(56), dp(28),
+            WindowManager.LayoutParams.MATCH_PARENT, dp(18),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(2)
+            gravity = Gravity.BOTTOM
+            y = 0
         }
         try {
             windowManager.addView(handle, params)
