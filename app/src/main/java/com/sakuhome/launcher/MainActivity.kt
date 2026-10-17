@@ -710,14 +710,12 @@ class MainActivity : Activity() {
                 // fallback for ROMs that block hidden API access.
                 val method = ActivityOptions::class.java.getDeclaredMethod(
                     "setLaunchWindowingMode",
-                    Int::class.javaPrimitiveType
+                    Int::class.javaPrimitiveType!!
                 )
                 method.isAccessible = true
                 method.invoke(options, 5)
-            } catch (_: ReflectiveOperationException) {
-                // ROM/API may hide this method; setLaunchBounds remains a best-effort hint.
-            } catch (_: SecurityException) {
-                // Hidden-API enforcement: continue with launch bounds.
+            } catch (_: Exception) {
+                // ROM/API may hide or reject this method; setLaunchBounds remains a best-effort hint.
             }
             startActivity(launchIntent, options.toBundle())
         } catch (_: Exception) {
