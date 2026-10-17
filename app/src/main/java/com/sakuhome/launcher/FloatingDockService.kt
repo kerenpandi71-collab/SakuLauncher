@@ -17,6 +17,11 @@ import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.view.inputmethod.InputMethodManager
+import android.widget.PopupWindow
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -36,6 +41,8 @@ class FloatingDockService : Service() {
     private var gestureStartY = 0f
     private var isForeground = false
     private var lastLandscape: Boolean? = null
+    private var quickMenuView: View? = null
+    private var lastBubbleTapAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -371,6 +378,7 @@ class FloatingDockService : Service() {
     }
 
     private fun hideDockTemporarily() {
+        hideQuickMenu()
         hideFloatingDrawer()
         dockView?.let { view -> try { windowManager.removeView(view) } catch (_: Exception) { } }
         dockView = null
@@ -435,7 +443,19 @@ class FloatingDockService : Service() {
                     if (dragged) {
                         prefs.edit().putInt(KEY_BUBBLE_X, params.x).putInt(KEY_BUBBLE_Y, params.y).apply()
                     } else {
-                        if (dockView == null) showDock() else hideDockTemporarily()
+                        val now = SystemClock.uptimeMillis()
+                        if (now - lastBubbleTapAt <= 330L) {
+                            lastBubbleTapAt = 0L
+                            showQuickMenu()
+                        } else {
+                            lastBubbleTapAt = now
+                            bubble.postDelayed({
+                                if (lastBubbleTapAt == now) {
+                                    if (dockView == null) showDock() else hideDockTemporarily()
+                                    lastBubbleTapAt = 0L
+                                }
+                            }, 340L)
+                        }
                     }
                     true
                 }
@@ -443,6 +463,72 @@ class FloatingDockService : Service() {
             }
         }
         try { windowManager.addView(bubble, params); assistiveBubble = bubble } catch (_: Exception) { assistiveBubble = null }
+    }
+
+    private fun showQuickMenu() {
+        if (!Settings.canDrawOverlays(this)) return
+        quickMenuView?.let { try { windowManager.removeView(it) } catch (_: Exception) { }; quickMenuView = null }
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dark = prefs.getBoolean(KEY_DARK_THEME, true)
+        val foreground = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val background = if (dark) Color.rgb(31, 37, 52) else Color.rgb(248, 249, 253)
+        val menu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            this.background = GradientDrawable().apply {
+                setColor(background); setStroke(dp(1), Color.argb(150, 255, 255, 255)); cornerRadius = dp(22).toFloat()
+            }
+            elevation = dp(20).toFloat()
+        }
+        menu.addView(TextView(this).apply {
+            text = "Saku Assist"; textSize = 17f; setTextColor(foreground)
+            setPadding(dp(8), dp(5), dp(8), dp(10))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        fun action(label: String, description: String, run: () -> Unit) {
+            menu.addView(TextView(this).apply {
+                text = label; textSize = 14f; setTextColor(foreground); gravity = Gravity.CENTER_VERTICAL
+                contentDescription = description
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = GradientDrawable().apply { setColor(Color.argb(if (dark) 24 else 16, 128, 150, 210)); cornerRadius = dp(14).toFloat() }
+                isClickable = true; isFocusable = true
+                setOnClickListener { run(); hideQuickMenu() }
+            }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
+        }
+        action("⇧  Scroll ke atas", "Gulir layar ke atas") { SakuNavigationAccessibilityService.performScroll(false) }
+        action("⇩  Scroll ke bawah", "Gulir layar ke bawah") { SakuNavigationAccessibilityService.performScroll(true) }
+        action("⌨  Keyboard bergaya iOS", "Pilih keyboard Saku bergaya iOS") {
+            try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
+            catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
+        }
+        action("▤  Papan klip", "Lihat teks terakhir di papan klip") {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val text = if (clipboard.hasPrimaryClip()) clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty() else ""
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Papan klip")
+                .setMessage(if (text.isBlank()) "Papan klip masih kosong." else text)
+                .setPositiveButton("Salin lagi") { _, _ ->
+                    if (text.isNotBlank()) clipboard.setPrimaryClip(ClipData.newPlainText("Saku clipboard", text))
+                }
+                .setNegativeButton("Tutup", null).show()
+        }
+        action("×  Tutup", "Tutup menu Saku Assist") { }
+        val params = WindowManager.LayoutParams(
+            dp(250), WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.RIGHT
+            x = dp(16); y = dp(160)
+        }
+        try { windowManager.addView(menu, params); quickMenuView = menu }
+        catch (_: Exception) { quickMenuView = null; Toast.makeText(this, "Menu bantuan tidak dapat ditampilkan", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun hideQuickMenu() {
+        quickMenuView?.let { try { windowManager.removeView(it) } catch (_: Exception) { } }
+        quickMenuView = null
     }
 
     private fun removeAssistiveBubble() {
