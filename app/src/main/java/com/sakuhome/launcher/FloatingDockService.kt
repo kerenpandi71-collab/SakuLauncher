@@ -125,35 +125,52 @@ class FloatingDockService : Service() {
             }
             elevation = dp(12).toFloat()
         }
-        val startButton = TextView(this).apply {
-            text = "▦"
-            textSize = 20f
-            gravity = Gravity.CENTER
-            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-            background = rounded(accentColor, 17)
-            contentDescription = "Buka Start"
-            setOnClickListener {
-                if (drawerView == null) showFloatingDrawer() else hideFloatingDrawer()
+        fun dockActionButton(label: String, description: String, highlighted: Boolean = false, action: () -> Unit): TextView =
+            TextView(this).apply {
+                text = label
+                textSize = if (label == "⚙") 20f else 21f
+                gravity = Gravity.CENTER
+                setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+                contentDescription = description
+                background = GradientDrawable().apply {
+                    setColor(if (highlighted) accentColor else Color.argb(if (darkTheme) 28 else 20, if (darkTheme) 255 else 22, if (darkTheme) 255 else 30, if (darkTheme) 255 else 46))
+                    cornerRadius = dp(15).toFloat()
+                }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+        fun actionDivider() {
+            dock.addView(View(this).apply {
+                setBackgroundColor(Color.argb(if (darkTheme) 68 else 50, if (darkTheme) 255 else 25, if (darkTheme) 255 else 31, if (darkTheme) 255 else 48))
+                isClickable = false
+            }, if (sideDock) LinearLayout.LayoutParams(dp(28), dp(1)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(4); bottomMargin = dp(4)
+            } else LinearLayout.LayoutParams(dp(1), dp(28)).apply {
+                gravity = Gravity.CENTER_VERTICAL; marginStart = dp(4); marginEnd = dp(4)
+            })
+        }
+        val actionButtonWidth = dp(if (sideDock) 56 else 44)
+        val actionButtonHeight = dp(if (sideDock) 44 else 48)
+        val startButton = dockActionButton("▦", "Buka menu aplikasi", true) {
+            if (drawerView == null) showFloatingDrawer() else hideFloatingDrawer()
+        }
+        dock.addView(startButton, LinearLayout.LayoutParams(actionButtonWidth, actionButtonHeight).apply {
+            if (sideDock) gravity = Gravity.CENTER_HORIZONTAL else gravity = Gravity.CENTER_VERTICAL
+        })
+        actionDivider()
+        val settingsButton = dockActionButton("⚙", "Pengaturan Saku Launcher") {
+            val openSettings = Intent(this@FloatingDockService, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+            }
+            try { startActivity(openSettings) } catch (_: Exception) {
+                Toast.makeText(this@FloatingDockService, "Pengaturan Saku Launcher tidak dapat dibuka", Toast.LENGTH_SHORT).show()
             }
         }
-        dock.addView(startButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 45), dp(48)))
-        val settingsButton = TextView(this).apply {
-            text = "⚙"
-            textSize = 21f
-            gravity = Gravity.CENTER
-            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-            contentDescription = "Pengaturan Saku Launcher"
-            setOnClickListener {
-                val openSettings = Intent(this@FloatingDockService, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
-                }
-                try { startActivity(openSettings) } catch (_: Exception) {
-                    Toast.makeText(this@FloatingDockService, "Pengaturan Saku Launcher tidak dapat dibuka", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-        dock.addView(settingsButton, LinearLayout.LayoutParams(dp(if (landscape) 42 else 40), dp(48)))
+        dock.addView(settingsButton, LinearLayout.LayoutParams(actionButtonWidth, actionButtonHeight).apply {
+            if (sideDock) gravity = Gravity.CENTER_HORIZONTAL else gravity = Gravity.CENTER_VERTICAL
+        })
         // One UI-inspired navigation cluster: separate hit targets and subtle dividers
         // reduce accidental taps while keeping the dock compact.
         fun navDivider() {
@@ -287,7 +304,11 @@ class FloatingDockService : Service() {
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(5), dp(5), dp(5), dp(5))
+                    setPadding(dp(8), dp(4), dp(10), dp(4))
+                    background = GradientDrawable().apply {
+                        setColor(Color.argb(if (dark) 18 else 12, if (dark) 255 else 30, if (dark) 255 else 38, if (dark) 255 else 54))
+                        cornerRadius = dp(14).toFloat()
+                    }
                     isClickable = true
                     isFocusable = true
                     setOnClickListener {
@@ -298,7 +319,7 @@ class FloatingDockService : Service() {
                         }
                     }
                 }
-                row.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(42), dp(42)))
+                row.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(40), dp(40)))
                 row.addView(TextView(this).apply {
                     text = app.label
                     textSize = 14f
@@ -306,8 +327,8 @@ class FloatingDockService : Service() {
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(dp(12), 0, 0, 0)
-                }, LinearLayout.LayoutParams(0, dp(48), 1f))
-                list.addView(row, LinearLayout.LayoutParams(-1, dp(50)))
+                }, LinearLayout.LayoutParams(0, dp(40), 1f))
+                list.addView(row, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(4) })
             }
         }
         populate("")
