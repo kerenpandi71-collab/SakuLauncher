@@ -97,6 +97,7 @@ class FloatingDockService : Service() {
         val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
         val dockWidth = prefs.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
         val dockHeight = prefs.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
             prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
@@ -125,7 +126,7 @@ class FloatingDockService : Service() {
             }
         }
         dock.addView(startButton, LinearLayout.LayoutParams(dp(45), dp(48)))
-        pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
+        if (!landscape) pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
             val icon = ImageView(this).apply {
                 setImageDrawable(app.icon)
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -153,16 +154,41 @@ class FloatingDockService : Service() {
             }
             dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize.coerceAtMost(dockHeight - 12)), -1))
         }
+        if (landscape) {
+            fun navButton(label: String, description: String, action: () -> Unit) {
+                val button = TextView(this).apply {
+                    text = label
+                    contentDescription = description
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
+                    setOnClickListener { action() }
+                }
+                dock.addView(button, LinearLayout.LayoutParams(dp(48), -1))
+            }
+            navButton("‹", "Kembali") {
+                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+                    Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
+            }
+            navButton("○", "Beranda") {
+                hideFloatingDrawer()
+                try { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
+            }
+            navButton("□", "Aplikasi terbaru") {
+                if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS))
+                    Toast.makeText(this, "Aktifkan aksesibilitas Navigasi desktop Saku", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         val params = WindowManager.LayoutParams(
-            dp(dockWidth),
+            dp(if (landscape) 210 else dockWidth),
             dp(dockHeight),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(28)
+            y = dp(if (landscape) 8 else 28)
         }
         try {
             windowManager.addView(dock, params)
