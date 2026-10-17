@@ -345,6 +345,7 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(3), dp(14), dp(10))
         }
 
+        val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -363,6 +364,7 @@ class MainActivity : Activity() {
         }
         brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(1) })
         brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(0) })
+        brand.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
 
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
@@ -370,7 +372,9 @@ class MainActivity : Activity() {
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
-        shell.addView(buildStatusStrip(), LinearLayout.LayoutParams(-1, dp(34)).apply {
+        val statusStrip = buildStatusStrip()
+        statusStrip.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
+        shell.addView(statusStrip, LinearLayout.LayoutParams(-1, dp(34)).apply {
             topMargin = dp(1)
             bottomMargin = dp(1)
         })
@@ -378,14 +382,15 @@ class MainActivity : Activity() {
         val pageControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), dp(13), dp(5), dp(10))
+            setPadding(dp(5), dp(if (landscapeLayout) 5 else 13), dp(5), dp(if (landscapeLayout) 5 else 10))
             visibility = if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) View.GONE else View.VISIBLE
         }
         pageControls.addView(TextView(this).apply {
-            text = "LAYAR UTAMA"
+            text = "DESKTOP"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
+            visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         }, LinearLayout.LayoutParams(0, -2, 1f))
         pageControls.addView(chipButton("‹", cardSurface, primaryText, 12).apply {
             setOnClickListener { showHomePage(homePage - 1) }
@@ -502,7 +507,7 @@ class MainActivity : Activity() {
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
             val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, availableWidthDp)
+            val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, availableWidthDp)
             val dockGravity = if (landscape) currentDockGravity() else Gravity.CENTER_HORIZONTAL
             shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(dockHeightDp)).apply {
                 gravity = dockGravity
@@ -515,9 +520,9 @@ class MainActivity : Activity() {
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val drawerPosition = preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left"
-        val landscapeDrawerWidth = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460)
+        val landscapeDrawerWidth = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300).coerceIn(280, 460)
         val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(if (landscape) landscapeDrawerWidth else 500))
-        val actualPanelHeight = if (landscape) (screenHeightDp - 28).coerceAtLeast(240) else panelHeight
+        val actualPanelHeight = if (landscape) (screenHeightDp - 88).coerceAtLeast(240) else panelHeight
         val panelGravity = if (!landscape) {
             Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         } else if (drawerPosition == "right") {
@@ -611,7 +616,7 @@ class MainActivity : Activity() {
     private fun buildDock(): View {
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
-        val effectiveWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, maxWidth)
+        val effectiveWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, maxWidth)
         val effectiveHeight = dockHeightDp
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1133,10 +1138,10 @@ class MainActivity : Activity() {
             return
         }
         val items = arrayOf(
-            "Lebar drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340) + " dp",
-            "Kolom drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5),
-            "Ukuran ikon drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42) + " dp",
-            "Dock: " + preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) + " dp · " + preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")
+            "Lebar drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300) + " dp",
+            "Kolom drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4),
+            "Ukuran ikon drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40) + " dp",
+            "Dock: " + preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) + " dp · " + preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")
         )
         AlertDialog.Builder(this).setTitle("Kustomisasi landscape").setItems(items) { _, which ->
             when (which) {
@@ -1150,9 +1155,9 @@ class MainActivity : Activity() {
 
     private fun chooseLandscapeDrawerWidth() {
         val values = intArrayOf(280, 300, 320, 340, 360, 400, 440, 460)
-        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300).coerceIn(280, 460)
         AlertDialog.Builder(this).setTitle("Lebar drawer landscape")
-            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 3 else it }) { dialog, which ->
+            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 1 else it }) { dialog, which ->
                 preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_WIDTH, values[which]).apply()
                 dialog.dismiss()
                 buildScreen()
@@ -1162,7 +1167,7 @@ class MainActivity : Activity() {
 
     private fun chooseLandscapeDrawerColumns() {
         val values = (3..7).map { it.toString() + " kolom" }.toTypedArray()
-        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5).coerceIn(3, 7) - 3
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4).coerceIn(3, 7) - 3
         AlertDialog.Builder(this).setTitle("Kolom drawer landscape")
             .setSingleChoiceItems(values, current) { dialog, which ->
                 preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_COLUMNS, which + 3).apply()
@@ -1174,7 +1179,7 @@ class MainActivity : Activity() {
 
     private fun chooseLandscapeDrawerIconSize() {
         val values = intArrayOf(28, 32, 36, 40, 42, 48, 52, 56)
-        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 42).coerceIn(28, 56)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56)
         AlertDialog.Builder(this).setTitle("Ukuran ikon drawer landscape")
             .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 4 else it }) { dialog, which ->
                 preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, values[which]).apply()
@@ -1201,7 +1206,7 @@ class MainActivity : Activity() {
     private fun currentDockWidth(): Int {
         val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
-        return (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 260) else dockWidthDp).coerceIn(160, maxWidth)
+        return (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, maxWidth)
     }
 
     private fun currentDockGravity(): Int {
@@ -1215,7 +1220,7 @@ class MainActivity : Activity() {
 
     private fun drawerColumns(): Int {
         return if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
-            preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 5).coerceIn(3, 7)
+            preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4).coerceIn(3, 7)
         else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, 4).coerceIn(2, 6)
     }
 
