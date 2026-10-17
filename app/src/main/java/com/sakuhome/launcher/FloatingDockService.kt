@@ -30,6 +30,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import kotlin.math.roundToInt
 
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
@@ -589,7 +590,8 @@ class FloatingDockService : Service() {
         val height = target.mode.physicalHeight.coerceAtLeast(2)
         val displayX = (x / screenWidth * width).toInt().coerceIn(1, width - 1)
         val startY = (y / desktopHeight * height).toInt().coerceIn(2, height - 2)
-        val endY = (startY + deltaY * height / desktopHeight).coerceIn(2, height - 2)
+        val scaledDeltaY = (deltaY.toFloat() * height.toFloat() / desktopHeight.coerceAtLeast(1f)).roundToInt()
+        val endY = (startY + scaledDeltaY).coerceIn(2, height - 2)
         return runRootInputCommand("input -d " + displayId + " swipe " + displayX + " " + startY + " " + displayX + " " + endY + " 300")
     }
 
