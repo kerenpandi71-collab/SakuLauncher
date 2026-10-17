@@ -680,22 +680,53 @@ class MainActivity : Activity() {
             return
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            if (asFreeform) {
-                val width = resources.displayMetrics.widthPixels
-                val height = resources.displayMetrics.heightPixels
-                val margin = dp(24)
-                val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                startActivity(launchIntent, options.toBundle())
-            } else {
+
+        if (!asFreeform) {
+            try {
                 startActivity(launchIntent)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
             }
+            return
+        }
+
+        try {
+            // Launch bounds alone are only a hint; they do not request freeform
+            // windowing on Android builds that support explicit windowing modes.
+            val metrics = resources.displayMetrics
+            val margin = dp(18)
+            val top = dp(48)
+            val bottom = dp(72)
+            val bounds = Rect(
+                margin,
+                top,
+                (metrics.widthPixels - margin).coerceAtLeast(margin + dp(240)),
+                (metrics.heightPixels - bottom).coerceAtLeast(top + dp(240))
+            )
+            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+            try {
+                // WINDOWING_MODE_FREEFORM = 5. This method is hidden from the
+                // public SDK, so use reflection and retain the bounds-only
+                // fallback for ROMs that block hidden API access.
+                val method = ActivityOptions::class.java.getDeclaredMethod(
+                    "setLaunchWindowingMode",
+                    Int::class.javaPrimitiveType!!
+                )
+                method.isAccessible = true
+                method.invoke(options, 5)
+            } catch (_: Exception) {
+                // ROM/API may hide or reject this method; setLaunchBounds remains a best-effort hint.
+            }
+            startActivity(launchIntent, options.toBundle())
         } catch (_: Exception) {
-            if (asFreeform) {
-                Toast.makeText(this, "Mode jendela tidak didukung; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Android/ROM menolak jendela bebas. Aktifkan dukungan Freeform di opsi pengembang atau mode desktop, lalu coba lagi.",
+                Toast.LENGTH_LONG
+            ).show()
+            try {
                 startActivity(launchIntent)
-            } else {
+            } catch (_: Exception) {
                 Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
             }
         }
