@@ -2028,7 +2028,8 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             setupTrackpad(accessContext)
             if (shellService != null) initCustomKeyboard()
             menuManager = TrackpadMenuManager(displayContext, windowManager!!, this)
-            setupBubble(accessContext)
+            // Saku Assist is the single assistant bubble owned by the host launcher.
+            // Skip the legacy DroidOS bubble to avoid showing two floating bubbles.
             setupCursor(accessContext)
 
 
