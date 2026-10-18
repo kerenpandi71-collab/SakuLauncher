@@ -160,35 +160,35 @@ class DesktopModeActivity : Activity() {
         val (w, h, dpi) = cfg
         Thread {
             // Android creates this overlay display from the global setting.
-            val result = runPrivileged("settings put global overlay_display_devices \"\u0024{w}x\u0024{h}/\u0024{dpi}\" && sleep 1 && dumpsys display")
+            val result = runPrivileged("settings put global overlay_display_devices \"${w}x${h}/${dpi}\" && sleep 1 && dumpsys display")
             val found = parseOverlayDisplayId(result.second)
             runOnUiThread {
                 if (result.first == 0 && found != null) {
                     displayId = found
                     prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
                     updateStatus("overlay display diterapkan")
-                    toast("Overlay display aktif: ID \u0024found · \u0024{w}×\u0024{h} @ \u0024dpi dpi")
+                    toast("Overlay display aktif: ID $found · ${w}×${h} @ $dpi dpi")
                     sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", found))
                 } else {
                     displayId = -1
                     updateStatus("display belum terdeteksi")
-                    toast("Setting diterapkan, tetapi ID overlay belum terbaca. Coba lagi beberapa detik. \u0024{result.second.take(150)}")
+                    toast("Setting diterapkan, tetapi ID overlay belum terbaca. Coba lagi beberapa detik. ${result.second.take(150)}")
                 }
             }
         }.start()
     }
 
     private fun parseOverlayDisplayId(dump: String): Int? {
-        val blocks = Regex("""LogicalDisplay\\{.*?(?=LogicalDisplay\\{|$)""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        val blocks = Regex("""LogicalDisplay\{.*?(?=LogicalDisplay\{|$)""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
             .findAll(dump)
         for (match in blocks) {
             val block = match.value
             if (block.contains("Overlay", ignoreCase = true) || block.contains("overlay:", ignoreCase = true)) {
-                Regex("""mDisplayId=(\\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
-                Regex("""displayId=(\\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+                Regex("""mDisplayId=(\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+                Regex("""displayId=(\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
             }
         }
-        return Regex("""(?:mDisplayId|displayId)=(\\d+)[^\\n]{0,300}(?:Overlay|overlay:)""", RegexOption.IGNORE_CASE)
+        return Regex("""(?:mDisplayId|displayId)=(\d+)[^\n]{0,300}(?:Overlay|overlay:)""", RegexOption.IGNORE_CASE)
             .find(dump)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
@@ -202,7 +202,7 @@ class DesktopModeActivity : Activity() {
                     updateStatus("overlay display ditutup")
                     toast("Overlay display ditutup. Semua overlay display dari setting ini akan dihapus.")
                     sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", 0))
-                } else toast("Gagal menutup overlay display: \u0024{result.second.take(140)}")
+                } else toast("Gagal menutup overlay display: ${result.second.take(140)}")
             }
         }.start()
     }
