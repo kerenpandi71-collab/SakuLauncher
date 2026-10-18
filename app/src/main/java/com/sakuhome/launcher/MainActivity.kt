@@ -1496,7 +1496,7 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Masuk Mode Desktop DroidOS · Launcher + Trackpad asli"
+            "YouTube Web · buka di browser"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1548,9 +1548,23 @@ class MainActivity : Activity() {
                     }
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
-                    18 -> startActivity(Intent(this, DroidOSModeActivity::class.java))
+                    18 -> openYouTubeWeb()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openYouTubeWeb() {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/"))
+        try {
+            startActivity(intent)
+            Toast.makeText(
+                this,
+                "YouTube dibuka di browser pilihanmu. Pemblokiran iklan memerlukan browser yang mendukung uBlock Origin dan ekstensi aktif; Saku tidak menyematkan uBlock di dalam aplikasi.",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Tidak ada browser yang dapat membuka YouTube.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun runRootDisplayCommand(title: String, command: String) {
