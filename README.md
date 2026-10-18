@@ -22,13 +22,7 @@ Mode jendela bebas (freeform) sengaja tidak diminta oleh Saku Launcher. Aplikasi
 APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK pada branch `feature/saku-desktop-overhaul`; periksa tab Actions untuk status dan artefak.
 
 
-## DroidOS Trackpad integration
+## YouTube di dalam Saku
 
-Branch `feature/saku-trackpad-integration` packages the GPLv3 FOSS trackpad implementation as a library module inside SakuLauncher. In Saku settings, select **Mode Trackpad DroidOS · ON/OFF** to open the trackpad setup/service or send its stop command. Android Accessibility, overlay, and Shizuku permissions remain user-controlled.
+SakuLauncher menyediakan layar YouTube internal melalui Android WebView, jadi tautan ini tidak perlu membuka browser eksternal. Penyaringan permintaan iklan yang ada bersifat terbatas dan **bukan pengganti uBlock Origin**; pemblokiran iklan penuh dan pemutaran stabil belum dijamin.
 
-Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If you redistribute a build containing this GPLv3 module, comply with GPLv3 obligations for the combined derivative work.
-
-
-## DroidOS desktop mode
-
-Saku bundles the original FOSS/GPLv3 DroidOS launcher and trackpad modules. Open **Settings → Masuk Mode Desktop DroidOS** to enter the combined setup screen, authorize Shizuku, and then start the original launcher and trackpad overlays. Root can be used to grant overlay and accessibility settings; the FOSS DroidOS shell/input backend still requires Shizuku authorization.
