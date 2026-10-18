@@ -1475,6 +1475,65 @@ class MainActivity : Activity() {
         }.setNegativeButton("Batal", null).show()
     }
 
+    private fun showDiagnosticLog() {
+        val log = android.util.Log.getStackTraceString(Throwable("SakuLauncher diagnostic snapshot"))
+        val runtime = buildString {
+            appendLine("=== SAKU LAUNCHER DIAGNOSTIC ===")
+            appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
+            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            appendLine("App version: ${packageManager.getPackageInfo(packageName, 0).versionName}")
+            appendLine("Default launcher: ${isDefaultLauncher()}")
+            appendLine("Floating dock preference: ${preferences.getBoolean(KEY_OVERLAY_ENABLED, false)}")
+            appendLine("Accessibility service enabled: ${isSakuAccessibilityEnabled()}")
+            appendLine()
+            appendLine("=== RECENT APP-RECORDED ERRORS ===")
+            appendLine(preferences.getString("saku_recent_errors", "No app-recorded errors yet.") ?: "No app-recorded errors yet.")
+            appendLine()
+            appendLine("=== NOTE ===")
+            appendLine("Android restricts access to system-wide logcat for ordinary apps. This report contains app-accessible diagnostics only, not a full system log.")
+        }
+        val box = android.widget.ScrollView(this)
+        val text = android.widget.TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(16, 20, 29))
+            setPadding(24, 20, 24, 20)
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 12f
+            text = runtime
+            setTextIsSelectable(true)
+        }
+        box.addView(text)
+        AlertDialog.Builder(this)
+            .setTitle("Log error · diagnostik")
+            .setView(box)
+            .setPositiveButton("Salin") { _, _ ->
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Saku diagnostic", runtime))
+                Toast.makeText(this, "Laporan diagnostik disalin", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Bagikan") { _, _ ->
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, runtime)
+                }, "Bagikan log diagnostik"))
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun isDefaultLauncher(): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        return resolved?.activityInfo?.packageName == packageName
+    }
+
+    private fun isSakuAccessibilityEnabled(): Boolean {
+        val expected = "$packageName/${SakuNavigationAccessibilityService::class.java.name}"
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+    }
+
     private fun showSettings() {
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
@@ -1496,7 +1555,8 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "SakuTube · YouTube di dalam aplikasi"
+            "SakuTube · YouTube di dalam aplikasi",
+            "Baca log error untuk analisis"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1549,6 +1609,7 @@ class MainActivity : Activity() {
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
                     18 -> openYouTubeWeb()
+                    19 -> showDiagnosticLog()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
