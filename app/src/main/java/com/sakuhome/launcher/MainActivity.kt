@@ -396,6 +396,12 @@ class MainActivity : Activity() {
         brand.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
 
+        topBar.addView(chipButton("▣", cardSurface, primaryText, 19).apply {
+            contentDescription = "Desktop Mode"
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, DesktopModeActivity::class.java).putExtra("auto_start_controls", true))
+            }
+        }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(6) })
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
             contentDescription = "Pengaturan Saku Dock"
             setOnClickListener { showSettings() }
