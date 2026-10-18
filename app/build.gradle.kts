@@ -31,5 +31,5 @@ android {
 
 dependencies {
     // Embedded Gecko engine keeps YouTube inside Saku rather than opening a default browser.
-    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:158.0.20261007201254")
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:157.0.20260924084938")
 }
