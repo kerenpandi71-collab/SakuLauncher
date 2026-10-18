@@ -496,6 +496,13 @@ class FloatingDockService : Service() {
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
         }
+        action("▶  YouTube Saku", "Buka YouTube di dalam Saku Launcher") {
+            try {
+                startActivity(Intent(this@FloatingDockService, YouTubeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                Toast.makeText(this@FloatingDockService, "YouTube Saku tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+            }
+        }
         action("⌨  Keyboard bergaya iOS", "Pilih keyboard Saku bergaya iOS") {
             try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
             catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
