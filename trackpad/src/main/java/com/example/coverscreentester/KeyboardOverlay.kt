@@ -253,9 +253,9 @@ class KeyboardOverlay(
         if (isVisible && keyboardContainer != null) {
             val bg = keyboardContainer?.background as? GradientDrawable
             if (bg != null) {
-                val fillColor = (alpha shl 24) or (0x1A1A1A)
+                val fillColor = (alpha shl 24) or (0xDCE1E8)
                 bg.setColor(fillColor)
-                bg.setStroke(2, Color.parseColor("#44FFFFFF"))
+                bg.setStroke(2, Color.parseColor("#55838A96"))
             }
             val normalizedAlpha = alpha / 255f
             keyboardView?.alpha = normalizedAlpha
@@ -1110,10 +1110,10 @@ fun setCustomModKey(keyCode: Int) {
         keyboardContainer?.filterTouchesWhenObscured = true
 
         val containerBg = GradientDrawable()
-        val fillColor = (currentAlpha shl 24) or (0x1A1A1A)
+        val fillColor = (currentAlpha shl 24) or (0xDCE1E8)
         containerBg.setColor(fillColor)
         containerBg.cornerRadius = 16f
-        containerBg.setStroke(2, Color.parseColor("#44FFFFFF"))
+        containerBg.setStroke(2, Color.parseColor("#55838A96"))
         keyboardContainer?.background = containerBg
         
         keyboardContainer?.isFocusable = true
@@ -1335,7 +1335,7 @@ windowManager.addView(keyboardContainer, keyboardParams)
         // Create indicator bar
         val indicator = View(context)
         val indicatorBg = GradientDrawable()
-        indicatorBg.setColor(Color.parseColor("#555555"))
+        indicatorBg.setColor(Color.parseColor("#8A929E"))
         indicatorBg.cornerRadius = 3f
         indicator.background = indicatorBg
         
@@ -1404,7 +1404,7 @@ windowManager.addView(keyboardContainer, keyboardParams)
         if (extendedModeActive) {
             bg.setColor(Color.parseColor("#FF5555")) // Red - tap to exit
         } else {
-            bg.setColor(Color.parseColor("#555555")) // Grey - normal
+            bg.setColor(Color.parseColor("#8A929E")) // Grey - normal
         }
         indicator.invalidate()
         
