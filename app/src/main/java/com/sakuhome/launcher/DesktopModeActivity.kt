@@ -105,8 +105,12 @@ class DesktopModeActivity : Activity() {
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row2.addView(button("Sembunyikan trackpad") { sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", false) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
         row2.addView(button("Izin aksesibilitas") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        row2.addView(button("Kembali") { finish() }, LinearLayout.LayoutParams(0, dp(42), .7f))
+        row2.addView(button("Izin Shizuku") { requestShizuku() }, LinearLayout.LayoutParams(0, dp(42), .7f))
         controls.addView(row2, LinearLayout.LayoutParams(-1, dp(44)))
+        val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row3.addView(button("Buka izin overlay") { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
+        row3.addView(button("Kembali") { finish() }, LinearLayout.LayoutParams(0, dp(42), .7f))
+        controls.addView(row3, LinearLayout.LayoutParams(-1, dp(44)))
         root.addView(controls, LinearLayout.LayoutParams(-1, 0, 0.42f).apply { topMargin = dp(8) })
         setContentView(root)
     }
@@ -241,9 +245,25 @@ class DesktopModeActivity : Activity() {
                 if (id >= 0) sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", id))
                 sendBroadcast(Intent("SAKU_DESKTOP_LAYOUT").setPackage(packageName))
                 sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", true)
-            }, 900L)
+            }, 1600L)
             toast("Trackpad dan keyboard diminta aktif. Jika belum muncul, aktifkan layanan aksesibilitas trackpad.")
         } catch (e: Exception) { toast("Trackpad gagal dibuka: ${e.message}") }
+    }
+
+    private fun requestShizuku() {
+        try {
+            if (Shizuku.getBinder() == null) {
+                val launch = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                if (launch != null) startActivity(launch)
+                else toast("Shizuku belum terpasang. Instal dan jalankan server Shizuku terlebih dahulu.")
+            } else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                toast("Izin Shizuku sudah aktif.")
+            } else {
+                Shizuku.requestPermission(9072)
+            }
+        } catch (e: Exception) {
+            toast("Shizuku belum siap: ${e.message ?: "periksa server Shizuku"}")
+        }
     }
 
     private fun sendTrackpadCommand(action: String, visible: Boolean? = null) {
