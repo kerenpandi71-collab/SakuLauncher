@@ -908,7 +908,7 @@ private fun buildKeyboard() {
         suggestionStrip = LinearLayout(context).apply {
             orientation = HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, (35 * scaleFactor).toInt()) 
-            setBackgroundColor(Color.parseColor("#222222"))
+            setBackgroundColor(Color.parseColor("#DCE1E8"))
             setPadding(0, 0, 0, 4)
             
             // Mouse Click Handler for Empty Bar
@@ -954,7 +954,7 @@ private fun buildKeyboard() {
             return TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
+                setTextColor(Color.parseColor("#202124"))
                 textSize = fontSize * 0.9f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 setBackgroundResource(android.R.drawable.list_selector_background)
@@ -965,7 +965,7 @@ private fun buildKeyboard() {
 
         cand1 = createCandidateView(); suggestionStrip?.addView(cand1)
         // Divider
-        val div1 = View(context).apply { layoutParams = LinearLayout.LayoutParams(1, LayoutParams.MATCH_PARENT); setBackgroundColor(Color.GRAY) }
+        val div1 = View(context).apply { layoutParams = LinearLayout.LayoutParams(1, LayoutParams.MATCH_PARENT); setBackgroundColor(Color.parseColor("#B8C0CC")) }
         suggestionStrip?.addView(div1)
 
         cand2 = createCandidateView(); suggestionStrip?.addView(cand2)
@@ -1074,7 +1074,7 @@ private fun buildKeyboard() {
         keyView.gravity = Gravity.CENTER
         val rowFontSize = if (key in arrowRow || key in navRow) fontSize - 4 else fontSize
         keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, rowFontSize)
-        keyView.setTextColor(Color.WHITE)
+        keyView.setTextColor(Color.parseColor("#202124"))
         keyView.text = getDisplayText(key)
 
         val bg = GradientDrawable()
@@ -1957,49 +1957,31 @@ private fun buildKeyboard() {
     }
 
     private fun getKeyColor(key: String): Int {
-        if (key == "CTRL" && isCtrlActive) return Color.parseColor("#3DDC84")
-        if (key == "ALT" && isAltActive) return Color.parseColor("#3DDC84")
-
-if (key == "META" && isMetaActive) return Color.parseColor("#3DDC84")
-        
-        // NEW: Voice Active Indicator
-        // UPDATED: Voice Key Color
-        // Green if active, standard dark gray if inactive (removed red alert color)
-        if (key == "MIC") {
-            return if (isVoiceActive) Color.parseColor("#3DDC84") else Color.parseColor("#252525")
-        }
-
-        if (key == "SCREEN") {
-            return if (isSymbolsActive()) Color.parseColor("#FF9800") else Color.parseColor("#FF5555")
-        }
-        
-        // =================================================================================
-        // ARROW KEYS COLOR - BLUE WHEN IN SPACEBAR MOUSE MODE
-        // =================================================================================
+        // Gboard-inspired palette: light keyboard deck, white letter keys,
+        // neutral utility keys, and a blue action key.
+        if (key == "CTRL" && isCtrlActive) return Color.parseColor("#A8DAB5")
+        if (key == "ALT" && isAltActive) return Color.parseColor("#A8DAB5")
+        if (key == "META" && isMetaActive) return Color.parseColor("#A8DAB5")
+        if (key == "MIC") return if (isVoiceActive) Color.parseColor("#A8DAB5") else Color.parseColor("#C7CED8")
+        if (key == "SCREEN") return if (isSymbolsActive()) Color.parseColor("#F9AB00") else Color.parseColor("#C7CED8")
         if (key in arrowRow) {
-            if (key in listOf("←", "↑", "↓", "→") && isTrackpadTouchMode) {
-                return Color.parseColor("#4488FF") // Blue for swipe mode
-            }
-            return Color.parseColor("#252525")
+            if (key in listOf("←", "↑", "↓", "→") && isTrackpadTouchMode) return Color.parseColor("#AECBFA")
+            return Color.parseColor("#C7CED8")
         }
-        if (key in navRow) return Color.parseColor("#252525")
-        // =================================================================================
-        // END BLOCK: ARROW KEYS COLOR
-        // =================================================================================
-        
+        if (key in navRow) return Color.parseColor("#C7CED8")
         return when (key) {
             "SHIFT" -> when (currentState) {
-                KeyboardState.CAPS_LOCK -> Color.parseColor("#3DDC84")
-                KeyboardState.UPPERCASE -> Color.parseColor("#4A90D9")
-                else -> Color.parseColor("#3A3A3A")
+                KeyboardState.CAPS_LOCK -> Color.parseColor("#A8DAB5")
+                KeyboardState.UPPERCASE -> Color.parseColor("#AECBFA")
+                else -> Color.parseColor("#C7CED8")
             }
-            "ENTER" -> Color.parseColor("#4A90D9")
-            "BKSP", "SYM", "SYM1", "SYM2", "ABC" -> Color.parseColor("#3A3A3A")
-            "SPACE" -> Color.parseColor("#2D2D2D")
-            else -> Color.parseColor("#2D2D2D")
+            "ENTER" -> Color.parseColor("#4285F4")
+            "BKSP", "SYM", "SYM1", "SYM2", "ABC" -> Color.parseColor("#C7CED8")
+            "SPACE" -> Color.parseColor("#FFFFFF")
+            else -> Color.parseColor("#FFFFFF")
         }
     }
-    
+
     private fun isSymbolsActive(): Boolean {
         return currentState == KeyboardState.SYMBOLS_1 || currentState == KeyboardState.SYMBOLS_2
     }
