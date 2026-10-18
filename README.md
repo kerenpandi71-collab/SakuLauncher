@@ -2,33 +2,53 @@
 
 Launcher Android bergaya desktop yang mempertahankan ikon aplikasi Android asli dari sistem.
 
-## Fitur
+## Fitur launcher
+
 - Ikon aplikasi Android asli di layar utama, Start Menu, dan dock.
 - Start Menu dengan pencarian aplikasi, tab disematkan/semua aplikasi.
 - Halaman layar utama tambahan, susun ikon dengan drag-and-drop, dan geser antarhalaman.
 - Dock bawah dengan aplikasi favorit dan menu tekan-lama.
 - Widget Android melalui AppWidgetHost.
 - Wallpaper dari galeri, tema terang/gelap, warna aksen, ukuran ikon, transparansi dock, label ikon, dan pengaturan tampilan.
-- Dock mengambang opsional di atas aplikasi lain. Aplikasi yang dibuka dari dock memakai peluncuran Android normal, bukan mode freeform.
+- Dock mengambang opsional di atas aplikasi lain.
+- Keyboard Android buatan Saku dengan tombol QWERTY, angka/simbol, Shift, Backspace, clipboard, dan kontrol ukuran/posisi.
 
-## Jendela aplikasi
-Mode jendela bebas (freeform) sengaja tidak diminta oleh Saku Launcher. Aplikasi diluncurkan dengan intent Android biasa sehingga tidak dipaksa menjadi jendela mengambang. Multi-window sistem tetap mengikuti dukungan dan pengaturan ROM.
+## Saku YouTube
+
+Saku menyediakan halaman YouTube tertanam berbasis GeckoView. Tautan YouTube dibuka di activity aplikasi Saku, bukan diteruskan ke browser default Android. Pada peluncuran awal, pengguna dapat menyetujui pemasangan ekstensi uBlock Origin dari Mozilla Add-ons. Status ekstensi ditampilkan di UI; jika pemasangan gagal atau pengguna menolak, aplikasi tidak mengklaim iklan sudah diblokir.
+
+Fitur saat ini:
+- Navigasi dan pencarian YouTube di dalam Saku.
+- Tombol beranda, muat ulang, dan kembali.
+- Sakelar User-Agent Desktop/Mobile.
+- Dukungan video layar penuh.
+- Alur pemasangan uBlock Origin resmi yang membutuhkan koneksi internet dan persetujuan pengguna.
+
+Inspirasi arsitektur dan UX:
+- [LiteTube](https://github.com/HydeYYHH/litube) — referensi open-source untuk aplikasi YouTube mandiri. Saku tidak menyalin kode LiteTube.
+- [GeckoView WebExtensionController](https://mozilla.github.io/geckoview/javadoc/mozilla-central/org/mozilla/geckoview/WebExtensionController.html) — API untuk memasang dan mengelola WebExtensions.
+- [uBlock Origin di Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/) — sumber resmi ekstensi.
+
+Catatan: ad-blocking bergantung pada keberhasilan pemasangan dan kompatibilitas ekstensi/YouTube, sehingga tidak bisa dijamin memblokir setiap iklan atau sponsor. Login dan video tertentu dapat tunduk pada pembatasan YouTube.
 
 ## Build
-- Android SDK Platform 35
+
+- Android SDK Platform 36
 - JDK 17
-- `./gradlew assembleDebug`
+- Gradle wrapper (versi di `gradle/wrapper/gradle-wrapper.properties`)
+- Target ABI build ini: `arm64-v8a` (untuk perangkat ARM64 seperti Redmi 12C)
 
-APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK pada branch `feature/saku-desktop-overhaul`; periksa tab Actions untuk status dan artefak.
+Jalankan:
 
+```bash
+./gradlew assembleDebug
+```
 
-## DroidOS Trackpad integration
+APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun dan menerbitkan artefak APK debug pada workflow terkait.
 
-Branch `feature/saku-trackpad-integration` packages the GPLv3 FOSS trackpad implementation as a library module inside SakuLauncher. In Saku settings, select **Mode Trackpad DroidOS · ON/OFF** to open the trackpad setup/service or send its stop command. Android Accessibility, overlay, and Shizuku permissions remain user-controlled.
+## Lisensi dan atribusi
 
-Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If you redistribute a build containing this GPLv3 module, comply with GPLv3 obligations for the combined derivative work.
-
-
-## DroidOS desktop mode
-
-Saku bundles the original FOSS/GPLv3 DroidOS launcher and trackpad modules. Open **Settings → Masuk Mode Desktop DroidOS** to enter the combined setup screen, authorize Shizuku, and then start the original launcher and trackpad overlays. Root can be used to grant overlay and accessibility settings; the FOSS DroidOS shell/input backend still requires Shizuku authorization.
+- Saku Launcher: lihat lisensi dan pemberitahuan di repository.
+- GeckoView: Mozilla Public License 2.0 (MPL-2.0); GeckoView diambil sebagai dependency Maven, tidak disalin ke source tree.
+- uBlock Origin: GPL-3.0; aplikasi mengunduh XPI resmi dari Mozilla Add-ons saat pengguna menyetujui pemasangan, bukan membundel XPI tersebut di APK.
+- LiteTube disebut sebagai referensi; source code LiteTube tidak dimasukkan ke Saku.
