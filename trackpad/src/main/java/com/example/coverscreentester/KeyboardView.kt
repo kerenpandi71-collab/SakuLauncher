@@ -580,8 +580,8 @@ private var customModKeyCode = 0
 
     init {
         orientation = VERTICAL
-        setBackgroundColor(Color.parseColor("#1A1A1A"))
-        setPadding(4, 4, 4, 4)
+        setBackgroundColor(Color.parseColor("#DCE1E8"))
+        setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4))
         buildKeyboard()
     }
 
@@ -611,8 +611,8 @@ private var customModKeyCode = 0
     fun setInputCaptureMode(active: Boolean) {
         isInputCaptureActive = active
         // Visual feedback? maybe dim the keyboard slightly or change border
-        if (active) setBackgroundColor(Color.parseColor("#330000")) // Subtle Red tint
-        else setBackgroundColor(Color.parseColor("#1A1A1A"))
+        if (active) setBackgroundColor(Color.parseColor("#D2DDF0"))
+        else setBackgroundColor(Color.parseColor("#DCE1E8"))
     }
 
     fun setOverrideSystemShortcuts(enabled: Boolean) {
@@ -909,7 +909,7 @@ private fun buildKeyboard() {
             orientation = HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, (35 * scaleFactor).toInt()) 
             setBackgroundColor(Color.parseColor("#DCE1E8"))
-            setPadding(0, 0, 0, 4)
+            setPadding(0, 0, 0, dpToPx(3))
             
             // Mouse Click Handler for Empty Bar
             setOnTouchListener { v, event ->
@@ -957,7 +957,7 @@ private fun buildKeyboard() {
                 setTextColor(Color.parseColor("#202124"))
                 textSize = fontSize * 0.9f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
-                setBackgroundResource(android.R.drawable.list_selector_background)
+                setBackgroundColor(Color.TRANSPARENT)
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
@@ -970,7 +970,7 @@ private fun buildKeyboard() {
 
         cand2 = createCandidateView(); suggestionStrip?.addView(cand2)
         // Divider
-        val div2 = View(context).apply { layoutParams = LinearLayout.LayoutParams(1, LayoutParams.MATCH_PARENT); setBackgroundColor(Color.GRAY) }
+        val div2 = View(context).apply { layoutParams = LinearLayout.LayoutParams(1, LayoutParams.MATCH_PARENT); setBackgroundColor(Color.parseColor("#B8C0CC")) }
         suggestionStrip?.addView(div2)
 
         cand3 = createCandidateView(); suggestionStrip?.addView(cand3)
@@ -1074,7 +1074,7 @@ private fun buildKeyboard() {
         keyView.gravity = Gravity.CENTER
         val rowFontSize = if (key in arrowRow || key in navRow) fontSize - 4 else fontSize
         keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, rowFontSize)
-        keyView.setTextColor(Color.parseColor("#202124"))
+        keyView.setTextColor(if (key == "ENTER") Color.WHITE else Color.parseColor("#202124"))
         keyView.text = getDisplayText(key)
 
         val bg = GradientDrawable()
