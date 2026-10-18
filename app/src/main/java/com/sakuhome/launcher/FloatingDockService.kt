@@ -496,6 +496,13 @@ class FloatingDockService : Service() {
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
         }
+        action("▣  Desktop Mode", "Buka pengaturan virtual display dan kontrol desktop") {
+            try {
+                startActivity(Intent(this, DesktopModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Desktop Mode tidak dapat dibuka", Toast.LENGTH_LONG).show()
+            }
+        }
         action("⌨  Keyboard bergaya iOS", "Pilih keyboard Saku bergaya iOS") {
             try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
             catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
