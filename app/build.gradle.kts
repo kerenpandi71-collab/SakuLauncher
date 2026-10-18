@@ -5,15 +5,18 @@ plugins {
 
 android {
     namespace = "com.sakuhome.launcher"
-    compileSdk = 35
+    compileSdk = 36
 
 
     defaultConfig {
         applicationId = "com.sakuhome.launcher"
         minSdk = 30
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.5.0"
+
+        // Target Redmi 12C ARM64 and avoid packaging unused GeckoView ABIs.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     compileOptions {
@@ -27,5 +30,6 @@ android {
 }
 
 dependencies {
-    implementation("dev.rikka.shizuku:api:13.1.5")
+    // Embedded Gecko engine keeps YouTube inside Saku rather than opening a default browser.
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:158.0.20261007201254")
 }

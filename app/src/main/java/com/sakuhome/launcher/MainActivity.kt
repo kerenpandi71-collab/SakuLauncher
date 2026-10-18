@@ -1496,7 +1496,7 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "YouTube Web · buka di browser"
+            "Saku YouTube · uBlock Origin"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1554,17 +1554,8 @@ class MainActivity : Activity() {
     }
 
     private fun openYouTubeWeb() {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/"))
-        try {
-            startActivity(intent)
-            Toast.makeText(
-                this,
-                "YouTube dibuka di browser pilihanmu. Pemblokiran iklan memerlukan browser yang mendukung uBlock Origin dan ekstensi aktif; Saku tidak menyematkan uBlock di dalam aplikasi.",
-                Toast.LENGTH_LONG
-            ).show()
-        } catch (_: Exception) {
-            Toast.makeText(this, "Tidak ada browser yang dapat membuka YouTube.", Toast.LENGTH_LONG).show()
-        }
+        // Open the embedded YouTube web app. Never delegate to the system browser.
+        startActivity(Intent(this, YoutubeActivity::class.java))
     }
 
     private fun runRootDisplayCommand(title: String, command: String) {
