@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "SakuLauncher"
-include(":app", ":trackpad", ":droidoslauncher")
+include(":app")
