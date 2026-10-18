@@ -116,11 +116,11 @@ class DesktopModeActivity : Activity() {
         val (w, h, dpi) = cfg
         Thread {
             val currentSetting = runPrivileged("settings get global overlay_display_devices").second.trim()
-            if (currentSetting != "\${w}x\${h}/$dpi") {
+            if (currentSetting != "${w}x${h}/$dpi") {
                 prefs.edit().putString("previous_overlay_display_devices", if (currentSetting == "null") "" else currentSetting).apply()
             }
             val result = runPrivileged(
-                "settings put global overlay_display_devices '\${w}x\${h}/$dpi'; sleep 2; dumpsys display"
+                "settings put global overlay_display_devices '${w}x${h}/$dpi'; sleep 2; dumpsys display"
             )
             val output = result.second
             val found = Regex(
@@ -158,7 +158,7 @@ class DesktopModeActivity : Activity() {
                     prefs.edit().remove("previous_overlay_display_devices").apply()
                     updateStatus()
                     toast("Overlay virtual display ditutup")
-                } else toast("Gagal menutup display: \${result.second.take(140)}")
+                } else toast("Gagal menutup display: ${result.second.take(140)}")
             }
         }.start()
     }
