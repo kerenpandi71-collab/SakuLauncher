@@ -55,6 +55,9 @@ class DesktopModeActivity : Activity() {
         window.navigationBarColor = bg
         buildUi()
         updateStatus()
+        if (intent.getBooleanExtra("auto_start_controls", false)) {
+            window.decorView.postDelayed({ startTrackpad() }, 250L)
+        }
     }
 
     override fun onResume() { super.onResume(); if (::status.isInitialized) updateStatus() }
@@ -194,8 +197,11 @@ class DesktopModeActivity : Activity() {
                 if (id >= 0) sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", id))
                 sendBroadcast(Intent("SAKU_DESKTOP_LAYOUT").setPackage(packageName))
                 sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", true)
+                // Hide the bundled DroidOS keyboard overlay; Saku Keyboard is the intended IME.
+                sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD")
+                try { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showInputMethodPicker() } catch (_: Exception) { }
             }, 1600L)
-            toast("Trackpad dan keyboard diminta aktif. Jika belum muncul, aktifkan layanan aksesibilitas trackpad.")
+            toast("Trackpad diminta aktif. Pilih Keyboard Saku dari pemilih keyboard.")
         } catch (e: Exception) { toast("Trackpad gagal dibuka: ${e.message}") }
     }
 
