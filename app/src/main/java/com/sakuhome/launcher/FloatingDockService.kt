@@ -496,16 +496,20 @@ class FloatingDockService : Service() {
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
         }
-        action("▣  Desktop Mode", "Buka pengaturan virtual display dan kontrol desktop") {
+        action("▣  Resolusi & DPI virtual display", "Atur resolusi, DPI, dan matikan virtual display") {
             try {
                 startActivity(Intent(this, DesktopModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
-                Toast.makeText(this, "Desktop Mode tidak dapat dibuka", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Pengaturan Desktop Mode tidak dapat dibuka", Toast.LENGTH_LONG).show()
             }
         }
-        action("⌨  Keyboard bergaya iOS", "Pilih keyboard Saku bergaya iOS") {
+        action("⌨  Keyboard Saku", "Buka pemilih Keyboard Saku buatan Saku") {
             try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
             catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
+        }
+        action("♿  Pengaturan aksesibilitas", "Atur izin aksesibilitas trackpad") {
+            try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (_: Exception) { Toast.makeText(this, "Pengaturan aksesibilitas tidak dapat dibuka", Toast.LENGTH_LONG).show() }
         }
         action("▤  Papan klip", "Lihat teks terakhir di papan klip") {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
