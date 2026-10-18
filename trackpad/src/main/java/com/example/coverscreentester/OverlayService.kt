@@ -1173,6 +1173,20 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
                     if (visible) setTrackpadVisibility(true) 
                     else { if (menuDisplayId == -1 || menuDisplayId == currentDisplayId) setTrackpadVisibility(false) }
                 }
+                action == "SAKU_SET_INPUT_TARGET" -> {
+                    val targetId = intent.getIntExtra("DISPLAY_ID", Display.DEFAULT_DISPLAY)
+                    if (displayManager?.getDisplay(targetId) != null) {
+                        inputTargetDisplayId = targetId
+                        updateTargetMetrics(targetId)
+                        createRemoteCursor(targetId)
+                        resetCursorCenter()
+                        updateBorderColor(if (targetId != currentDisplayId) 0xFFFF00FF.toInt() else 0x55FFFFFF.toInt())
+                        showToast("Input target: Display $targetId")
+                    } else {
+                        showToast("Virtual display $targetId tidak ditemukan")
+                    }
+                }
+                action == "SAKU_DESKTOP_LAYOUT" -> applySakuDesktopLayout()
                 action == "SET_PREVIEW_MODE" -> setPreviewMode(intent.getBooleanExtra("PREVIEW_MODE", false))
                 action == "VOICE_TYPE_TRIGGERED" -> {
                     isVoiceActive = true
@@ -1589,6 +1603,8 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
                         addAction("FORCE_KEYBOARD")
                         addAction("TOGGLE_CUSTOM_KEYBOARD")
                         addAction("SET_TRACKPAD_VISIBILITY")
+                        addAction("SAKU_SET_INPUT_TARGET")
+                        addAction("SAKU_DESKTOP_LAYOUT")
                         addAction("SET_PREVIEW_MODE") 
                         addAction("OPEN_MENU")
                         addAction("VOICE_TYPE_TRIGGERED")
@@ -2238,6 +2254,27 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
              cursorParams.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         cursorParams.gravity = Gravity.TOP or Gravity.LEFT; cursorParams.x = uiScreenWidth / 2; cursorParams.y = uiScreenHeight / 2; windowManager?.addView(cursorLayout, cursorParams)
+    }
+
+    private fun applySakuDesktopLayout() {
+        try {
+            val w = uiScreenWidth.coerceAtLeast(1)
+            val h = uiScreenHeight.coerceAtLeast(1)
+            val trackpadHeight = (h * 0.34f).toInt().coerceAtLeast(1)
+            trackpadParams.width = w
+            trackpadParams.height = trackpadHeight
+            trackpadParams.gravity = Gravity.TOP or Gravity.LEFT
+            trackpadParams.x = 0
+            trackpadParams.y = (h - trackpadHeight).coerceAtLeast(0)
+            trackpadLayout?.let { windowManager?.updateViewLayout(it, trackpadParams) }
+            val keyboardHeight = (h * 0.29f).toInt().coerceAtLeast(1)
+            keyboardOverlay?.updateSize((w - 16).coerceAtLeast(1), keyboardHeight)
+            keyboardOverlay?.updatePosition(8, (h - keyboardHeight).coerceAtLeast(0))
+            enforceZOrder()
+            showToast("Tata letak Saku: trackpad + keyboard di bawah")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to apply Saku desktop layout", e)
+        }
     }
 
     fun toggleTrackpad() { 
