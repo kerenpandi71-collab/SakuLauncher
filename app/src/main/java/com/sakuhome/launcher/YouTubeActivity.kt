@@ -32,6 +32,8 @@ class YouTubeActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var adButton: TextView
     private lateinit var audioButton: TextView
+    private lateinit var toolbar: LinearLayout
+    private lateinit var contentRoot: LinearLayout
     private var videoPlaying = false
     private var adBlockingEnabled = true
     private var backgroundAudioEnabled = false
@@ -47,8 +49,7 @@ class YouTubeActivity : Activity() {
         "youtube.com/get_video_info?adformat"
     )
     private val blockedPathTokens = listOf(
-        "/pagead/", "/ptracking", "/api/stats/ads", "/pagead/lvz",
-        "/youtubei/v1/log_event"
+        "/pagead/", "/ptracking", "/api/stats/ads", "/pagead/lvz"
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,11 +58,11 @@ class YouTubeActivity : Activity() {
         window.navigationBarColor = Color.BLACK
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        val root = LinearLayout(this).apply {
+        contentRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
         }
-        val bar = LinearLayout(this).apply {
+        toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(8, 4, 8, 4)
@@ -73,25 +74,25 @@ class YouTubeActivity : Activity() {
             setTextColor(Color.WHITE)
             setPadding(8, 8, 4, 8)
         }
-        bar.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        toolbar.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
         adButton = makeButton("Iklan: ON") {
             adBlockingEnabled = !adBlockingEnabled
             adButton.text = if (adBlockingEnabled) "Iklan: ON" else "Iklan: OFF"
             Toast.makeText(this, if (adBlockingEnabled) "Pemblokir permintaan iklan aktif" else "Pemblokir iklan nonaktif", Toast.LENGTH_SHORT).show()
             webView.reload()
         }
-        bar.addView(adButton)
+        toolbar.addView(adButton)
         audioButton = makeButton("Audio BG: OFF") {
             backgroundAudioEnabled = !backgroundAudioEnabled
             audioButton.text = if (backgroundAudioEnabled) "Audio BG: ON" else "Audio BG: OFF"
             if (backgroundAudioEnabled) requestAudioFocus() else abandonAudioFocus()
             Toast.makeText(this, if (backgroundAudioEnabled) "Mode audio latar diaktifkan; dukungan tetap bergantung pada YouTube/WebView" else "Mode audio latar dinonaktifkan", Toast.LENGTH_LONG).show()
         }
-        bar.addView(audioButton)
-        bar.addView(makeButton("Mini") { enterMiniPlayer() })
-        bar.addView(makeButton("⟳") { webView.reload() })
-        bar.addView(makeButton("✕") { finish() })
-        root.addView(bar, LinearLayout.LayoutParams(-1, -2))
+        toolbar.addView(audioButton)
+        toolbar.addView(makeButton("Mini") { enterMiniPlayer() })
+        toolbar.addView(makeButton("⟳") { webView.reload() })
+        toolbar.addView(makeButton("✕") { finish() })
+        contentRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
         webView = WebView(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -137,8 +138,8 @@ class YouTubeActivity : Activity() {
             }
             loadUrl("https://m.youtube.com/")
         }
-        root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        contentRoot.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(contentRoot)
 
         val sampler = android.os.Handler(mainLooper)
         val sample = object : Runnable {
@@ -208,6 +209,24 @@ class YouTubeActivity : Activity() {
             @Suppress("DEPRECATION")
             manager.abandonAudioFocus(null)
         }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (::toolbar.isInitialized) {
+            toolbar.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        }
+    }
+
+    override fun onPause() {
+        // Keep WebView alive in background-audio mode; playback still depends on WebView/YouTube policy.
+        if (!backgroundAudioEnabled && ::webView.isInitialized) webView.onPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::webView.isInitialized) webView.onResume()
     }
 
     override fun onUserLeaveHint() {
