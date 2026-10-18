@@ -10,6 +10,10 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.app.PictureInPictureParams
+import android.util.Rational
+import android.os.Build
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.io.ByteArrayInputStream
@@ -22,11 +26,15 @@ import java.util.Locale
  */
 class YouTubeActivity : Activity() {
     private lateinit var webView: WebView
+    private var videoPlaying = false
     private val blockedHosts = listOf(
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
         "adservice.google.com", "pagead2.googlesyndication.com",
-        "youtube.com/pagead", "youtube.com/ptracking", "youtube.com/api/stats/ads"
+        "googleads.g.doubleclick.net", "ad.doubleclick.net", "securepubads.g.doubleclick.net",
+        "youtube.com/pagead", "youtube.com/ptracking", "youtube.com/api/stats/ads",
+        "youtube.com/get_video_info?adformat"
     )
+    private val blockedPathTokens = listOf("/pagead/", "/ptracking", "/api/stats/ads")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +86,7 @@ class YouTubeActivity : Activity() {
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.loadsImagesAutomatically = true
             settings.useWideViewPort = true
+            webChromeClient = WebChromeClient()
             settings.loadWithOverviewMode = true
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -93,9 +102,10 @@ class YouTubeActivity : Activity() {
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                     val url = request?.url?.toString()?.lowercase(Locale.ROOT).orEmpty()
                     val host = request?.url?.host?.lowercase(Locale.ROOT).orEmpty()
-                    if (blockedHosts.any { token ->
-                            if (token.contains('/')) url.contains(token) else host == token || host.endsWith(".$token")
-                        }) {
+                    val blockedHost = blockedHosts.any { token ->
+                        if (token.contains('/') || token.contains('?')) url.contains(token) else host == token || host.endsWith(".$token")
+                    }
+                    if (blockedHost || blockedPathTokens.any { url.contains(it) }) {
                         return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
                     }
                     return super.shouldInterceptRequest(view, request)
@@ -105,6 +115,27 @@ class YouTubeActivity : Activity() {
         }
         root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+        val sampler = android.os.Handler(mainLooper)
+        val sample = object : Runnable {
+            override fun run() {
+                if (!isFinishing && ::webView.isInitialized) {
+                    webView.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})()") { value ->
+                        videoPlaying = value == "true"
+                    }
+                    sampler.postDelayed(this, 1200)
+                }
+            }
+        }
+        sampler.post(sample)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (videoPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
+            } catch (_: Exception) { }
+        }
     }
 
     override fun onBackPressed() {
