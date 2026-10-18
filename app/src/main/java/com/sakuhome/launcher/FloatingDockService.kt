@@ -502,20 +502,23 @@ class FloatingDockService : Service() {
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
         }
-        action("▣  Resolusi & DPI virtual display", "Atur resolusi, DPI, dan matikan virtual display") {
+        action("▣  Desktop Mode · resolusi & DPI", "Atur resolusi, DPI, target input, dan matikan virtual display") {
             try {
-                startActivity(Intent(this, DesktopModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                startActivity(Intent(this, DesktopModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("auto_start_controls", true))
             } catch (_: Exception) {
                 Toast.makeText(this, "Pengaturan Desktop Mode tidak dapat dibuka", Toast.LENGTH_LONG).show()
             }
         }
-        action("⌖  Sembunyikan mouse / trackpad", "Sembunyikan overlay mouse dan trackpad DroidOS") {
-            sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", false)
-            Toast.makeText(this, "Overlay mouse/trackpad disembunyikan", Toast.LENGTH_SHORT).show()
+        action(if (prefs.getBoolean("saku_mouse_hidden", false)) "⌖  Tampilkan mouse / trackpad" else "⌖  Sembunyikan mouse / trackpad", "Tampilkan atau sembunyikan overlay mouse/trackpad") {
+            val hide = !prefs.getBoolean("saku_mouse_hidden", false)
+            prefs.edit().putBoolean("saku_mouse_hidden", hide).apply()
+            sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", !hide)
+            Toast.makeText(this, if (hide) "Mouse/trackpad disembunyikan" else "Mouse/trackpad ditampilkan", Toast.LENGTH_SHORT).show()
         }
-        action("▦  Sembunyikan keyboard DroidOS", "Sembunyikan keyboard overlay DroidOS") {
-            sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD")
-            Toast.makeText(this, "Perintah sembunyikan/tampilkan keyboard dikirim", Toast.LENGTH_SHORT).show()
+        action("▦  Gunakan Keyboard Saku (bukan keyboard DroidOS)", "Pilih Keyboard Saku dan jangan tampilkan keyboard overlay DroidOS") {
+            sendTrackpadCommand("SAKU_DISABLE_DROIDOS_KEYBOARD")
+            try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
+            catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
         }
         action("⚙  Pengaturan DroidOS Trackpad", "Buka pengaturan ukuran, sensitivitas, dan tampilan trackpad") {
             try {
@@ -528,7 +531,7 @@ class FloatingDockService : Service() {
                 }
             }
         }
-        action("⌨  Keyboard Saku", "Buka pemilih Keyboard Saku buatan Saku") {
+        action("⌨  Pilih / atur Keyboard Saku", "Pilih Keyboard Saku buatan Saku") {
             try { (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker() }
             catch (_: Exception) { Toast.makeText(this, "Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan", Toast.LENGTH_LONG).show() }
         }
