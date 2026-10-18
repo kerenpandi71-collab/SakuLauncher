@@ -220,7 +220,7 @@ class YouTubeActivity : Activity() {
 
     override fun onPause() {
         // Keep WebView alive in background-audio mode; playback still depends on WebView/YouTube policy.
-        if (!backgroundAudioEnabled && ::webView.isInitialized) webView.onPause()
+        if (!backgroundAudioEnabled && !isInPictureInPictureMode && ::webView.isInitialized) webView.onPause()
         super.onPause()
     }
 
