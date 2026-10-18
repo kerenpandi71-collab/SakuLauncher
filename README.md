@@ -24,6 +24,6 @@ APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun
 
 ## Virtual desktop + trackpad
 
-The integrated FOSS trackpad and custom keyboard remain bundled; the DroidOS launcher module is not included. Open **Settings → Mode Desktop Virtual** to create a secondary virtual display, adjust its resolution and DPI, and start the trackpad/keyboard controls. The upper panel is a lightweight secondary-display launcher preview; applications can be launched onto the selected virtual display through the privileged shell. Root is attempted first; Shizuku can be used when authorized.
+The integrated FOSS trackpad and custom keyboard remain bundled; the DroidOS launcher module is not included in the build. Open **Settings → Mode Desktop Virtual** to configure an Android overlay display through `settings put global overlay_display_devices`. The default resolution is **900×1080 at 240 DPI**. The app list/menu has been removed from this screen so the upper area is dedicated to display controls; the lower area contains trackpad and keyboard controls. The trackpad keyboard uses a light, Gboard-inspired key palette. Display-setting commands require Magisk root permission. Runtime behavior must still be tested on the target ROM.
 
 Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If redistributing, comply with the included GPLv3 license.
