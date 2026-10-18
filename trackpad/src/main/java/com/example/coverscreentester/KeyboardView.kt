@@ -1078,7 +1078,7 @@ private fun buildKeyboard() {
         keyView.text = getDisplayText(key)
 
         val bg = GradientDrawable()
-        bg.cornerRadius = dpToPx(6).toFloat()
+        bg.cornerRadius = dpToPx(7).toFloat()
         bg.setColor(getKeyColor(key))
         keyView.background = bg
         
@@ -1957,28 +1957,25 @@ private fun buildKeyboard() {
     }
 
     private fun getKeyColor(key: String): Int {
-        // Gboard-inspired palette: light keyboard deck, white letter keys,
-        // neutral utility keys, and a blue action key.
-        if (key == "CTRL" && isCtrlActive) return Color.parseColor("#A8DAB5")
-        if (key == "ALT" && isAltActive) return Color.parseColor("#A8DAB5")
-        if (key == "META" && isMetaActive) return Color.parseColor("#A8DAB5")
-        if (key == "MIC") return if (isVoiceActive) Color.parseColor("#A8DAB5") else Color.parseColor("#C7CED8")
-        if (key == "SCREEN") return if (isSymbolsActive()) Color.parseColor("#F9AB00") else Color.parseColor("#C7CED8")
-        if (key in arrowRow) {
-            if (key in listOf("←", "↑", "↓", "→") && isTrackpadTouchMode) return Color.parseColor("#AECBFA")
-            return Color.parseColor("#C7CED8")
+        if ((key == "CTRL" && isCtrlActive) || (key == "ALT" && isAltActive) || (key == "META" && isMetaActive)) {
+            return Color.parseColor("#AECBFA")
         }
-        if (key in navRow) return Color.parseColor("#C7CED8")
+        if (key == "MIC") return if (isVoiceActive) Color.parseColor("#AECBFA") else Color.parseColor("#F1F3F4")
+        if (key == "SCREEN") return if (isSymbolsActive()) Color.parseColor("#F9AB00") else Color.parseColor("#DADCE0")
+        if (key in arrowRow || key in navRow) {
+            if (key in listOf("←", "↑", "↓", "→") && isTrackpadTouchMode) return Color.parseColor("#AECBFA")
+            return Color.parseColor("#DADCE0")
+        }
         return when (key) {
             "SHIFT" -> when (currentState) {
-                KeyboardState.CAPS_LOCK -> Color.parseColor("#A8DAB5")
-                KeyboardState.UPPERCASE -> Color.parseColor("#AECBFA")
-                else -> Color.parseColor("#C7CED8")
+                KeyboardState.CAPS_LOCK -> Color.parseColor("#AECBFA")
+                KeyboardState.UPPERCASE -> Color.parseColor("#D2E3FC")
+                else -> Color.parseColor("#DADCE0")
             }
             "ENTER" -> Color.parseColor("#4285F4")
-            "BKSP", "SYM", "SYM1", "SYM2", "ABC" -> Color.parseColor("#C7CED8")
-            "SPACE" -> Color.parseColor("#FFFFFF")
-            else -> Color.parseColor("#FFFFFF")
+            "BKSP", "SYM", "SYM1", "SYM2", "ABC" -> Color.parseColor("#C4CBD5")
+            "SPACE" -> Color.parseColor("#F8F9FA")
+            else -> Color.parseColor("#F8F9FA")
         }
     }
 
