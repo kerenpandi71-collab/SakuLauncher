@@ -84,7 +84,8 @@ class DesktopModeActivity : Activity() {
         configActions.addView(button("Buat / Terapkan", true) { createOrApplyDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         configActions.addView(button("Tutup display") { releaseDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f))
         top.addView(configActions, LinearLayout.LayoutParams(-1, dp(44)))
-        val upper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }\n        upper.addView(top, LinearLayout.LayoutParams(-1, 0, 0.47f))
+        val upper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        upper.addView(top, LinearLayout.LayoutParams(-1, 0, 0.47f))
 
         val appsCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(6), dp(10), dp(6)) }
         appsCard.addView(label("Aplikasi di layar sekunder", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(30)))
@@ -92,7 +93,8 @@ class DesktopModeActivity : Activity() {
         appGrid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS }
         scroll.addView(appGrid)
         appsCard.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        upper.addView(appsCard, LinearLayout.LayoutParams(-1, 0, 0.53f).apply { topMargin = dp(6) })\n        root.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.58f))
+        upper.addView(appsCard, LinearLayout.LayoutParams(-1, 0, 0.53f).apply { topMargin = dp(6) })
+        root.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.58f))
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
         controls.addView(label("Ruang bawah · trackpad + keyboard", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(28)))
