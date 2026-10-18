@@ -863,7 +863,8 @@ class MainActivity : Activity() {
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
-            "◌  Label menu aplikasi · $drawerLabelState"
+            "◌  Label menu aplikasi · $drawerLabelState",
+            "▶  YouTube Web · pemblokir iklan dasar"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -899,6 +900,7 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
                         buildScreen()
                     }
+                    18 -> startActivity(Intent(this, YouTubeWebActivity::class.java))
                 }
             }.setNegativeButton("Selesai", null).show()
     }
