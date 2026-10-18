@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/saku-desktop-overhaul
+      - feature/saku-youtube-ublock
   pull_request:
     branches:
       - feature/saku-desktop-overhaul
@@ -15,6 +16,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,6 +28,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Install Android SDK platform
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            echo "Android SDK command-line tools were not found on the runner."
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
