@@ -42,7 +42,6 @@ private object SakuYouTubeRuntime {
                 context.applicationContext,
                 GeckoRuntimeSettings.Builder()
                     .javaScriptEnabled(true)
-                    .webManifest(true)
                     .extensionsProcessEnabled(true)
                     .build()
             ).also { instance = it }
@@ -94,8 +93,7 @@ class YoutubeActivity : Activity() {
         try {
             runtime = SakuYouTubeRuntime.get(this)
             session = GeckoSession()
-            session.settings.setInt(
-                GeckoSessionSettings.USER_AGENT_MODE,
+            session.settings.setUserAgentMode(
                 if (desktopMode) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
                 else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
             )
@@ -182,8 +180,7 @@ class YoutubeActivity : Activity() {
         statusRow.addView(makeButton(if (desktopMode) "Desktop ✓" else "Desktop") {
             desktopMode = !desktopMode
             prefs.edit().putBoolean(KEY_DESKTOP_MODE, desktopMode).apply()
-            session.settings.setInt(
-                GeckoSessionSettings.USER_AGENT_MODE,
+            session.settings.setUserAgentMode(
                 if (desktopMode) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
                 else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
             )
