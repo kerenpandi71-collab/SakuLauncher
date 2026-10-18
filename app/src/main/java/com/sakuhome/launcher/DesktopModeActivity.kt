@@ -1,0 +1,252 @@
+package com.sakuhome.launcher
+
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.GridLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import rikka.shizuku.Shizuku
+import com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity as TrackpadActivity
+
+private data class DesktopApp(val label: String, val component: String)
+
+class DesktopModeActivity : Activity() {
+    private val prefs by lazy { getSharedPreferences("SakuVirtualDesktop", MODE_PRIVATE) }
+    private lateinit var status: TextView
+    private lateinit var appGrid: GridLayout
+    private lateinit var widthInput: EditText
+    private lateinit var heightInput: EditText
+    private lateinit var dpiInput: EditText
+    private var displayId: Int
+        get() = prefs.getInt("display_id", -1)
+        set(value) { prefs.edit().putInt("display_id", value).apply() }
+    private val bg = Color.rgb(12, 17, 29)
+    private val panel = Color.rgb(24, 34, 51)
+    private val accent = Color.rgb(73, 130, 230)
+    private val fg = Color.rgb(239, 245, 255)
+    private val muted = Color.rgb(153, 171, 195)
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density + .5f).toInt()
+    private fun rounded(color: Int, radius: Int = 14) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun label(value: String, size: Float = 13f, color: Int = fg, bold: Boolean = false) = TextView(this).apply {
+        text = value; textSize = size; setTextColor(color); gravity = Gravity.CENTER_VERTICAL
+        if (bold) setTypeface(typeface, Typeface.BOLD)
+    }
+    private fun button(value: String, primary: Boolean = false, click: () -> Unit) = Button(this).apply {
+        text = value; isAllCaps = false; textSize = 12f; setTextColor(fg)
+        background = rounded(if (primary) accent else panel)
+        setOnClickListener { click() }
+    }
+    private fun field(value: String, hintText: String): EditText = EditText(this).apply {
+        setText(value); hint = hintText; textSize = 13f; setTextColor(fg); setHintTextColor(muted)
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        setPadding(dp(8), 0, dp(8), 0); background = rounded(panel)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        buildUi()
+        refreshApps()
+        updateStatus()
+    }
+
+    override fun onResume() { super.onResume(); if (::status.isInitialized) updateStatus() }
+
+    private fun buildUi() {
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        top.addView(label("SAKU · VIRTUAL DESKTOP", 17f, fg, true), LinearLayout.LayoutParams(-1, dp(32)))
+        top.addView(label("Ruang atas · simulasi layar sekunder", 11f, muted), LinearLayout.LayoutParams(-1, dp(22)))
+        status = label("Memeriksa display…", 11f, muted)
+        top.addView(status, LinearLayout.LayoutParams(-1, dp(25)))
+        val config = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        widthInput = field("1280", "Lebar")
+        heightInput = field("720", "Tinggi")
+        dpiInput = field("240", "DPI")
+        listOf(widthInput, heightInput, dpiInput).forEach { config.addView(it, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) }) }
+        top.addView(config, LinearLayout.LayoutParams(-1, dp(46)))
+        val configActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        configActions.addView(button("Buat / Terapkan", true) { createOrApplyDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        configActions.addView(button("Tutup display") { releaseDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        top.addView(configActions, LinearLayout.LayoutParams(-1, dp(44)))
+        root.addView(top, LinearLayout.LayoutParams(-1, 0, 0.55f))
+
+        val appsCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(6), dp(10), dp(6)) }
+        appsCard.addView(label("Aplikasi di layar sekunder", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(30)))
+        val scroll = ScrollView(this)
+        appGrid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS }
+        scroll.addView(appGrid)
+        appsCard.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(appsCard, LinearLayout.LayoutParams(-1, 0, 0.45f).apply { topMargin = dp(8) })
+
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
+        controls.addView(label("Ruang bawah · trackpad + keyboard", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(28)))
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row1.addView(button("Aktifkan trackpad + keyboard", true) { startTrackpad() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(5) })
+        row1.addView(button("Tampilkan keyboard") { sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD") }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        controls.addView(row1, LinearLayout.LayoutParams(-1, dp(46)))
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row2.addView(button("Sembunyikan trackpad") { sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", false) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
+        row2.addView(button("Izin aksesibilitas") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
+        row2.addView(button("Kembali") { finish() }, LinearLayout.LayoutParams(0, dp(42), .7f))
+        controls.addView(row2, LinearLayout.LayoutParams(-1, dp(44)))
+        root.addView(controls, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        setContentView(root)
+    }
+
+    private fun refreshApps() {
+        appGrid.removeAllViews()
+        val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = packageManager.queryIntentActivities(query, PackageManager.MATCH_ALL)
+            .mapNotNull { info ->
+                val ai = info.activityInfo ?: return@mapNotNull null
+                if (ai.packageName == packageName) return@mapNotNull null
+                DesktopApp(info.loadLabel(packageManager).toString(), "${ai.packageName}/${ai.name}")
+            }.distinctBy { it.component }.sortedBy { it.label.lowercase() }
+        apps.forEach { app ->
+            val tile = TextView(this).apply {
+                text = app.label; textSize = 11f; setTextColor(fg); gravity = Gravity.CENTER
+                maxLines = 2; setPadding(dp(4), dp(6), dp(4), dp(6)); background = rounded(Color.rgb(38, 51, 73), 10)
+                isClickable = true; isFocusable = true
+                setOnClickListener { launchOnDisplay(app) }
+            }
+            appGrid.addView(tile, GridLayout.LayoutParams().apply {
+                width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            })
+        }
+    }
+
+    private fun updateStatus(extra: String = "") {
+        val id = displayId
+        status.text = if (id >= 0) "Virtual display aktif · ID $id  •  ${widthInputOr("1280")}×${heightInputOr("720")} @ ${dpiInputOr("240")} dpi" + if (extra.isBlank()) "" else " · $extra"
+        else "Belum ada virtual display. Buat display untuk mengarahkan input." + if (extra.isBlank()) "" else " · $extra"
+    }
+    private fun widthInputOr(default: String) = if (::widthInput.isInitialized) widthInput.text.toString() else default
+    private fun heightInputOr(default: String) = if (::heightInput.isInitialized) heightInput.text.toString() else default
+    private fun dpiInputOr(default: String) = if (::dpiInput.isInitialized) dpiInput.text.toString() else default
+
+    private fun validConfig(): Triple<Int, Int, Int>? {
+        val w = widthInput.text.toString().toIntOrNull() ?: return null
+        val h = heightInput.text.toString().toIntOrNull() ?: return null
+        val dpi = dpiInput.text.toString().toIntOrNull() ?: return null
+        if (w !in 480..2560 || h !in 320..1600 || dpi !in 120..480) return null
+        return Triple(w, h, dpi)
+    }
+
+    private fun createOrApplyDisplay() {
+        val cfg = validConfig()
+        if (cfg == null) { toast("Resolusi: lebar 480–2560, tinggi 320–1600; DPI 120–480."); return }
+        val (w, h, dpi) = cfg
+        Thread {
+            val result = if (displayId >= 0) {
+                runPrivileged("wm size -d $displayId ${w}x${h}; wm density -d $displayId $dpi; echo SAKU_DISPLAY_UPDATED")
+            } else {
+                runPrivileged("cmd display create-virtual-display --own-content-only SakuDesktop")
+            }
+            val output = result.second
+            val found = Regex("(?:display(?:\s+id)?\s*[:=]?\s*|ID\s*[:=]?\s*)(\\d+)", RegexOption.IGNORE_CASE)
+                .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            runOnUiThread {
+                if (displayId >= 0 && output.contains("SAKU_DISPLAY_UPDATED")) {
+                    prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
+                    updateStatus("resolusi diterapkan"); toast("Resolusi dan DPI virtual display diperbarui")
+                } else if (found != null && found > 0) {
+                    displayId = found
+                    val apply = runPrivileged("wm size -d $found ${w}x${h}; wm density -d $found $dpi")
+                    prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
+                    updateStatus(); toast(if (apply.first == 0) "Virtual display dibuat" else "Display dibuat; gagal menerapkan resolusi/DPI: ${apply.second}")
+                } else {
+                    updateStatus("gagal membuat display")
+                    toast("Gagal membuat virtual display. Pastikan root/Shizuku aktif. ${output.take(180)}")
+                }
+            }
+        }.start()
+    }
+
+    private fun releaseDisplay() {
+        val id = displayId
+        if (id < 0) { toast("Belum ada virtual display"); return }
+        Thread {
+            val result = runPrivileged("cmd display release-virtual-display $id")
+            runOnUiThread {
+                if (result.first == 0) { displayId = -1; updateStatus(); toast("Virtual display ditutup") }
+                else toast("Gagal menutup display: ${result.second.take(140)}")
+            }
+        }.start()
+    }
+
+    private fun runPrivileged(command: String): Pair<Int, String> {
+        // Root is preferred on this rooted-device workflow. Fall back to Shizuku only when authorized.
+        try {
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val out = p.inputStream.bufferedReader().use { it.readText() }
+            val err = p.errorStream.bufferedReader().use { it.readText() }
+            val code = p.waitFor()
+            if (code == 0) return code to (out + "\n" + err)
+            if (Shizuku.getBinder() == null || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return code to (out + "\n" + err)
+        } catch (_: Exception) { }
+        return try {
+            if (Shizuku.getBinder() == null || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED)
+                return -1 to "Root tidak tersedia dan izin Shizuku belum diberikan."
+            val p = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+            val out = p.inputStream.bufferedReader().use { it.readText() }
+            val err = p.errorStream.bufferedReader().use { it.readText() }
+            p.waitFor() to (out + "\n" + err)
+        } catch (e: Exception) { -1 to (e.message ?: "Perintah privileged gagal") }
+    }
+
+    private fun launchOnDisplay(app: DesktopApp) {
+        val id = displayId
+        if (id < 0) { toast("Buat virtual display terlebih dahulu"); return }
+        // component is built only from package-manager metadata, not user-supplied shell text.
+        val component = app.component
+        Thread {
+            val result = runPrivileged("am start --display $id -n '$component'")
+            runOnUiThread { if (result.first != 0) toast("Tidak bisa membuka aplikasi di display: ${result.second.take(140)}") }
+        }.start()
+    }
+
+    private fun startTrackpad() {
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        try {
+            startActivity(Intent(this, TrackpadActivity::class.java).apply {
+                putExtra("displayId", 0)
+                putExtra("force_start", true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+            window.decorView.postDelayed({
+                val id = displayId
+                if (id >= 0) sendBroadcast(Intent("com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MOVE_TO_VIRTUAL").setPackage(packageName).putExtra("DISPLAY_ID", id))
+                sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", true)
+            }, 900L)
+            toast("Trackpad dan keyboard diminta aktif. Jika belum muncul, aktifkan layanan aksesibilitas trackpad.")
+        } catch (e: Exception) { toast("Trackpad gagal dibuka: ${e.message}") }
+    }
+
+    private fun sendTrackpadCommand(action: String, visible: Boolean? = null) {
+        val intent = Intent(action).setPackage(packageName)
+        if (visible != null) intent.putExtra("VISIBLE", visible)
+        sendBroadcast(intent)
+        if (action == "TOGGLE_CUSTOM_KEYBOARD") toast("Perintah keyboard dikirim")
+    }
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+}

@@ -1496,7 +1496,7 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Masuk Mode Desktop DroidOS · Launcher + Trackpad asli"
+            "Mode Desktop Virtual · Trackpad + Keyboard"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1548,7 +1548,7 @@ class MainActivity : Activity() {
                     }
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
-                    18 -> startActivity(Intent(this, DroidOSModeActivity::class.java))
+                    18 -> startActivity(Intent(this, DesktopModeActivity::class.java))
                 }
             }.setNegativeButton("Tutup", null).show()
     }

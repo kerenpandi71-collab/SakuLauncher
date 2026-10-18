@@ -22,13 +22,8 @@ Mode jendela bebas (freeform) sengaja tidak diminta oleh Saku Launcher. Aplikasi
 APK debug: `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions membangun APK pada branch `feature/saku-desktop-overhaul`; periksa tab Actions untuk status dan artefak.
 
 
-## DroidOS Trackpad integration
+## Virtual desktop + trackpad
 
-Branch `feature/saku-trackpad-integration` packages the GPLv3 FOSS trackpad implementation as a library module inside SakuLauncher. In Saku settings, select **Mode Trackpad DroidOS · ON/OFF** to open the trackpad setup/service or send its stop command. Android Accessibility, overlay, and Shizuku permissions remain user-controlled.
+The integrated FOSS trackpad and custom keyboard remain bundled; the DroidOS launcher module is not included. Open **Settings → Mode Desktop Virtual** to create a secondary virtual display, adjust its resolution and DPI, and start the trackpad/keyboard controls. The upper panel is a lightweight secondary-display launcher preview; applications can be launched onto the selected virtual display through the privileged shell. Root is attempted first; Shizuku can be used when authorized.
 
-Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If you redistribute a build containing this GPLv3 module, comply with GPLv3 obligations for the combined derivative work.
-
-
-## DroidOS desktop mode
-
-Saku bundles the original FOSS/GPLv3 DroidOS launcher and trackpad modules. Open **Settings → Masuk Mode Desktop DroidOS** to enter the combined setup screen, authorize Shizuku, and then start the original launcher and trackpad overlays. Root can be used to grant overlay and accessibility settings; the FOSS DroidOS shell/input backend still requires Shizuku authorization.
+Source and license attribution: see [trackpad/README.md](trackpad/README.md) and [trackpad/LICENSE](trackpad/LICENSE). If redistributing, comply with the included GPLv3 license.

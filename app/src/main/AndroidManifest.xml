@@ -68,9 +68,10 @@
             </intent-filter>
         </receiver>
         <activity
-            android:name=".DroidOSModeActivity"
+            android:name=".DesktopModeActivity"
             android:exported="false"
-            android:resizeableActivity="true" />
+            android:resizeableActivity="true"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|density" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"
