@@ -466,6 +466,12 @@ class FloatingDockService : Service() {
         try { windowManager.addView(bubble, params); assistiveBubble = bubble } catch (_: Exception) { assistiveBubble = null }
     }
 
+    private fun sendTrackpadCommand(action: String, visible: Boolean? = null) {
+        val intent = Intent(action).setPackage(packageName)
+        if (visible != null) intent.putExtra("VISIBLE", visible)
+        sendBroadcast(intent)
+    }
+
     private fun showQuickMenu() {
         if (!Settings.canDrawOverlays(this)) return
         quickMenuView?.let { try { windowManager.removeView(it) } catch (_: Exception) { }; quickMenuView = null }
@@ -501,6 +507,25 @@ class FloatingDockService : Service() {
                 startActivity(Intent(this, DesktopModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
                 Toast.makeText(this, "Pengaturan Desktop Mode tidak dapat dibuka", Toast.LENGTH_LONG).show()
+            }
+        }
+        action("⌖  Sembunyikan mouse / trackpad", "Sembunyikan overlay mouse dan trackpad DroidOS") {
+            sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", false)
+            Toast.makeText(this, "Overlay mouse/trackpad disembunyikan", Toast.LENGTH_SHORT).show()
+        }
+        action("▦  Sembunyikan keyboard DroidOS", "Sembunyikan keyboard overlay DroidOS") {
+            sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD")
+            Toast.makeText(this, "Perintah sembunyikan/tampilkan keyboard dikirim", Toast.LENGTH_SHORT).show()
+        }
+        action("⚙  Pengaturan DroidOS Trackpad", "Buka pengaturan ukuran, sensitivitas, dan tampilan trackpad") {
+            try {
+                startActivity(Intent().setClassName(packageName, "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.SettingsActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                try {
+                    startActivity(Intent().setClassName(packageName, "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Pengaturan DroidOS Trackpad tidak dapat dibuka", Toast.LENGTH_LONG).show()
+                }
             }
         }
         action("⌨  Keyboard Saku", "Buka pemilih Keyboard Saku buatan Saku") {
