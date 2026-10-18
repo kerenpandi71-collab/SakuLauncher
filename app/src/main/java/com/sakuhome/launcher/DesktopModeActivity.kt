@@ -60,10 +60,10 @@ class DesktopModeActivity : Activity() {
     override fun onResume() { super.onResume(); if (::status.isInitialized) updateStatus() }
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(12), dp(8), dp(12), dp(8)); isFocusableInTouchMode = true }
         val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(12), dp(8), dp(12), dp(8)) }
-        top.addView(label("SAKU · VIRTUAL DESKTOP", 17f, fg, true), LinearLayout.LayoutParams(-1, dp(32)))
-        top.addView(label("Ruang atas · simulasi layar sekunder", 11f, muted), LinearLayout.LayoutParams(-1, dp(22)))
+        top.addView(label("SAKU ASSISTANT", 17f, fg, true), LinearLayout.LayoutParams(-1, dp(32)))
+        top.addView(label("Resolusi layar sekunder · virtual display", 11f, muted), LinearLayout.LayoutParams(-1, dp(22)))
         status = label("Memeriksa display…", 11f, muted)
         top.addView(status, LinearLayout.LayoutParams(-1, dp(25)))
         val config = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -86,16 +86,11 @@ class DesktopModeActivity : Activity() {
         row1.addView(button("Tampilkan keyboard") { sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD") }, LinearLayout.LayoutParams(0, dp(44), 1f))
         controls.addView(row1, LinearLayout.LayoutParams(-1, dp(46)))
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row2.addView(button("Sembunyikan trackpad") { sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", false) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        row2.addView(button("Izin aksesibilitas") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        row2.addView(button("Cek izin root") { toast("Fitur display memerlukan akses root Magisk. Pastikan SakuLauncher diizinkan di prompt Magisk.") }, LinearLayout.LayoutParams(0, dp(42), .7f))
+        row2.addView(button("Kembali ke Saku") { finish() }, LinearLayout.LayoutParams(-1, dp(42)))
         controls.addView(row2, LinearLayout.LayoutParams(-1, dp(44)))
-        val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row3.addView(button("Buka izin overlay") { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        row3.addView(button("Kembali") { finish() }, LinearLayout.LayoutParams(0, dp(42), .7f))
-        controls.addView(row3, LinearLayout.LayoutParams(-1, dp(44)))
         root.addView(controls, LinearLayout.LayoutParams(-1, 0, 0.42f).apply { topMargin = dp(8) })
         setContentView(root)
+        root.requestFocus()
     }
 
     private fun updateStatus(extra: String = "") {
