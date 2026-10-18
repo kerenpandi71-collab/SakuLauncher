@@ -67,7 +67,7 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <activity android:name=".YouTubeActivity" android:exported="false" android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity android:name=".YouTubeActivity" android:exported="false" android:supportsPictureInPicture="true" android:configChanges="keyboardHidden|orientation|screenSize" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"
