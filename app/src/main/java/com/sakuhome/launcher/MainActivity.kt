@@ -1496,7 +1496,8 @@ class MainActivity : Activity() {
             "Mulai otomatis setelah restart",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "Mode Desktop Virtual · Trackpad + Keyboard"
+            "Saku Assistant · Display Virtual + Trackpad",
+            "Izin Desktop · Aksesibilitas & overlay"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1549,6 +1550,22 @@ class MainActivity : Activity() {
                     16 -> requestBackgroundRunPermission()
                     17 -> showPermissionInfo()
                     18 -> startActivity(Intent(this, DesktopModeActivity::class.java))
+                    19 -> showDesktopPermissions()
+                }
+            }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun showDesktopPermissions() {
+        val options = arrayOf("Izin tampil di atas aplikasi", "Aktifkan layanan aksesibilitas", "Info izin Root Magisk")
+        AlertDialog.Builder(this).setTitle("Izin Desktop Saku")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> openOverlaySettings()
+                    1 -> try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                        catch (_: Exception) { Toast.makeText(this, "Pengaturan aksesibilitas tidak tersedia", Toast.LENGTH_LONG).show() }
+                    2 -> AlertDialog.Builder(this).setTitle("Izin Root")
+                        .setMessage("Saku Assistant meminta izin Root melalui prompt Magisk ketika menerapkan resolusi virtual display. Izinkan hanya jika ingin mengaktifkan fitur ini.")
+                        .setPositiveButton("Mengerti", null).show()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
