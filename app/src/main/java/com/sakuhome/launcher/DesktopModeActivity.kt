@@ -159,25 +159,22 @@ class DesktopModeActivity : Activity() {
         if (cfg == null) { toast("Resolusi: lebar 480–2560, tinggi 320–1600; DPI 120–480."); return }
         val (w, h, dpi) = cfg
         Thread {
-            val result = if (displayId >= 0) {
-                runPrivileged("wm size -d $displayId ${w}x${h}; wm density -d $displayId $dpi; echo SAKU_DISPLAY_UPDATED")
-            } else {
-                runPrivileged("cmd display create-virtual-display --own-content-only SakuDesktop")
-            }
+            val result = runPrivileged(
+                "settings put global overlay_display_devices \\\"${w}x${h}/$dpi\\\"; sleep 2; dumpsys display"
+            )
             val output = result.second
-            val found = Regex("""(?:display\s+id\s*[:=]?\s*|id\s*[:=]\s*)(\d+)""", RegexOption.IGNORE_CASE)
-                .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                ?: Regex("""created virtual display.*?(\d+)""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                    .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val found = Regex(
+                """DisplayInfo\\{\\\"[^\\\"]*(?:Overlay|Saku)[^\\\"]*\\\"[^}]*displayId\\s+(\\d+)""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
             runOnUiThread {
                 if (displayId >= 0 && output.contains("SAKU_DISPLAY_UPDATED")) {
                     prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
                     updateStatus("resolusi diterapkan"); toast("Resolusi dan DPI virtual display diperbarui")
                 } else if (found != null && found > 0) {
                     displayId = found
-                    val apply = runPrivileged("wm size -d $found ${w}x${h}; wm density -d $found $dpi")
                     prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
-                    updateStatus(); toast(if (apply.first == 0) "Virtual display dibuat" else "Display dibuat; gagal menerapkan resolusi/DPI: ${apply.second}")
+                    updateStatus(); toast("Overlay virtual display aktif · ID $found")
                 } else {
                     updateStatus("gagal membuat display")
                     toast("Gagal membuat virtual display. Pastikan root/Shizuku aktif. ${output.take(180)}")
@@ -190,9 +187,9 @@ class DesktopModeActivity : Activity() {
         val id = displayId
         if (id < 0) { toast("Belum ada virtual display"); return }
         Thread {
-            val result = runPrivileged("cmd display release-virtual-display $id")
+            val result = runPrivileged("settings put global overlay_display_devices \\\"\\\"; sleep 1; echo SAKU_OVERLAY_DISPLAY_CLEARED")
             runOnUiThread {
-                if (result.first == 0) { displayId = -1; updateStatus(); toast("Virtual display ditutup") }
+                if (result.first == 0 && result.second.contains("SAKU_OVERLAY_DISPLAY_CLEARED")) { displayId = -1; updateStatus(); toast("Overlay virtual display ditutup") }
                 else toast("Gagal menutup display: ${result.second.take(140)}")
             }
         }.start()
