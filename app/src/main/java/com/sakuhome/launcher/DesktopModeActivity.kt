@@ -238,7 +238,8 @@ class DesktopModeActivity : Activity() {
             })
             window.decorView.postDelayed({
                 val id = displayId
-                if (id >= 0) sendBroadcast(Intent("com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MOVE_TO_VIRTUAL").setPackage(packageName).putExtra("DISPLAY_ID", id))
+                if (id >= 0) sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", id))
+                sendBroadcast(Intent("SAKU_DESKTOP_LAYOUT").setPackage(packageName))
                 sendTrackpadCommand("SET_TRACKPAD_VISIBILITY", true)
             }, 900L)
             toast("Trackpad dan keyboard diminta aktif. Jika belum muncul, aktifkan layanan aksesibilitas trackpad.")
