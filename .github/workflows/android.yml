@@ -3,7 +3,7 @@ name: Android CI
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "feature/saku-desktop-overhaul", "feature/saku-trackpad-integration", "feature/saku-droidos-minimal-desktop"]
+    branches: ["main", "feature/saku-desktop-overhaul", "feature/saku-youtube-ublock"]
   pull_request:
     branches: ["main", "feature/saku-desktop-overhaul"]
 
@@ -31,7 +31,7 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
