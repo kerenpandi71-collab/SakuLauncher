@@ -181,17 +181,6 @@ class DesktopModeActivity : Activity() {
         }
     }
 
-    private fun launchOnDisplay(app: DesktopApp) {
-        val id = displayId
-        if (id < 0) { toast("Buat virtual display terlebih dahulu"); return }
-        // component is built only from package-manager metadata, not user-supplied shell text.
-        val component = app.component
-        Thread {
-            val result = runPrivileged("am start --display $id -n '$component'")
-            runOnUiThread { if (result.first != 0) toast("Tidak bisa membuka aplikasi di overlay display: ${result.second.take(140)}") }
-        }.start()
-    }
-
     private fun startTrackpad() {
         if (!Settings.canDrawOverlays(this)) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
