@@ -162,8 +162,10 @@ class DesktopModeActivity : Activity() {
                 runPrivileged("cmd display create-virtual-display --own-content-only SakuDesktop")
             }
             val output = result.second
-            val found = Regex("(?:display(?:\s+id)?\s*[:=]?\s*|ID\s*[:=]?\s*)(\\d+)", RegexOption.IGNORE_CASE)
+            val found = Regex("""(?:display\s+id\s*[:=]?\s*|id\s*[:=]\s*)(\d+)""", RegexOption.IGNORE_CASE)
                 .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: Regex("""created virtual display.*?(\d+)""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
             runOnUiThread {
                 if (displayId >= 0 && output.contains("SAKU_DISPLAY_UPDATED")) {
                     prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
