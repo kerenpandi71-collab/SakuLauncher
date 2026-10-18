@@ -26,8 +26,8 @@ class DesktopModeActivity : Activity() {
     private var displayId: Int
         get() = prefs.getInt("display_id", -1)
         set(value) { prefs.edit().putInt("display_id", value).apply() }
-    private val bg = Color.rgb(12, 17, 29)
-    private val panel = Color.rgb(24, 34, 51)
+    private val bg = Color.BLACK
+    private val panel = Color.rgb(0, 0, 0)
     private val accent = Color.rgb(73, 130, 230)
     private val fg = Color.rgb(239, 245, 255)
     private val muted = Color.rgb(153, 171, 195)
@@ -61,7 +61,7 @@ class DesktopModeActivity : Activity() {
 
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(12), dp(8), dp(12), dp(8)); isFocusableInTouchMode = true }
-        val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(Color.BLACK, 18); setPadding(dp(12), dp(8), dp(12), dp(8)) }
         top.addView(label("SAKU ASSISTANT", 17f, fg, true), LinearLayout.LayoutParams(-1, dp(32)))
         top.addView(label("Resolusi layar sekunder · virtual display", 11f, muted), LinearLayout.LayoutParams(-1, dp(22)))
         status = label("Memeriksa display…", 11f, muted)
@@ -79,7 +79,7 @@ class DesktopModeActivity : Activity() {
         // No app drawer/menu here: this panel is reserved for virtual display controls.
         root.addView(top, LinearLayout.LayoutParams(-1, 0, 0.58f))
 
-        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(Color.BLACK, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
         controls.addView(label("Ruang bawah · trackpad + keyboard", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(28)))
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row1.addView(button("Aktifkan trackpad + keyboard", true) { startTrackpad() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(5) })
