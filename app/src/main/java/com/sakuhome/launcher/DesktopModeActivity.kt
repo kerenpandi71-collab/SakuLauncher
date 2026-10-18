@@ -159,50 +159,50 @@ class DesktopModeActivity : Activity() {
         if (cfg == null) { toast("Resolusi: lebar 480–2560, tinggi 320–1600; DPI 120–480."); return }
         val (w, h, dpi) = cfg
         Thread {
-            // Android creates this overlay display from the global setting.
-            val result = runPrivileged("settings put global overlay_display_devices \"${w}x${h}/${dpi}\" && sleep 1 && dumpsys display")
-            val found = parseOverlayDisplayId(result.second)
+            val currentSetting = runPrivileged("settings get global overlay_display_devices").second.trim()
+            if (currentSetting != "\${w}x\${h}/$dpi") {
+                prefs.edit().putString("previous_overlay_display_devices", if (currentSetting == "null") "" else currentSetting).apply()
+            }
+            val result = runPrivileged(
+                "settings put global overlay_display_devices '\${w}x\${h}/$dpi'; sleep 2; dumpsys display"
+            )
+            val output = result.second
+            val found = Regex(
+                """DisplayInfo\{"[^"]*(?:Overlay|Saku)[^"]*"[^}]*displayId\s+(\d+)""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
             runOnUiThread {
-                if (result.first == 0 && found != null) {
+                if (found != null && found > 0) {
                     displayId = found
                     prefs.edit().putInt("width", w).putInt("height", h).putInt("dpi", dpi).apply()
-                    updateStatus("overlay display diterapkan")
-                    toast("Overlay display aktif: ID $found · ${w}×${h} @ $dpi dpi")
-                    sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", found))
+                    updateStatus(); toast("Overlay virtual display aktif · ID $found")
                 } else {
-                    displayId = -1
-                    updateStatus("display belum terdeteksi")
-                    toast("Setting diterapkan, tetapi ID overlay belum terbaca. Coba lagi beberapa detik. ${result.second.take(150)}")
+                    updateStatus("gagal menemukan display")
+                    toast("Setting overlay diterapkan, tetapi ID display belum terbaca. Periksa Developer Options / dumpsys display.")
                 }
             }
         }.start()
     }
 
-    private fun parseOverlayDisplayId(dump: String): Int? {
-        val blocks = Regex("""LogicalDisplay\{.*?(?=LogicalDisplay\{|$)""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-            .findAll(dump)
-        for (match in blocks) {
-            val block = match.value
-            if (block.contains("Overlay", ignoreCase = true) || block.contains("overlay:", ignoreCase = true)) {
-                Regex("""mDisplayId=(\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
-                Regex("""displayId=(\d+)""").find(block)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
-            }
-        }
-        return Regex("""(?:mDisplayId|displayId)=(\d+)[^\n]{0,300}(?:Overlay|overlay:)""", RegexOption.IGNORE_CASE)
-            .find(dump)?.groupValues?.getOrNull(1)?.toIntOrNull()
-    }
-
     private fun releaseDisplay() {
+        val id = displayId
+        if (id < 0) { toast("Belum ada virtual display"); return }
         Thread {
-            // This setting may describe multiple overlays; clearing it closes all of them.
-            val result = runPrivileged("settings put global overlay_display_devices \"\"")
+            val previous = prefs.getString("previous_overlay_display_devices", "").orEmpty()
+            val safePrevious = previous.replace("\\", "\\\\").replace("'", "'\\''")
+            val command = if (safePrevious.isBlank()) {
+                "settings put global overlay_display_devices ''"
+            } else {
+                "settings put global overlay_display_devices '$safePrevious'"
+            }
+            val result = runPrivileged("$command; sleep 1; echo SAKU_OVERLAY_DISPLAY_CLEARED")
             runOnUiThread {
-                if (result.first == 0) {
+                if (result.first == 0 && result.second.contains("SAKU_OVERLAY_DISPLAY_CLEARED")) {
                     displayId = -1
-                    updateStatus("overlay display ditutup")
-                    toast("Overlay display ditutup. Semua overlay display dari setting ini akan dihapus.")
-                    sendBroadcast(Intent("SAKU_SET_INPUT_TARGET").setPackage(packageName).putExtra("DISPLAY_ID", 0))
-                } else toast("Gagal menutup overlay display: ${result.second.take(140)}")
+                    prefs.edit().remove("previous_overlay_display_devices").apply()
+                    updateStatus()
+                    toast("Overlay virtual display ditutup")
+                } else toast("Gagal menutup display: \${result.second.take(140)}")
             }
         }.start()
     }
