@@ -2,7 +2,6 @@ package com.sakuhome.launcher
 
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -13,19 +12,14 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
-import android.widget.GridLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity as TrackpadActivity
 
-private data class DesktopApp(val label: String, val component: String)
-
 class DesktopModeActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("SakuVirtualDesktop", MODE_PRIVATE) }
     private lateinit var status: TextView
-    private lateinit var appGrid: GridLayout
     private lateinit var widthInput: EditText
     private lateinit var heightInput: EditText
     private lateinit var dpiInput: EditText
@@ -60,7 +54,6 @@ class DesktopModeActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
-        refreshApps()
         updateStatus()
     }
 
@@ -74,26 +67,17 @@ class DesktopModeActivity : Activity() {
         status = label("Memeriksa display…", 11f, muted)
         top.addView(status, LinearLayout.LayoutParams(-1, dp(25)))
         val config = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        widthInput = field("1280", "Lebar")
-        heightInput = field("720", "Tinggi")
-        dpiInput = field("240", "DPI")
+        widthInput = field(prefs.getInt("width", 900).toString(), "Lebar")
+        heightInput = field(prefs.getInt("height", 1080).toString(), "Tinggi")
+        dpiInput = field(prefs.getInt("dpi", 240).toString(), "DPI")
         listOf(widthInput, heightInput, dpiInput).forEach { config.addView(it, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) }) }
         top.addView(config, LinearLayout.LayoutParams(-1, dp(46)))
         val configActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         configActions.addView(button("Buat / Terapkan", true) { createOrApplyDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         configActions.addView(button("Tutup display") { releaseDisplay() }, LinearLayout.LayoutParams(0, dp(42), 1f))
         top.addView(configActions, LinearLayout.LayoutParams(-1, dp(44)))
-        val upper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        upper.addView(top, LinearLayout.LayoutParams(-1, 0, 0.47f))
-
-        val appsCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(6), dp(10), dp(6)) }
-        appsCard.addView(label("Aplikasi di layar sekunder", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(30)))
-        val scroll = ScrollView(this)
-        appGrid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS }
-        scroll.addView(appGrid)
-        appsCard.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        upper.addView(appsCard, LinearLayout.LayoutParams(-1, 0, 0.53f).apply { topMargin = dp(6) })
-        root.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.58f))
+        // No app drawer/menu here: this panel is reserved for virtual display controls.
+        root.addView(top, LinearLayout.LayoutParams(-1, 0, 0.58f))
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(panel, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
         controls.addView(label("Ruang bawah · trackpad + keyboard", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(28)))
@@ -114,32 +98,9 @@ class DesktopModeActivity : Activity() {
         setContentView(root)
     }
 
-    private fun refreshApps() {
-        appGrid.removeAllViews()
-        val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = packageManager.queryIntentActivities(query, PackageManager.MATCH_ALL)
-            .mapNotNull { info ->
-                val ai = info.activityInfo ?: return@mapNotNull null
-                if (ai.packageName == packageName) return@mapNotNull null
-                DesktopApp(info.loadLabel(packageManager).toString(), "${ai.packageName}/${ai.name}")
-            }.distinctBy { it.component }.sortedBy { it.label.lowercase() }
-        apps.forEach { app ->
-            val tile = TextView(this).apply {
-                text = app.label; textSize = 11f; setTextColor(fg); gravity = Gravity.CENTER
-                maxLines = 2; setPadding(dp(4), dp(6), dp(4), dp(6)); background = rounded(Color.rgb(38, 51, 73), 10)
-                isClickable = true; isFocusable = true
-                setOnClickListener { launchOnDisplay(app) }
-            }
-            appGrid.addView(tile, GridLayout.LayoutParams().apply {
-                width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                setMargins(dp(3), dp(3), dp(3), dp(3))
-            })
-        }
-    }
-
     private fun updateStatus(extra: String = "") {
         val id = displayId
-        status.text = if (id >= 0) "Virtual display aktif · ID $id  •  ${widthInputOr("1280")}×${heightInputOr("720")} @ ${dpiInputOr("240")} dpi" + if (extra.isBlank()) "" else " · $extra"
+        status.text = if (id >= 0) "Virtual display aktif · ID $id  •  ${widthInputOr("900")}×${heightInputOr("1080")} @ ${dpiInputOr("240")} dpi" + if (extra.isBlank()) "" else " · $extra"
         else "Belum ada virtual display. Buat display untuk mengarahkan input." + if (extra.isBlank()) "" else " · $extra"
     }
     private fun widthInputOr(default: String) = if (::widthInput.isInitialized) widthInput.text.toString() else default
