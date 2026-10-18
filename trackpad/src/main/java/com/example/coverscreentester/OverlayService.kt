@@ -1166,6 +1166,11 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
                 action == "RESET_CURSOR" -> resetCursorCenter()
                 action == "TOGGLE_DEBUG" -> toggleDebugMode()
                 action == "FORCE_KEYBOARD" || action == "TOGGLE_CUSTOM_KEYBOARD" -> toggleCustomKeyboard()
+                action == "SAKU_DISABLE_DROIDOS_KEYBOARD" -> {
+                    keyboardOverlay?.hide()
+                    isCustomKeyboardVisible = false
+                    enforceZOrder()
+                }
                 action == "OPEN_MENU" -> { menuManager?.show(); enforceZOrder() }
                 action == "SET_TRACKPAD_VISIBILITY" -> {
                     val visible = intent.getBooleanExtra("VISIBLE", true)
