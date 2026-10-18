@@ -200,23 +200,16 @@ class DesktopModeActivity : Activity() {
     }
 
     private fun runPrivileged(command: String): Pair<Int, String> {
-        // Root is preferred on this rooted-device workflow. Fall back to Shizuku only when authorized.
-        try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val out = p.inputStream.bufferedReader().use { it.readText() }
-            val err = p.errorStream.bufferedReader().use { it.readText() }
-            val code = p.waitFor()
-            if (code == 0) return code to (out + "\n" + err)
-            if (Shizuku.getBinder() == null || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return code to (out + "\n" + err)
-        } catch (_: Exception) { }
+        // This build executes privileged commands through Magisk su. Shizuku's
+        // newProcess API is not public in the pinned dependency, so do not call it.
         return try {
-            if (Shizuku.getBinder() == null || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED)
-                return -1 to "Root tidak tersedia dan izin Shizuku belum diberikan."
-            val p = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
-            val out = p.inputStream.bufferedReader().use { it.readText() }
-            val err = p.errorStream.bufferedReader().use { it.readText() }
-            p.waitFor() to (out + "\n" + err)
-        } catch (e: Exception) { -1 to (e.message ?: "Perintah privileged gagal") }
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val stdout = process.inputStream.bufferedReader().use { it.readText() }
+            val stderr = process.errorStream.bufferedReader().use { it.readText() }
+            process.waitFor() to (stdout + "\n" + stderr).trim()
+        } catch (e: Exception) {
+            -1 to (e.message ?: "Perintah root gagal. Pastikan Magisk memberikan izin root.")
+        }
     }
 
     private fun launchOnDisplay(app: DesktopApp) {
