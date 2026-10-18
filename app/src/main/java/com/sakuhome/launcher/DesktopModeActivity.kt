@@ -82,8 +82,11 @@ class DesktopModeActivity : Activity() {
         val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded(Color.BLACK, 18); setPadding(dp(10), dp(8), dp(10), dp(8)) }
         controls.addView(label("Ruang bawah · trackpad + keyboard", 13f, fg, true), LinearLayout.LayoutParams(-1, dp(28)))
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row1.addView(button("Aktifkan trackpad + keyboard", true) { startTrackpad() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(5) })
-        row1.addView(button("Tampilkan keyboard") { sendTrackpadCommand("TOGGLE_CUSTOM_KEYBOARD") }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        row1.addView(button("Aktifkan trackpad", true) { startTrackpad() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(5) })
+        row1.addView(button("Keyboard Saku") {
+            try { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showInputMethodPicker() }
+            catch (_: Exception) { toast("Aktifkan Keyboard Saku di Pengaturan > Bahasa & masukan.") }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f))
         controls.addView(row1, LinearLayout.LayoutParams(-1, dp(46)))
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row2.addView(button("Kembali ke Saku") { finish() }, LinearLayout.LayoutParams(-1, dp(42)))
