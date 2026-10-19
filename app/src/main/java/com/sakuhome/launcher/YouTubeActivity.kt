@@ -214,7 +214,13 @@ class YouTubeActivity : Activity() {
         return object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 runOnUiThread {
+                    val tab = browserTabs.firstOrNull { it.session === session }
+                    if (tab != null) {
+                        tab.url = url
+                        if (tab.title == "Tab baru" || tab.title == "Tab Samaran" || tab.title == "Tab 1") tab.title = Uri.parse(url).host ?: url
+                    }
                     if (this@YouTubeActivity.session === session && ::addressField.isInitialized) addressField.setText(url)
+                    updateTabsButton()
                     recordHistory(url)
                 }
             }
@@ -223,6 +229,12 @@ class YouTubeActivity : Activity() {
 
     private fun createDownloadContentDelegate(): GeckoSession.ContentDelegate {
         return object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                val tab = browserTabs.firstOrNull { it.session === session } ?: return
+                tab.title = title?.takeIf { it.isNotBlank() } ?: tab.url
+                runOnUiThread { updateTabsButton() }
+            }
+
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
                 val url = response.uri
                 val contentType = response.headers.entries.firstOrNull { it.key.equals("content-type", true) }?.value ?: ""
@@ -498,7 +510,6 @@ class YouTubeActivity : Activity() {
             newSession.setNavigationDelegate(createPopupNavigationDelegate())
             newSession.setProgressDelegate(createProgressDelegate())
             newSession.setContentDelegate(createDownloadContentDelegate())
-            newSession.setContentDelegate(createTabContentDelegate())
             val url = "https://m.youtube.com/"
             val tab = BrowserTab(nextTabId++, newSession, url, if (privateMode) "Tab Samaran" else "Tab baru", privateMode)
             browserTabs.add(tab)
@@ -508,16 +519,6 @@ class YouTubeActivity : Activity() {
             Toast.makeText(this, if (privateMode) "Tab samaran dibuka." else "Tab baru dibuka.", Toast.LENGTH_SHORT).show()
         } catch (error: Exception) {
             Toast.makeText(this, "Tidak bisa membuka tab: " + (error.message ?: ""), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun createTabContentDelegate(): GeckoSession.ContentDelegate {
-        return object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String?) {
-                val tab = browserTabs.firstOrNull { it.session === session } ?: return
-                tab.title = title?.takeIf { it.isNotBlank() } ?: tab.url
-                runOnUiThread { updateTabsButton() }
-            }
         }
     }
 
@@ -720,6 +721,8 @@ class YouTubeActivity : Activity() {
         actions += { showInstalledExtensions() }
         items += "Toko extension Mozilla"
         actions += { showExtensionStore() }
+        items += "Cari & pasang extension (katalog)"
+        actions += { promptExtensionSearch() }
         items += "Manajemen cache"
         actions += { showCacheManager() }
         items += "Riwayat penelusuran"
@@ -935,6 +938,27 @@ class YouTubeActivity : Activity() {
 
 
     private data class StoreExtension(val name: String, val summary: String, val xpiUrl: String)
+
+    private fun promptExtensionSearch() {
+        val input = EditText(this).apply {
+            hint = "Nama extension, misalnya uBlock Origin"
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = roundedBackground(Color.rgb(42, 42, 42), 12)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(input, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        AlertDialog.Builder(this).setTitle("Cari extension Mozilla")
+            .setView(box)
+            .setPositiveButton("Cari") { _, _ -> searchExtensionStore(input.text.toString().trim()) }
+            .setNeutralButton("Tampilkan populer") { _, _ -> searchExtensionStore("") }
+            .setNegativeButton("Batal", null).show()
+    }
 
     private fun showExtensionStore() {
         // Open Mozilla's real Add-ons storefront in the current GeckoView session.
