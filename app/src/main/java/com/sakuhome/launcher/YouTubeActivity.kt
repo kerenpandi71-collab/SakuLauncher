@@ -85,8 +85,13 @@ class YouTubeActivity : Activity() {
         audioButton = makeButton("Audio BG: OFF") {
             backgroundAudioEnabled = !backgroundAudioEnabled
             audioButton.text = if (backgroundAudioEnabled) "Audio BG: ON" else "Audio BG: OFF"
-            if (backgroundAudioEnabled) requestAudioFocus() else abandonAudioFocus()
-            Toast.makeText(this, if (backgroundAudioEnabled) "Mode audio latar diaktifkan; dukungan tetap bergantung pada YouTube/WebView" else "Mode audio latar dinonaktifkan", Toast.LENGTH_LONG).show()
+            if (backgroundAudioEnabled) {
+                requestAudioFocus()
+                enableBackgroundPlayback()
+            } else {
+                abandonAudioFocus()
+            }
+            Toast.makeText(this, if (backgroundAudioEnabled) "Audio latar diaktifkan. Pemutaran tetap mengikuti dukungan YouTube/WebView." else "Mode audio latar dinonaktifkan", Toast.LENGTH_LONG).show()
         }
         toolbar.addView(audioButton)
         toolbar.addView(makeButton("Mini") { enterMiniPlayer() })
@@ -178,6 +183,21 @@ class YouTubeActivity : Activity() {
         } catch (_: Exception) {
             Toast.makeText(this, "Mode jendela mini tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Applies inline playback hints and attempts to resume the current video from
+     * the explicit user action. YouTube/WebView may still enforce its own
+     * background-playback restrictions; this is a best-effort integration.
+     */
+    private fun enableBackgroundPlayback() {
+        if (!::webView.isInitialized) return
+        webView.evaluateJavascript(
+            "(function(){var v=document.querySelector('video');if(!v)return false;" +
+                "v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');" +
+                "v.muted=false;var p=v.play();if(p&&p.catch)p.catch(function(){});return true;})()",
+            null
+        )
     }
 
     private fun requestAudioFocus() {
