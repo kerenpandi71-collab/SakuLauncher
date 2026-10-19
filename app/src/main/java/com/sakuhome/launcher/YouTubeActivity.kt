@@ -29,6 +29,9 @@ import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
 import java.io.File
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 /**
  * SakuTube browser surface backed by GeckoView so real WebExtensions can run.
@@ -58,6 +61,7 @@ class YouTubeActivity : Activity() {
     private val uboId = "uBlock0@raymondhill.net"
     private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
     private val pickExtensionRequest = 4207
+    private val storeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -272,12 +276,18 @@ class YouTubeActivity : Activity() {
         actions += { confirmLocalExtensionInstall() }
         items += "Daftar extension terpasang"
         actions += { showInstalledExtensions() }
+        items += "Toko extension Mozilla"
+        actions += { showExtensionStore() }
+        items += "Manajemen cache"
+        actions += { showCacheManager() }
         items += "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF"
         actions += { toggleDesktopMode() }
         items += "Audio latar belakang: " + if (backgroundAudioEnabled) "ON" else "OFF"
         actions += { toggleBackgroundAudio() }
         items += "Kelola semua extension"
         actions += { showInstalledExtensions() }
+        items += "Buka halaman di browser eksternal"
+        actions += { openCurrentPageExternally() }
         items += "Kunci zoom: " + if (zoomLocked) "ON" else "OFF"
         actions += { toggleZoomLock() }
 
@@ -473,6 +483,151 @@ class YouTubeActivity : Activity() {
             .setNegativeButton("Tutup", null).show()
     }
 
+
+    private data class StoreExtension(val name: String, val summary: String, val xpiUrl: String)
+
+    private fun showExtensionStore() {
+        val input = EditText(this).apply {
+            hint = "Cari extension (contoh: subtitle atau translator)"
+            textSize = 16f
+            setSingleLine(true)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Toko extension Mozilla")
+            .setMessage("Katalog resmi Mozilla Add-ons. Extension Chrome tidak otomatis kompatibel; dukungan extension bergantung pada GeckoView.")
+            .setView(input)
+            .setPositiveButton("Cari") { _, _ -> searchExtensionStore(input.text.toString().trim()) }
+            .setNeutralButton("Populer") { _, _ -> searchExtensionStore("") }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun searchExtensionStore(query: String) {
+        Toast.makeText(this, "Mengambil katalog Mozilla…", Toast.LENGTH_SHORT).show()
+        storeExecutor.execute {
+            var connection: HttpURLConnection? = null
+            try {
+                val encodedQuery = if (query.isBlank()) "" else "&q=" + Uri.encode(query)
+                val endpoint = "https://addons.mozilla.org/api/v5/addons/search/?app=firefox&type=extension&page_size=20" + encodedQuery
+                connection = URL(endpoint).openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.setRequestProperty("Accept", "application/json")
+                connection.setRequestProperty("User-Agent", "SakuTube/0.4.0")
+                if (connection.responseCode !in 200..299) throw IOException("HTTP " + connection.responseCode)
+                val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                val results = json.optJSONArray("results")
+                val found = mutableListOf<StoreExtension>()
+                if (results != null) {
+                    for (i in 0 until results.length()) {
+                        val addon = results.optJSONObject(i) ?: continue
+                        val version = addon.optJSONObject("current_version") ?: continue
+                        val files = version.optJSONArray("files") ?: continue
+                        var xpi = ""
+                        for (j in 0 until files.length()) {
+                            val file = files.optJSONObject(j) ?: continue
+                            val candidate = file.optJSONObject("url")?.optString("url").orEmpty()
+                            if (candidate.startsWith("https://addons.mozilla.org/") && candidate.endsWith(".xpi")) {
+                                xpi = candidate
+                                break
+                            }
+                        }
+                        if (xpi.isBlank()) continue
+                        val nameObject = addon.optJSONObject("name")
+                        val summaryObject = addon.optJSONObject("summary")
+                        val name = nameObject?.optString("en-US")?.takeIf { it.isNotBlank() }
+                            ?: addon.optString("slug", "Extension")
+                        val summary = summaryObject?.optString("en-US").orEmpty()
+                        found += StoreExtension(name, summary, xpi)
+                    }
+                }
+                runOnUiThread {
+                    if (found.isEmpty()) {
+                        AlertDialog.Builder(this).setTitle("Tidak ada hasil")
+                            .setMessage("Katalog kosong atau koneksi gagal. Coba kata kunci lain.")
+                            .setPositiveButton("Cari lagi") { _, _ -> showExtensionStore() }
+                            .setNegativeButton("Tutup", null).show()
+                    } else showExtensionStoreResults(found)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    AlertDialog.Builder(this).setTitle("Toko tidak tersedia")
+                        .setMessage("Tidak bisa memuat katalog Mozilla: " + (e.message ?: "kesalahan jaringan"))
+                        .setPositiveButton("Coba lagi") { _, _ -> showExtensionStore() }
+                        .setNegativeButton("Tutup", null).show()
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    private fun showExtensionStoreResults(found: List<StoreExtension>) {
+        val labels = found.map { item ->
+            item.name + if (item.summary.isBlank()) "" else "\n" + item.summary.take(100)
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Pilih extension")
+            .setItems(labels) { _, which ->
+                val selected = found[which]
+                AlertDialog.Builder(this).setTitle("Pasang " + selected.name)
+                    .setMessage("Diunduh dari Mozilla Add-ons. Extension dapat meminta akses situs. Tidak semua extension bekerja penuh di GeckoView.")
+                    .setPositiveButton("Unduh & pasang") { _, _ -> installFromStore(selected) }
+                    .setNegativeButton("Batal", null).show()
+            }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun installFromStore(extension: StoreExtension) {
+        Toast.makeText(this, "Mengunduh " + extension.name + "…", Toast.LENGTH_LONG).show()
+        allowLocalExtensionInstallPrompt = true
+        runtime.webExtensionController.install(extension.xpiUrl, WebExtensionController.INSTALLATION_METHOD_MANAGER)
+            .accept(
+                { installed ->
+                    allowLocalExtensionInstallPrompt = false
+                    if (installed != null) {
+                        Toast.makeText(this, "Extension terpasang: " + (installed.metaData?.name ?: extension.name), Toast.LENGTH_LONG).show()
+                        refreshInstalledExtension()
+                        session.reload()
+                    } else Toast.makeText(this, "Pemasangan tidak mengembalikan hasil.", Toast.LENGTH_LONG).show()
+                },
+                { error ->
+                    allowLocalExtensionInstallPrompt = false
+                    Toast.makeText(this, "Gagal memasang; extension mungkin tidak kompatibel: " + (error?.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+            )
+    }
+
+    private fun showCacheManager() {
+        val dirs = listOfNotNull(cacheDir, externalCacheDir)
+        val bytes = dirs.sumOf { dir -> dir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
+        val mb = bytes / (1024 * 1024)
+        AlertDialog.Builder(this).setTitle("Manajemen cache")
+            .setMessage("Cache sementara aplikasi: sekitar " + mb + " MB.\nMenghapus cache dapat membuat halaman memuat ulang berkas. Cookie, login, riwayat, dan data situs tidak dihapus.")
+            .setPositiveButton("Hapus cache") { _, _ ->
+                var deleted = 0
+                dirs.forEach { dir ->
+                    dir.listFiles()?.forEach { child ->
+                        if (child.isDirectory) {
+                            if (child.deleteRecursively()) deleted++
+                        } else if (child.delete()) deleted++
+                    }
+                }
+                Toast.makeText(this, "Cache sementara dibersihkan (" + deleted + " item).", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openCurrentPageExternally() {
+        val raw = addressField.text.toString().trim()
+        if (raw.isBlank()) return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(raw)))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Browser eksternal tidak ditemukan.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun toggleBackgroundAudio() {
         backgroundAudioEnabled = !backgroundAudioEnabled
         browserPrefs.edit().putBoolean("background_audio", backgroundAudioEnabled).apply()
@@ -600,13 +755,14 @@ class YouTubeActivity : Activity() {
         super.onResume()
         if (::session.isInitialized) {
             session.setActive(true)
-            session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            session.setPriorityHint(if (backgroundAudioEnabled) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         }
     }
 
     override fun onDestroy() {
         if (::geckoView.isInitialized) geckoView.releaseSession()
         if (::session.isInitialized) session.close()
+        storeExecutor.shutdownNow()
         super.onDestroy()
     }
 }
