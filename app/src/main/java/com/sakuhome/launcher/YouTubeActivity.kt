@@ -283,14 +283,38 @@ class YouTubeActivity : Activity() {
                     permissions: Array<out String>,
                     origins: Array<out String>
                 ): GeckoResult<WebExtension.PermissionPromptResponse>? {
-                    val isOfficialUbo = extension.metaData.name == "uBlock Origin" &&
-                        extension.id == uboId
-                    // Permission approval is only possible after the explicit
-                    // confirmation dialog shown by SakuTube's settings menu.
-                    val approved = (isOfficialUbo && allowUboInstallPrompt) || allowLocalExtensionInstallPrompt
-                    return GeckoResult.fromValue(
-                        WebExtension.PermissionPromptResponse(approved, false)
-                    )
+                    val result = GeckoResult<WebExtension.PermissionPromptResponse>()
+                    val name = extension.metaData.name ?: extension.id ?: "Extension"
+                    val permissionText = buildString {
+                        append("Extension: ").append(name).append("\\n\\n")
+                        if (permissions.isNotEmpty()) {
+                            append("Izin: ").append(permissions.joinToString(", ")).append("\\n")
+                        }
+                        if (origins.isNotEmpty()) {
+                            append("Akses situs: ").append(origins.joinToString(", ")).append("\\n")
+                        }
+                        append("\\nPasang hanya jika kamu mempercayai extension ini.")
+                    }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) {
+                            result.complete(WebExtension.PermissionPromptResponse(false, false))
+                        } else {
+                            AlertDialog.Builder(this@YouTubeActivity)
+                                .setTitle("Izin pemasangan extension")
+                                .setMessage(permissionText)
+                                .setPositiveButton("Pasang") { _, _ ->
+                                    result.complete(WebExtension.PermissionPromptResponse(true, false))
+                                }
+                                .setNegativeButton("Batal") { _, _ ->
+                                    result.complete(WebExtension.PermissionPromptResponse(false, false))
+                                }
+                                .setOnCancelListener {
+                                    result.complete(WebExtension.PermissionPromptResponse(false, false))
+                                }
+                                .show()
+                        }
+                    }
+                    return result
                 }
             }
         )
@@ -848,13 +872,19 @@ class YouTubeActivity : Activity() {
             return
         }
         try {
-            enterPictureInPictureMode(
-                PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-            )
-        } catch (_: Exception) {
-            Toast.makeText(this, "Picture-in-Picture tidak tersedia pada perangkat ini.", Toast.LENGTH_SHORT).show()
+            // PiP bounds must describe the content area, not the full browser chrome.
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                enterPictureInPictureMode(params)
+            }
+        } catch (error: Exception) {
+            Toast.makeText(
+                this,
+                "Picture-in-Picture gagal dibuka: " + (error.message ?: "tidak didukung"),
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -869,6 +899,14 @@ class YouTubeActivity : Activity() {
         // Keep only the webpage/video surface visible in the PiP window.
         if (::geckoView.isInitialized) {
             geckoView.visibility = View.VISIBLE
+            val contentParams = geckoView.layoutParams
+            if (contentParams is LinearLayout.LayoutParams) {
+                contentParams.width = LinearLayout.LayoutParams.MATCH_PARENT
+                contentParams.height = 0
+                contentParams.weight = 1f
+                geckoView.layoutParams = contentParams
+            }
+            root.requestLayout()
             geckoView.requestLayout()
         }
     }
