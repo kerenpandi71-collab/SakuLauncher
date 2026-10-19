@@ -221,7 +221,7 @@ class YouTubeActivity : Activity() {
                     }
                     if (this@YouTubeActivity.session === session && ::addressField.isInitialized) addressField.setText(url)
                     updateTabsButton()
-                    recordHistory(url)
+                    if (tab?.privateMode != true) recordHistory(url)
                 }
             }
         }
