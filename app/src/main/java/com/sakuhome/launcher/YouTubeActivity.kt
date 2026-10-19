@@ -35,7 +35,6 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONObject
 
 /**
  * SakuTube browser surface backed by GeckoView so real WebExtensions can run.
