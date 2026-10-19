@@ -83,6 +83,12 @@ class YouTubeActivity : Activity() {
         )
         session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
         session.open(runtime)
+        if (backgroundAudioEnabled) {
+            try {
+                val audioService = Intent(this, SakuTubePlaybackService::class.java).setAction(SakuTubePlaybackService.ACTION_START)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(audioService) else startService(audioService)
+            } catch (_: Exception) { /* Playback remains available while SakuTube is visible. */ }
+        }
 
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -95,7 +101,7 @@ class YouTubeActivity : Activity() {
             setBackgroundColor(Color.rgb(18, 18, 18))
         }
 
-        // Controls use a minimum 48dp touch target for reliable use on a phone.
+        // Controls use a 54dp minimum touch target for easier use on a phone.
         toolbar.addView(makeButton("⋮", 21f, 10, 8) { showSettingsMenu() })
         toolbar.addView(makeButton("‹", 24f, 10, 8) { session.goBack() })
         toolbar.addView(makeButton("Mini", 13f, 10, 8) { enterMiniPlayer() })
@@ -528,18 +534,30 @@ class YouTubeActivity : Activity() {
                         var xpi = ""
                         for (j in 0 until files.length()) {
                             val file = files.optJSONObject(j) ?: continue
-                            val candidate = file.optJSONObject("url")?.optString("url").orEmpty()
+                            val urlValue = file.opt("url")
+                            val candidate = when (urlValue) {
+                                is String -> urlValue
+                                is JSONObject -> urlValue.optString("url")
+                                else -> ""
+                            }
                             if (candidate.startsWith("https://addons.mozilla.org/") && candidate.endsWith(".xpi")) {
                                 xpi = candidate
                                 break
                             }
                         }
                         if (xpi.isBlank()) continue
-                        val nameObject = addon.optJSONObject("name")
-                        val summaryObject = addon.optJSONObject("summary")
-                        val name = nameObject?.optString("en-US")?.takeIf { it.isNotBlank() }
-                            ?: addon.optString("slug", "Extension")
-                        val summary = summaryObject?.optString("en-US").orEmpty()
+                        val nameValue = addon.opt("name")
+                        val summaryValue = addon.opt("summary")
+                        val name = when (nameValue) {
+                            is String -> nameValue
+                            is JSONObject -> nameValue.optString("en-US").ifBlank { addon.optString("slug", "Extension") }
+                            else -> addon.optString("slug", "Extension")
+                        }
+                        val summary = when (summaryValue) {
+                            is String -> summaryValue
+                            is JSONObject -> summaryValue.optString("en-US")
+                            else -> ""
+                        }
                         found += StoreExtension(name, summary, xpi)
                     }
                 }
