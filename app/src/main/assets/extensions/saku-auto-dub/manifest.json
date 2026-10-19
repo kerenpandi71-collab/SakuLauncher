@@ -1,0 +1,39 @@
+{
+  "manifest_version": 2,
+  "name": "SakuTube Auto Dub Indonesia",
+  "version": "0.2.0",
+  "description": "Terjemahkan subtitle YouTube ke bahasa Indonesia dan bacakan dengan suara perangkat.",
+  "applications": {
+    "gecko": {
+      "id": "saku-auto-dub@sakuhome.launcher",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://translate.googleapis.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "persistent": false
+  }
+}
