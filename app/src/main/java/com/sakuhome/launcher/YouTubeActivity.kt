@@ -63,6 +63,8 @@ class YouTubeActivity : Activity() {
     private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
     private val pickExtensionRequest = 4207
     private val storeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val popupSessions = mutableSetOf<GeckoSession>()
+    private val popupDialogs = mutableSetOf<AlertDialog>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,6 +176,8 @@ class YouTubeActivity : Activity() {
         }
         root.addView(zoomRow, LinearLayout.LayoutParams(-1, -2))
 
+        session.setNavigationDelegate(createPopupNavigationDelegate())
+
         geckoView = GeckoView(this)
         geckoView.setBackgroundColor(Color.BLACK)
         geckoView.setSession(session)
@@ -183,6 +187,90 @@ class YouTubeActivity : Activity() {
 
         refreshInstalledExtension()
         session.loadUri("https://m.youtube.com/")
+    }
+
+    /**
+     * Handle target=_blank/window.open requests inside SakuTube instead of silently
+     * dropping them. OAuth pages and extension links can use these new-window requests.
+     */
+    private fun createPopupNavigationDelegate(): GeckoSession.NavigationDelegate {
+        return object : GeckoSession.NavigationDelegate {
+            override fun onNewSession(
+                sourceSession: GeckoSession,
+                uri: String
+            ): GeckoResult<GeckoSession>? {
+                return try {
+                    val popupSession = GeckoSession(
+                        GeckoSessionSettings.Builder()
+                            .allowJavascript(true)
+                            .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                            .build()
+                    )
+                    popupSession.setSuspendMediaWhenInactive(false)
+                    popupSession.setNavigationDelegate(createPopupNavigationDelegate())
+                    popupSession.open(runtime)
+                    popupSessions.add(popupSession)
+                    showInAppPopup(popupSession, uri)
+                    GeckoResult.fromValue(popupSession)
+                } catch (error: Exception) {
+                    Toast.makeText(
+                        this@YouTubeActivity,
+                        "Tidak bisa membuka jendela baru: " + (error.message ?: "kesalahan"),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    GeckoResult.fromValue(null)
+                }
+            }
+        }
+    }
+
+    private fun showInAppPopup(popupSession: GeckoSession, initialUri: String) {
+        val popupRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+        }
+        val popupToolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setBackgroundColor(Color.rgb(24, 24, 24))
+        }
+        val popupTitle = TextView(this).apply {
+            text = "Jendela popup / login"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        popupToolbar.addView(popupTitle, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val closeButton = makeButton("Tutup", 13f, 10, 6) { }
+        popupToolbar.addView(closeButton)
+        popupRoot.addView(popupToolbar, LinearLayout.LayoutParams(-1, -2))
+
+        val popupView = GeckoView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            setSession(popupSession)
+        }
+        popupRoot.addView(popupView, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(popupRoot)
+            .create()
+        closeButton.setOnClickListener { dialog.dismiss() }
+        dialog.setOnDismissListener {
+            popupDialogs.remove(dialog)
+            popupSessions.remove(popupSession)
+            try { popupView.releaseSession() } catch (_: Exception) { }
+            try { popupSession.close() } catch (_: Exception) { }
+        }
+        popupDialogs.add(dialog)
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.96f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.82f).toInt()
+        )
+        // The initial URI is loaded by Gecko after onNewSession returns its new session.
+        @Suppress("UNUSED_VARIABLE")
+        val requestedUri = initialUri
     }
 
     private fun configureExtensionPrompts() {
@@ -809,6 +897,10 @@ class YouTubeActivity : Activity() {
     override fun onDestroy() {
         if (::geckoView.isInitialized) geckoView.releaseSession()
         if (::session.isInitialized) session.close()
+        popupDialogs.toList().forEach { try { it.dismiss() } catch (_: Exception) { } }
+        popupSessions.toList().forEach { try { it.close() } catch (_: Exception) { } }
+        popupDialogs.clear()
+        popupSessions.clear()
         storeExecutor.shutdownNow()
         super.onDestroy()
     }
