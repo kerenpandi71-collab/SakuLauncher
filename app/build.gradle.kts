@@ -7,7 +7,6 @@ android {
     namespace = "com.sakuhome.launcher"
     compileSdk = 35
 
-
     defaultConfig {
         applicationId = "com.sakuhome.launcher"
         minSdk = 30
@@ -28,4 +27,6 @@ android {
 
 dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
+    // GeckoView is required for real WebExtension support; Android WebView cannot host uBlock Origin.
+    implementation("org.mozilla.geckoview:geckoview:160.0.20261017034010")
 }
