@@ -98,8 +98,7 @@ class YouTubeActivity : Activity() {
                 override fun onInstallPromptRequest(
                     extension: WebExtension,
                     permissions: Array<out String>,
-                    origins: Array<out String>,
-                    dataCollectionPermissions: Array<out String>
+                    origins: Array<out String>
                 ): GeckoResult<WebExtension.PermissionPromptResponse>? {
                     val isOfficialUbo = extension.metaData.name == "uBlock Origin" &&
                         extension.id == uboId
@@ -107,7 +106,7 @@ class YouTubeActivity : Activity() {
                     // confirmation dialog shown by SakuTube's settings menu.
                     val approved = (isOfficialUbo && allowUboInstallPrompt) || allowLocalExtensionInstallPrompt
                     return GeckoResult.fromValue(
-                        WebExtension.PermissionPromptResponse(approved, false, false)
+                        WebExtension.PermissionPromptResponse(approved, false)
                     )
                 }
             }
@@ -238,7 +237,7 @@ class YouTubeActivity : Activity() {
             .accept(
                 { extension ->
                     allowLocalExtensionInstallPrompt = false
-                    Toast.makeText(this, "Extension terpasang: " + extension.metaData.name, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Extension terpasang: " + (extension?.metaData?.name ?: "Extension"), Toast.LENGTH_LONG).show()
                     refreshInstalledExtension()
                     session.reload()
                 },
@@ -247,7 +246,7 @@ class YouTubeActivity : Activity() {
                     Toast.makeText(
                         this,
                         "Gagal memasang extension. Pastikan XPI valid dan ditandatangani Mozilla. " +
-                            (error.message ?: ""),
+                            (error?.message ?: ""),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -258,13 +257,14 @@ class YouTubeActivity : Activity() {
         runtime.webExtensionController.list().accept(
             { extensions ->
                 runOnUiThread {
-                    val labels = extensions.map { extension ->
-                        extension.metaData.name + if (extension.isBuiltIn) " — bawaan" else " — terpasang"
+                    val installed = extensions.orEmpty()
+                    val labels = installed.map { extension ->
+                        (extension.metaData?.name ?: extension.id ?: "Extension") + if (extension.isBuiltIn) " — bawaan" else " — terpasang"
                     }.toTypedArray()
                     AlertDialog.Builder(this)
                         .setTitle("Extension terpasang")
                         .setItems(labels) { _, which ->
-                            val optionsUrl = extensions[which].metaData.optionsPageUrl
+                            val optionsUrl = installed.getOrNull(which)?.metaData?.optionsPageUrl
                             if (!optionsUrl.isNullOrBlank()) session.loadUri(optionsUrl)
                             else Toast.makeText(this, "Extension ini tidak menyediakan halaman pengaturan.", Toast.LENGTH_SHORT).show()
                         }
@@ -297,7 +297,7 @@ class YouTubeActivity : Activity() {
             .accept(
                 { extension ->
                     allowUboInstallPrompt = false
-                    if (extension.id == uboId && extension.metaData.name == "uBlock Origin") {
+                    if (extension?.id == uboId && extension.metaData?.name == "uBlock Origin") {
                         uboExtension = extension
                         Toast.makeText(this, "uBlock Origin berhasil dipasang. Memuat ulang halaman…", Toast.LENGTH_LONG).show()
                         session.reload()
@@ -319,7 +319,7 @@ class YouTubeActivity : Activity() {
     private fun refreshInstalledExtension() {
         runtime.webExtensionController.list().accept(
             { extensions ->
-                uboExtension = extensions?.firstOrNull { it.id == uboId && it.metaData.name == "uBlock Origin" }
+                uboExtension = extensions.orEmpty().firstOrNull { it.id == uboId && it.metaData?.name == "uBlock Origin" }
             },
             { /* The settings menu still offers installation if listing fails. */ }
         )
