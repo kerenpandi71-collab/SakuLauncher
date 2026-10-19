@@ -108,7 +108,7 @@ class YouTubeActivity : Activity() {
         addressField = EditText(this).apply {
             hint = "Cari atau masukkan URL"
             textSize = 14f
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
             setTextColor(Color.WHITE)
