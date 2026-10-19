@@ -25,8 +25,6 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.AccelerateInterpolator
-import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.AbsListView
 import android.widget.BaseAdapter
@@ -51,9 +49,7 @@ private data class LaunchableApp(
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var rootFrame: FrameLayout
-    private lateinit var shellView: LinearLayout
     private lateinit var startPanel: LinearLayout
-    private lateinit var startScrim: View
     private lateinit var startGrid: GridView
     private lateinit var widgetStrip: LinearLayout
     private lateinit var appWidgetHost: AppWidgetHost
@@ -69,11 +65,10 @@ class MainActivity : Activity() {
     private var apps: List<LaunchableApp> = emptyList()
     private var searchQuery = ""
     private var showingAllApps = true
+    private var drawerMode = "grid"
+    private lateinit var drawerModeButton: TextView
     private var homePage = 0
     private var homePageLabel: TextView? = null
-    private var pageTransitionInProgress = false
-    private var isDraggingHomeIcon = false
-    private var panelAnimationToken = 0
 
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
     private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
@@ -84,9 +79,14 @@ class MainActivity : Activity() {
     private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(159, 177, 202) else Color.rgb(82, 101, 130)
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
-    private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, hideLabels)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
+    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
+    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
+    private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
+    private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
+    private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
+    private val localIconFolder: String get() = preferences.getString(KEY_LOCAL_ICON_FOLDER, "").orEmpty()
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -110,31 +110,7 @@ class MainActivity : Activity() {
     private fun homePageCount(): Int = maxOf(1, preferences.getInt(KEY_HOME_PAGE_COUNT, 1))
 
     private fun showHomePage(page: Int) {
-        val targetPage = page.coerceIn(0, homePageCount() - 1)
-        if (targetPage == homePage || pageTransitionInProgress) return
-        if (!::desktopGrid.isInitialized || desktopGrid.width == 0) {
-            applyHomePage(targetPage)
-            return
-        }
-        pageTransitionInProgress = true
-        val direction = if (targetPage > homePage) -1 else 1
-        val offset = direction * dp(30)
-        desktopGrid.animate().cancel()
-        desktopGrid.animate().alpha(0.25f).translationX(offset.toFloat())
-            .setDuration(115).setInterpolator(AccelerateInterpolator()).withEndAction {
-                applyHomePage(targetPage)
-                desktopGrid.translationX = -offset.toFloat()
-                desktopGrid.alpha = 0f
-                desktopGrid.animate().alpha(1f).translationX(0f)
-                    .setDuration(235).setInterpolator(DecelerateInterpolator(1.55f)).withEndAction {
-                        pageTransitionInProgress = false
-                    }.start()
-            }.start()
-    }
-
-    private fun applyHomePage(page: Int) {
         homePage = page.coerceIn(0, homePageCount() - 1)
-        preferences.edit().putInt(KEY_LAST_HOME_PAGE, homePage).apply()
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
     }
@@ -144,6 +120,55 @@ class MainActivity : Activity() {
         preferences.edit().putInt(KEY_HOME_PAGE_COUNT, next + 1).apply()
         showHomePage(next)
         Toast.makeText(this, "Layar baru ditambahkan", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun removeCurrentHomePage() {
+        val count = homePageCount()
+        if (count <= 1) {
+            Toast.makeText(this, "Minimal harus ada satu layar utama", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pages = (0 until count).map { homePackages(it).toMutableList() }.toMutableList()
+        val removed = pages.removeAt(homePage)
+        val target = if (homePage > 0) homePage - 1 else 0
+        removed.forEach { if (!pages[target].contains(it)) pages[target].add(it) }
+        preferences.edit().apply {
+            for (page in 0 until count) remove(homePageKey(page))
+            putInt(KEY_HOME_PAGE_COUNT, pages.size)
+            pages.forEachIndexed { index, packages -> putString(homePageKey(index), packages.distinct().joinToString("\n")) }
+        }.apply()
+        showHomePage((homePage - 1).coerceAtLeast(0).coerceAtMost(pages.size - 1))
+        Toast.makeText(this, "Layar dihapus; ikon dipindahkan agar tidak hilang", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showHomeLayoutOptions() {
+        val options = arrayOf(
+            "＋  Tambah layar utama",
+            "－  Kurangi layar utama",
+            "↕  Posisi ikon: ${homeIconPositionLabel()}",
+            if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
+            "Hapus layar ini"
+        )
+        AlertDialog.Builder(this).setTitle("Tata letak layar utama").setItems(options) { _, which ->
+            when (which) {
+                0 -> { addHomePage(); buildScreen() }
+                1 -> {
+                    if (homePageCount() <= 1) Toast.makeText(this, "Minimal satu layar utama", Toast.LENGTH_SHORT).show()
+                    else { removeCurrentHomePage(); buildScreen() }
+                }
+                2 -> chooseHomeIconPosition()
+                3 -> {
+                    preferences.edit().putBoolean(KEY_HIDE_PAGE_CONTROLS, !preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)).apply()
+                    buildScreen()
+                }
+                4 -> AlertDialog.Builder(this)
+                    .setTitle("Hapus layar ${homePage + 1}?")
+                    .setMessage("Ikon di layar ini akan dipindahkan ke layar sebelumnya atau layar terdekat agar tidak hilang.")
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Hapus") { _, _ -> removeCurrentHomePage(); buildScreen() }
+                    .show()
+            }
+        }.setNegativeButton("Batal", null).show()
     }
 
     private fun moveHomeApp(app: LaunchableApp, direction: Int) {
@@ -183,13 +208,33 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        applyDisplayAwareOrientation()
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
-        homePage = preferences.getInt(KEY_LAST_HOME_PAGE, 0).coerceIn(0, homePageCount() - 1)
         apps = loadApps()
         buildScreen()
         restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
         if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
+    }
+
+    /**
+     * Keep the phone's main display governed by the user's orientation preference,
+     * but always use the existing landscape desktop layout on a secondary display.
+     * This does not rotate the device or alter the system-wide display settings.
+     */
+    private fun applyDisplayAwareOrientation() {
+        val secondaryDisplay = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            display?.displayId?.let { it != android.view.Display.DEFAULT_DISPLAY } ?: false
+        } else {
+            windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
+        }
+        // Saku desktop is landscape only on a non-default (secondary/virtual) display.
+        // Keep ordinary phone use portrait regardless of the saved legacy orientation preference.
+        requestedOrientation = if (secondaryDisplay) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -199,10 +244,40 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
     }
 
-    @Deprecated("Deprecated in Android; retained for broad device compatibility")
-    override fun onBackPressed() {
-        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-        else super.onBackPressed()
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            val ctrl = event.isCtrlPressed
+            when {
+                event.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && startPanel.visibility == View.VISIBLE -> {
+                    hideStartPanel()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_SPACE -> {
+                    toggleStartPanel()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_COMMA -> {
+                    showSettings()
+                    return true
+                }
+                ctrl && event.keyCode == android.view.KeyEvent.KEYCODE_F -> {
+                    showStartPanel()
+                    startSearchField.requestFocus()
+                    startSearchField.post {
+                        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                        imm.showSoftInput(startSearchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                    }
+                    return true
+                }
+                event.keyCode == android.view.KeyEvent.KEYCODE_F5 -> {
+                    apps = loadApps()
+                    rebuildPinnedViews()
+                    Toast.makeText(this, "Daftar aplikasi diperbarui", Toast.LENGTH_SHORT).show()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
@@ -215,6 +290,20 @@ class MainActivity : Activity() {
                 if (info != null) addWidgetView(widgetId, info) else appWidgetHost.deleteAppWidgetId(widgetId)
             } else if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 appWidgetHost.deleteAppWidgetId(widgetId)
+            }
+            return
+        }
+        if (requestCode == REQUEST_ICON_FOLDER) {
+            if (resultCode == RESULT_OK) {
+                val folderUri = data?.data
+                if (folderUri != null) {
+                    try { contentResolver.takePersistableUriPermission(folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+                    preferences.edit().putString(KEY_LOCAL_ICON_FOLDER, folderUri.toString()).putString(KEY_ICON_PACK, "").apply()
+                    apps = loadApps()
+                    buildScreen()
+                    refreshFloatingDock()
+                    Toast.makeText(this, "Folder ikon dipilih", Toast.LENGTH_LONG).show()
+                }
             }
             return
         }
@@ -248,10 +337,20 @@ class MainActivity : Activity() {
         startSearchField.hideKeyboard()
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::preferences.isInitialized) buildScreen()
+    }
+
     private fun buildScreen() {
-        window.statusBarColor = backgroundTop
+        val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (landscapeLayout) {
+            buildKdeLandscapeDesktop()
+            return
+        }
+        window.statusBarColor = if (landscapeLayout) Color.TRANSPARENT else backgroundTop
         window.navigationBarColor = backgroundTop
-        window.decorView.systemUiVisibility = 0
+        window.decorView.systemUiVisibility = if (landscapeLayout) 0 else View.SYSTEM_UI_FLAG_FULLSCREEN
 
         rootFrame = FrameLayout(this).apply {
             background = GradientDrawable(
@@ -263,6 +362,9 @@ class MainActivity : Activity() {
             rootFrame.addView(ImageView(this).apply {
                 setImageBitmap(bitmap)
                 scaleType = ImageView.ScaleType.CENTER_CROP
+                if (android.os.Build.VERSION.SDK_INT >= 31 && blurRadius > 0f) {
+                    setRenderEffect(android.graphics.RenderEffect.createBlurEffect(blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP))
+                }
             }, FrameLayout.LayoutParams(-1, -1))
             rootFrame.addView(View(this).apply {
                 setBackgroundColor(if (isDarkTheme) 0x550D1420 else 0x260D1420)
@@ -270,52 +372,55 @@ class MainActivity : Activity() {
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(12))
+            setPadding(dp(14), dp(3), dp(14), dp(10))
         }
-        shellView = shell
 
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(4), dp(3), dp(5))
+            setPadding(dp(4), 0, dp(3), dp(2))
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(TextView(this).apply {
-            text = "SAKU DESKTOP"
-            textSize = 10f
-            letterSpacing = 0.22f
-            setTextColor(accent)
-        })
         clockText = TextView(this).apply {
-            textSize = 32f
+            textSize = 17f
             setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
             includeFontPadding = false
         }
         dateText = TextView(this).apply {
-            textSize = 12f
+            textSize = 10f
             setTextColor(secondaryText)
         }
-        brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(3) })
-        brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
+        brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(1) })
+        brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(0) })
+        brand.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
 
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
             contentDescription = "Pengaturan Saku Dock"
             setOnClickListener { showSettings() }
         }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        topBar.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
+        val statusStrip = buildStatusStrip()
+        statusStrip.visibility = if (landscapeLayout) View.GONE else View.VISIBLE
+        shell.addView(statusStrip, LinearLayout.LayoutParams(-1, dp(34)).apply {
+            topMargin = dp(1)
+            bottomMargin = dp(1)
+        })
 
         val pageControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), dp(13), dp(5), dp(10))
+            setPadding(dp(5), dp(if (landscapeLayout) 5 else 13), dp(5), dp(if (landscapeLayout) 5 else 10))
+            visibility = if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) View.GONE else View.VISIBLE
         }
         pageControls.addView(TextView(this).apply {
-            text = "LAYAR UTAMA"
+            text = "DESKTOP"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
+            visibility = if (landscapeLayout) View.GONE else View.VISIBLE
         }, LinearLayout.LayoutParams(0, -2, 1f))
         pageControls.addView(chipButton("‹", cardSurface, primaryText, 12).apply {
             setOnClickListener { showHomePage(homePage - 1) }
@@ -332,34 +437,45 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(34), dp(30)))
         pageControls.addView(chipButton("+", accent, Color.WHITE, 12).apply {
             contentDescription = "Buat layar utama baru"
-            setOnClickListener { addHomePage() }
+            setOnClickListener { addHomePage(); buildScreen() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(6) })
+        pageControls.addView(chipButton("−", cardSurface, primaryText, 12).apply {
+            contentDescription = "Hapus layar utama ini"
+            setOnClickListener { showHomeLayoutOptions() }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
+        pageControls.addView(chipButton("⋯", cardSurface, primaryText, 12).apply {
+            contentDescription = "Opsi tata letak layar utama"
+            setOnClickListener { showHomeLayoutOptions() }
+        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
+        if (landscapeLayout) pageControls.visibility = View.GONE
         shell.addView(pageControls)
 
         // App search removed from the home screen as requested.
         widgetStrip = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(2), 0, dp(4))
+            setPadding(0, dp(2), 0, dp(2))
+            clipToPadding = false
+            clipChildren = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
-            verticalSpacing = dp(13)
-            horizontalSpacing = dp(9)
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5)
+            verticalSpacing = dp(10)
+            horizontalSpacing = dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
             clipToPadding = false
-            setPadding(0, dp(4), 0, dp(4))
+            clipChildren = false
+            // Fixed compact layout: no configurable vertical icon-position mode.
+            setPadding(dp(2), dp(40), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
+        desktopGrid.setOnLongClickListener { false }
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> {
-                    isDraggingHomeIcon = true
-                    event.clipDescription?.hasMimeType("text/plain") == true
-                }
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
@@ -379,20 +495,38 @@ class MainActivity : Activity() {
                     }
                     true
                 }
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; isDraggingHomeIcon = false; true }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
                 else -> true
             }
         }
         var downX = 0f
         var downY = 0f
         desktopGrid.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
+            when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (!isDraggingHomeIcon && kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                        showHomePage(homePage + if (dx < 0) 1 else -1)
+                    if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                        showStartPanel()
+                        true
+                    } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && startPanel.visibility == View.VISIBLE) {
+                        hideStartPanel()
+                        true
+                    } else if (kotlin.math.abs(dx) > dp(72)) {
+                        val direction = if (dx < 0) -1f else 1f
+                        desktopGrid.animate().cancel()
+                        desktopGrid.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
+                            .setDuration(115L)
+                            .setInterpolator(android.view.animation.AccelerateInterpolator())
+                            .withEndAction {
+                                showHomePage(homePage + if (dx < 0) 1 else -1)
+                                desktopGrid.translationX = direction * dp(30).toFloat()
+                                desktopGrid.animate().alpha(1f).translationX(0f)
+                                    .setDuration(235L)
+                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                    .start()
+                            }.start()
                         true
                     } else false
                 }
@@ -402,65 +536,506 @@ class MainActivity : Activity() {
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
-            shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
+            val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+            val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, availableWidthDp)
+            val dockGravity = if (landscape) currentDockGravity() else Gravity.CENTER_HORIZONTAL
+            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(if (landscape) dockHeightDp.coerceAtLeast(64) else dockHeightDp)).apply {
+                gravity = dockGravity
                 topMargin = dp(10)
             })
+            if (landscape) {
+                shell.addView(buildDesktopNavigationBar(), LinearLayout.LayoutParams(-1, dp(46)).apply {
+                    topMargin = dp(8)
+                    bottomMargin = dp(1)
+                })
+            }
         }
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
-        startScrim = View(this).apply {
-            setBackgroundColor(if (isDarkTheme) 0x66070B12 else 0x440E1522)
-            alpha = 0f
-            visibility = View.GONE
-            setOnClickListener { hideStartPanel() }
-        }
-        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
-        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(500))
-        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, dp(panelHeight), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(82)
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val drawerPosition = preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left"
+        val landscapeDrawerWidth = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300).coerceIn(280, 460)
+        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(if (landscape) landscapeDrawerWidth else 500))
+        val actualPanelHeight = if (landscape) (screenHeightDp - 88).coerceAtLeast(240) else panelHeight
+        val panelGravity = if (!landscape) {
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        } else if (drawerPosition == "right") {
+            Gravity.END or Gravity.CENTER_VERTICAL
+        } else {
+            Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, dp(actualPanelHeight), panelGravity).apply {
+            if (landscape) {
+                if (drawerPosition == "right") marginEnd = dp(14) else marginStart = dp(14)
+            } else {
+                bottomMargin = dp(82)
+            }
         })
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
     }
 
-    private fun buildDock(): View {
-        val dock = LinearLayout(this).apply {
+    /**
+     * Dedicated landscape desktop shell inspired by KDE Plasma.
+     * Portrait intentionally continues through the original buildScreen() path.
+     */
+    private fun buildKdeLandscapeDesktop() {
+        val bgTop = backgroundTop
+        val bgBottom = backgroundBottom
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        }
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+
+        rootFrame = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(bgTop, bgBottom)
+            )
+            clipChildren = false
+            clipToPadding = false
+        }
+        loadWallpaper()?.let { bitmap ->
+            rootFrame.addView(ImageView(this).apply {
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                if (android.os.Build.VERSION.SDK_INT >= 31 && blurRadius > 0f) {
+                    setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP
+                    ))
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
+            rootFrame.addView(View(this).apply {
+                setBackgroundColor(if (isDarkTheme) 0x44080E1B else 0x220D1420)
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(28), dp(12), dp(12))
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        // Compact system monitor replaces branding and the duplicate top launcher.
+        val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(7), dp(8), dp(7))
-            background = if (liquidGlass) glassSurface(25) else rounded(dockSurface, 25)
-            elevation = dp(14).toFloat()
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+            background = if (liquidGlass) glassSurface(16) else rounded(dockSurface, 16)
+            elevation = dp(8).toFloat()
         }
-        dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
-            textSize = 20f
-            contentDescription = "Buka menu Start"
-            setOnClickListener { toggleStartPanel() }
-        }, LinearLayout.LayoutParams(dp(49), -1))
+        val systemStats = TextView(this).apply {
+            textSize = 12f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            contentDescription = "FPS launcher, penggunaan CPU, dan proses latar belakang"
+        }
+        topPanel.addView(systemStats, LinearLayout.LayoutParams(0, dp(34), 1f))
+        val landscapeClock = TextView(this).apply {
+            textSize = 12f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(8), 0)
+            contentDescription = "Waktu dan tanggal"
+            text = SimpleDateFormat("EEE, d MMM  ·  HH:mm", Locale("id", "ID")).format(Date())
+        }
+        topPanel.addView(landscapeClock, LinearLayout.LayoutParams(-2, dp(34)))
+        val batteryIntent = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val batteryLevel = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val batteryScale = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val batteryPercent = if (batteryLevel >= 0 && batteryScale > 0) batteryLevel * 100 / batteryScale else -1
+        topPanel.addView(TextView(this).apply {
+            text = if (batteryPercent >= 0) "▰ $batteryPercent%" else "▰ --%"
+            textSize = 12f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(4), 0)
+            contentDescription = "Persentase baterai"
+        }, LinearLayout.LayoutParams(-2, dp(34)))
+        topPanel.addView(chipButton("⚙", cardSurface, primaryText, 17).apply {
+            contentDescription = "Pengaturan Saku Launcher"
+            setOnClickListener { showSettings() }
+        }, LinearLayout.LayoutParams(dp(38), dp(36)).apply { marginStart = dp(6) })
+        shell.addView(topPanel, LinearLayout.LayoutParams(-1, dp(46)))
+        var frameCount = 0
+        var lastFrameTime = 0L
+        var measuredFps = 0
+        val frameCallback = object : android.view.Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                frameCount++
+                if (lastFrameTime == 0L) lastFrameTime = frameTimeNanos
+                val elapsed = frameTimeNanos - lastFrameTime
+                if (elapsed >= 1_000_000_000L) {
+                    measuredFps = (frameCount * 1_000_000_000L / elapsed).toInt()
+                    frameCount = 0
+                    lastFrameTime = frameTimeNanos
+                }
+                android.view.Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+        android.view.Choreographer.getInstance().postFrameCallback(frameCallback)
+        val statsHandler = android.os.Handler(mainLooper)
+        val statsUpdater = object : Runnable {
+            override fun run() {
+                val bgProcesses = try {
+                    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager)
+                        .runningAppProcesses?.count { it.processName != packageName } ?: 0
+                } catch (_: Exception) { 0 }
+                val cpuLabel = try {
+                    val lines = java.io.File("/proc/stat").readLines().first().trim().split(Regex("\\s+"))
+                    val values = lines.drop(1).take(8).mapNotNull { it.toLongOrNull() }
+                    if (values.size >= 4) {
+                        val idle = values[3] + (values.getOrNull(4) ?: 0L)
+                        val total = values.sum()
+                        val previous = preferences.getLong("landscape_cpu_total", -1L)
+                        val previousIdle = preferences.getLong("landscape_cpu_idle", -1L)
+                        preferences.edit().putLong("landscape_cpu_total", total).putLong("landscape_cpu_idle", idle).apply()
+                        if (previous >= 0 && total > previous) {
+                            val usage = (((total - previous) - (idle - previousIdle).coerceAtLeast(0L)) * 100 / (total - previous)).toInt().coerceIn(0, 100)
+                            "$usage%"
+                        } else { "…" }
+                    } else { "—" }
+                } catch (_: Exception) { "—" }
+                systemStats.text = "FPS $measuredFps   ·   CPU $cpuLabel   ·   BG $bgProcesses"
+                statsHandler.postDelayed(this, 1500L)
+            }
+        }
+        statsHandler.post(statsUpdater)
 
+        // Desktop workspace: real app shortcuts and optional widgets, not a floating window.
+        widgetStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+            clipChildren = false
+            clipToPadding = false
+        }
+        shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
+        desktopGrid = GridView(this).apply {
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, 7).coerceIn(4, 12)
+            verticalSpacing = dp(8)
+            horizontalSpacing = dp(8)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            setSelector(ColorDrawable(Color.TRANSPARENT))
+            isVerticalScrollBarEnabled = false
+            clipToPadding = false
+            clipChildren = false
+            setPadding(dp(12), dp(18), dp(12), dp(14))
+        }
+        pinnedAdapter = AppGridAdapter(isStartMenu = false)
+        desktopGrid.adapter = pinnedAdapter
+        desktopGrid.setOnDragListener { grid, event ->
+            when (event.action) {
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.9f; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DROP -> {
+                    grid.alpha = 1f
+                    val source = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
+                    val targetPos = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
+                    val order = homePackages()
+                    val from = order.indexOf(source)
+                    val target = pinnedAdapter.getItemOrNull(targetPos)?.packageName?.let { order.indexOf(it) } ?: -1
+                    if (from >= 0) {
+                        val moved = order.removeAt(from)
+                        order.add(if (target >= 0) target.coerceAtMost(order.size) else order.size, moved)
+                        saveHomePackages(order)
+                        pinnedAdapter.notifyDataSetChanged()
+                    }
+                    true
+                }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                else -> true
+            }
+        }
+        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Permanent bottom panel replaces the floating dock in landscape mode.
+        val bottomPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = if (liquidGlass) glassSurface(18) else rounded(dockSurface, 18)
+            elevation = dp(10).toFloat()
+        }
+        val startButton = TextView(this).apply {
+            text = "▦  Menu"
+            textSize = 13f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded(accent, 12)
+            contentDescription = "Buka menu aplikasi"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { toggleStartPanel() }
+        }
+        bottomPanel.addView(startButton, LinearLayout.LayoutParams(dp(92), dp(42)))
+        bottomPanel.addView(View(this).apply {
+            setBackgroundColor(Color.argb(if (isDarkTheme) 70 else 45, 255, 255, 255))
+        }, LinearLayout.LayoutParams(dp(1), dp(26)).apply {
+            marginStart = dp(8); marginEnd = dp(8)
+        })
+        val taskScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false
+        }
+        val taskIcons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        pinnedApps().take(8).forEachIndexed { index, app ->
+            taskIcons.addView(dockIcon(app, index).apply {
+                setPadding(dp(8), dp(5), dp(8), dp(5))
+                background = ColorDrawable(Color.TRANSPARENT)
+            }, LinearLayout.LayoutParams(dp(44), dp(42)).apply {
+                marginStart = dp(2); marginEnd = dp(2)
+            })
+        }
+        taskScroll.addView(taskIcons, ViewGroup.LayoutParams(-2, -1))
+        bottomPanel.addView(taskScroll, LinearLayout.LayoutParams(0, dp(42), 1f))
+        bottomPanel.addView(View(this).apply {
+            setBackgroundColor(Color.argb(if (isDarkTheme) 70 else 45, 255, 255, 255))
+        }, LinearLayout.LayoutParams(dp(1), dp(26)).apply {
+            marginStart = dp(8); marginEnd = dp(8)
+        })
+        fun bottomAction(glyph: String, description: String, action: () -> Unit) =
+            TextView(this).apply {
+                text = glyph
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(primaryText)
+                contentDescription = description
+                isClickable = true
+                isFocusable = true
+                background = ColorDrawable(Color.TRANSPARENT)
+                setOnClickListener { action() }
+            }
+        bottomPanel.addView(bottomAction("◁", "Kembali") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressed()
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        bottomPanel.addView(bottomAction("○", "Beranda") {
+            hideStartPanelIfVisible()
+            showHomePage(0)
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        bottomPanel.addView(bottomAction("□", "Aplikasi terbaru") {
+            if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) {
+                Toast.makeText(this, "Aktifkan layanan aksesibilitas Saku untuk tombol Recent Apps.", Toast.LENGTH_LONG).show()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }, LinearLayout.LayoutParams(dp(38), dp(42)))
+        shell.addView(bottomPanel, LinearLayout.LayoutParams(-1, dp(54)).apply {
+            topMargin = dp(8)
+        })
+
+        rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        startPanel = buildStartPanel()
+        val drawerWidth = dp(preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460))
+            .coerceAtMost((resources.displayMetrics.widthPixels - dp(32)).coerceAtLeast(dp(260)))
+        val drawerHeight = (resources.displayMetrics.heightPixels - dp(150)).coerceAtLeast(dp(250))
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(drawerWidth, drawerHeight, Gravity.BOTTOM or Gravity.START).apply {
+            leftMargin = dp(12)
+            bottomMargin = dp(86)
+        })
+        startPanel.visibility = View.GONE
+        setContentView(rootFrame)
+        updateClock()
+    }
+
+    private fun isOnSecondaryDisplay(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= 30) {
+            display?.displayId?.let { it != android.view.Display.DEFAULT_DISPLAY } ?: false
+        } else {
+            windowManager.defaultDisplay.displayId != android.view.Display.DEFAULT_DISPLAY
+        }
+    }
+
+    private fun hideStartPanelIfVisible() {
+        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+    }
+
+    private fun buildDesktopNavigationBar(): View {
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(5), dp(3), dp(5), dp(3))
+            background = if (liquidGlass) glassSurface(22) else rounded(dockSurface, 22)
+            elevation = dp(12).toFloat()
+        }
+        fun navButton(label: String, description: String, action: () -> Unit): TextView =
+            TextView(this).apply {
+                text = label
+                contentDescription = description
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(primaryText)
+                background = ColorDrawable(Color.TRANSPARENT)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+        bar.addView(navButton("‹", "Tampilkan atau sembunyikan panel aplikasi", {
+            toggleStartPanel()
+        }), LinearLayout.LayoutParams(0, -1, 0.8f))
+        bar.addView(navButton("⚙", "Pengaturan Saku Launcher", {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_OPEN_SETTINGS, true)
+            })
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        bar.addView(navButton("▦", "Semua aplikasi", {
+            showingAllApps = true
+            if (::startPanel.isInitialized) { showStartPanel(); refreshStartPanel() }
+        }), LinearLayout.LayoutParams(0, -1, 1.15f))
+        bar.addView(navButton("◁", "Kembali", {
+            if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+            else if (!SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) onBackPressed()
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        bar.addView(navButton("○", "Beranda", {
+            if (::startPanel.isInitialized) hideStartPanel()
+            showHomePage(0)
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        bar.addView(navButton("□", "Aplikasi terbaru", {
+            if (SakuNavigationAccessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)) return@navButton
+            AlertDialog.Builder(this).setTitle("Izin navigasi")
+                .setMessage("Aktifkan layanan aksesibilitas Saku Launcher agar tombol Aplikasi terbaru dapat membuka layar Recent Apps.")
+                .setPositiveButton("Buka pengaturan") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }.setNegativeButton("Batal", null).show()
+        }), LinearLayout.LayoutParams(0, -1, 1f))
+        return bar
+    }
+
+    private fun buildStatusStrip(): View {
+        val strip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(12), 0)
+            background = if (liquidGlass) glassSurface(18) else rounded(cardSurface, 18)
+            elevation = dp(4).toFloat()
+        }
+        val now = Date()
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
+
+        strip.addView(TextView(this).apply {
+            text = "☁  18°"
+            textSize = 11f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = "Widget cuaca dekoratif"
+        }, LinearLayout.LayoutParams(0, -1, 1f))
+        strip.addView(TextView(this).apply {
+            text = "▰  ${percent?.let { "$it%" } ?: "--%"}"
+            textSize = 11f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            contentDescription = "Persentase baterai"
+            setPadding(dp(8), 0, dp(10), 0)
+        }, LinearLayout.LayoutParams(-2, -1))
+        strip.addView(View(this).apply {
+            background = rounded(if (isDarkTheme) 0x55FFFFFF else 0x22000000, 1)
+        }, LinearLayout.LayoutParams(dp(1), dp(18)))
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            strip.addView(TextView(this).apply {
+                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+                textSize = 12f
+                setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+                setTextColor(primaryText)
+                gravity = Gravity.CENTER
+                contentDescription = "Waktu"
+                setPadding(dp(10), 0, dp(5), 0)
+            }, LinearLayout.LayoutParams(-2, -1))
+            strip.addView(TextView(this).apply {
+                text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
+                textSize = 10f
+                setTextColor(secondaryText)
+                gravity = Gravity.CENTER
+                contentDescription = "Tanggal"
+                setPadding(dp(5), 0, 0, 0)
+            }, LinearLayout.LayoutParams(-2, -1))
+        }
+        return strip
+    }
+
+    private fun toggleNativeQuickSettings() {
+        val disable = !preferences.getBoolean(KEY_NATIVE_QS_DISABLED, false)
+        Thread {
+            val output = runRootCommand(if (disable) "cmd statusbar disable 0x00010000; echo QS_EXIT:$?" else "cmd statusbar enable 0x00010000; echo QS_EXIT:$?")
+            val success = output.contains("QS_EXIT:0")
+            runOnUiThread {
+                if (success) {
+                    preferences.edit().putBoolean(KEY_NATIVE_QS_DISABLED, disable).apply()
+                    Toast.makeText(this, if (disable) "Ekspansi panel Android dinonaktifkan. menu Saku tersedia dari layar utama." else "Panel Android dipulihkan.", Toast.LENGTH_LONG).show()
+                    buildScreen()
+                } else {
+                    Toast.makeText(this, "Perintah ditolak ROM. Pulihkan manual jika perlu: su -c cmd statusbar enable 0x00010000", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun buildDock(): View {
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+        val effectiveWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, maxWidth)
+        val effectiveHeight = if (landscape) dockHeightDp.coerceAtLeast(64) else dockHeightDp
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(if (landscape) 10 else 8), dp(3), dp(if (landscape) 10 else 8), dp(3))
+            // Keep the existing liquid-glass treatment; the panel simply encloses the icons more clearly.
+            background = if (liquidGlass) glassSurface(24) else rounded(dockSurface, 24)
+            elevation = dp(14).toFloat()
+            minimumWidth = dp(effectiveWidth)
+            minimumHeight = dp(effectiveHeight)
+        }
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
         val icons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), 0, dp(5), 0)
+            setPadding(dp(7), 0, dp(7), 0)
         }
-        pinnedApps().take(6).forEachIndexed { index, app ->
-            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp), -1))
+        pinnedApps().take(7).forEachIndexed { index, app ->
+            // Ikon menyatu dengan dock: tanpa bubble individual atau sekat di sekelilingnya.
+            icons.addView(dockIcon(app, index).apply {
+                background = ColorDrawable(Color.TRANSPARENT)
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(effectiveHeight - 14).coerceAtLeast(24) + 2), -1).apply {
+                marginStart = dp(2)
+                marginEnd = dp(2)
+            })
         }
-        scroll.addView(icons)
-        dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+        scroll.addView(icons, ViewGroup.LayoutParams(-2, -1))
+        dock.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        dock.layoutParams = LinearLayout.LayoutParams(dp(effectiveWidth), dp(effectiveHeight)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
         return dock
     }
 
     private fun dockIcon(app: LaunchableApp, index: Int): View = ImageView(this).apply {
         setImageDrawable(app.icon)
         scaleType = ImageView.ScaleType.FIT_CENTER
-        setPadding(dp(8), dp(7), dp(8), dp(7))
+        setPadding(dp(7), dp(6), dp(7), dp(6))
         contentDescription = app.label
         isClickable = true
         isFocusable = true
@@ -474,20 +1049,44 @@ class MainActivity : Activity() {
     private fun buildStartPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = if (liquidGlass) glassSurface(28) else rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
-            elevation = dp(16).toFloat()
+            setPadding(dp(17), dp(16), dp(17), dp(13))
+            background = if (liquidGlass) glassSurface(30) else rounded(if (isDarkTheme) Color.rgb(24, 31, 47) else Color.rgb(246, 248, 253), 30)
+            elevation = dp(20).toFloat()
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(TextView(this).apply {
-            text = "Start"
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heading.addView(TextView(this).apply {
+            text = "Aplikasi"
             textSize = 20f
             setTextColor(primaryText)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD))
+            letterSpacing = -0.02f
+        })
+        header.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
+        val landscapeDrawer = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val drawerModeKey = if (landscapeDrawer) "drawer_mode_landscape" else "drawer_mode"
+        drawerMode = preferences.getString(drawerModeKey, "grid") ?: "grid"
+        drawerModeButton = chipButton(if (drawerMode == "list") "▦" else "☷", cardSurface, primaryText, 15).apply {
+            textSize = 18f
+            contentDescription = "Ubah tampilan aplikasi"
+            setOnClickListener {
+                drawerMode = if (drawerMode == "grid") "list" else "grid"
+                val modeKey = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "drawer_mode_landscape" else "drawer_mode"
+                preferences.edit().putString(modeKey, drawerMode).apply()
+                if (::startGrid.isInitialized) {
+                    val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    startGrid.numColumns = if (drawerMode == "list") 1 else if (isLandscape) 6 else drawerColumns()
+                    startGrid.verticalSpacing = dp(if (drawerMode == "list") 3 else if (isLandscape) 8 else 10)
+                    startAdapter.notifyDataSetChanged()
+                }
+                drawerModeButton.text = if (drawerMode == "list") "▦" else "☷"
+            }
+        }
+        drawerModeButton.visibility = View.VISIBLE
+        header.addView(drawerModeButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(6) })
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
@@ -500,11 +1099,12 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(15), 0, dp(15), 0)
-            background = rounded(cardSurface, 18)
+            background = if (liquidGlass) glassSurface(16) else rounded(cardSurface, 16)
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            contentDescription = "Cari aplikasi di menu Start"
+            contentDescription = "Cari aplikasi"
+            compoundDrawablePadding = dp(8)
         }
-        panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        panel.addView(startSearchField, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(13) })
 
         val filters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -513,20 +1113,28 @@ class MainActivity : Activity() {
         }
         pinnedTabButton = chipButton("Disematkan", if (!showingAllApps) accent else cardSurface, primaryText, 15).apply {
             textSize = 12f
-            setOnClickListener { switchStartTab(showAllApps = false) }
+            setOnClickListener {
+                showingAllApps = false
+                refreshStartPanel()
+            }
         }
         allAppsTabButton = chipButton("Semua aplikasi", if (showingAllApps) accent else cardSurface, primaryText, 15).apply {
             textSize = 12f
-            setOnClickListener { switchStartTab(showAllApps = true) }
+            setOnClickListener {
+                showingAllApps = true
+                refreshStartPanel()
+            }
         }
         filters.addView(pinnedTabButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(6) })
         filters.addView(allAppsTabButton, LinearLayout.LayoutParams(0, dp(38), 1f))
+        filters.visibility = if (landscapeDrawer) View.GONE else View.VISIBLE
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
-            verticalSpacing = dp(5)
-            horizontalSpacing = dp(4)
+            numColumns = if (drawerMode == "list") 1 else if (landscapeDrawer) 6 else drawerColumns()
+            verticalSpacing = dp(if (drawerMode == "list") 3 else if (landscapeDrawer) 8 else 10)
+            horizontalSpacing = dp(if (landscapeDrawer) 10 else 8)
+            setPadding(dp(6), dp(8), dp(6), dp(10))
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
@@ -536,22 +1144,6 @@ class MainActivity : Activity() {
         }
         startAdapter = AppGridAdapter(isStartMenu = true)
         startGrid.adapter = startAdapter
-        var downX = 0f
-        var downY = 0f
-        startGrid.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
-                android.view.MotionEvent.ACTION_UP -> {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                        switchStartTab(showAllApps = dx < 0)
-                        true
-                    } else false
-                }
-                else -> false
-            }
-        }
         panel.addView(startGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         startSearchField.addTextChangedListener(object : TextWatcher {
@@ -571,77 +1163,43 @@ class MainActivity : Activity() {
 
     private fun showStartPanel() {
         if (!::startPanel.isInitialized) return
-        if (startPanel.visibility == View.VISIBLE) return
-        panelAnimationToken++
-        startPanel.animate().cancel()
-        startScrim.animate().cancel()
-        startGrid.animate().cancel()
-        startGrid.alpha = 1f
-        startGrid.translationX = 0f
         showingAllApps = true
+        startPanel.animate().cancel()
         startPanel.visibility = View.VISIBLE
-        startScrim.visibility = View.VISIBLE
         startPanel.bringToFront()
-        startSearchField.setText("")
-        refreshStartPanel()
         startPanel.alpha = 0f
         startPanel.translationY = dp(22).toFloat()
+        startPanel.translationX = 0f
         startPanel.scaleX = 0.985f
         startPanel.scaleY = 0.985f
-        startScrim.alpha = 0f
-        startScrim.animate().alpha(1f).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
+        startSearchField.setText("")
+        refreshStartPanel()
         startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-            .setDuration(250).setInterpolator(DecelerateInterpolator(1.6f)).start()
+             .setDuration(250).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
 
     private fun hideStartPanel() {
         if (!::startPanel.isInitialized || startPanel.visibility != View.VISIBLE) return
-        val token = ++panelAnimationToken
         startPanel.animate().cancel()
-        startScrim.animate().cancel()
-        startPanel.animate().alpha(0f).translationY(dp(14).toFloat()).scaleX(0.99f).scaleY(0.99f)
-            .setDuration(170).setInterpolator(DecelerateInterpolator()).withEndAction {
-                if (token == panelAnimationToken) {
-                    startPanel.visibility = View.GONE
-                    startPanel.alpha = 1f
-                    startPanel.translationY = 0f
-                    startPanel.scaleX = 1f
-                    startPanel.scaleY = 1f
-                    startScrim.visibility = View.GONE
-                    startScrim.alpha = 0f
-                }
+        startPanel.animate().alpha(0f).translationX(dp(32).toFloat()).scaleX(0.985f).scaleY(0.985f)
+            .setDuration(170).setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                startPanel.visibility = View.GONE
+                startPanel.alpha = 1f
+                startPanel.translationX = 0f
+                startPanel.scaleX = 1f
+                startPanel.scaleY = 1f
             }.start()
-        startScrim.animate().alpha(0f).setDuration(150).start()
         searchQuery = ""
         if (::startSearchField.isInitialized) startSearchField.setText("")
-        if (::startSearchField.isInitialized) startSearchField.hideKeyboard()
     }
 
     private fun refreshStartPanel() {
-        updateStartTabAppearance()
+        if (::pinnedTabButton.isInitialized) {
+            pinnedTabButton.background = rounded(if (!showingAllApps) accent else cardSurface, 15)
+            allAppsTabButton.background = rounded(if (showingAllApps) accent else cardSurface, 15)
+        }
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
-    }
-
-    private fun updateStartTabAppearance() {
-        if (!::pinnedTabButton.isInitialized) return
-        pinnedTabButton.background = rounded(if (!showingAllApps) accent else cardSurface, 15)
-        allAppsTabButton.background = rounded(if (showingAllApps) accent else cardSurface, 15)
-    }
-
-    private fun switchStartTab(showAllApps: Boolean) {
-        if (showingAllApps == showAllApps) return
-        showingAllApps = showAllApps
-        updateStartTabAppearance()
-        if (!::startGrid.isInitialized || !::startAdapter.isInitialized) return
-        val direction = if (showAllApps) 1f else -1f
-        startGrid.animate().cancel()
-        startGrid.animate().alpha(0f).translationX(-direction * dp(20).toFloat())
-            .setDuration(105).setInterpolator(AccelerateInterpolator()).withEndAction {
-                startAdapter.notifyDataSetChanged()
-                startGrid.translationX = direction * dp(20).toFloat()
-                startGrid.animate().alpha(1f).translationX(0f)
-                    .setDuration(190).setInterpolator(DecelerateInterpolator(1.5f)).start()
-            }.start()
     }
 
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
@@ -656,8 +1214,92 @@ class MainActivity : Activity() {
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
         return matches.filter { it.activityInfo.packageName != packageName }
             .distinctBy { it.activityInfo.packageName }
-            .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, info.loadIcon(packageManager)) }
+            .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, loadThemedIcon(info)) }
             .sortedBy { it.label.lowercase(Locale.getDefault()) }
+    }
+
+    private fun componentMatches(component: String, targetPackage: String, targetActivity: String): Boolean {
+        val normalized = component.replace("ComponentInfo{", "").replace("}", "")
+        val pkg = normalized.substringBefore("/", "")
+        val activity = normalized.substringAfter("/", "")
+        return pkg == targetPackage && (activity.isBlank() || activity == targetActivity || targetActivity.endsWith(activity.removePrefix(".")))
+    }
+
+    private fun loadThemedIcon(info: ResolveInfo): android.graphics.drawable.Drawable {
+        val fallback = info.loadIcon(packageManager)
+        if (localIconFolder.isNotBlank()) {
+            try {
+                val tree = Uri.parse(localIconFolder)
+                val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+                val target = info.activityInfo.packageName
+                val targetActivity = info.activityInfo.name
+                val names = setOf(
+                    target.lowercase(Locale.ROOT),
+                    target.replace(".", "_").lowercase(Locale.ROOT),
+                    target.substringAfterLast(".").lowercase(Locale.ROOT),
+                    targetActivity.substringAfterLast(".").lowercase(Locale.ROOT),
+                    ("app_" + target.substringAfterLast(".")).lowercase(Locale.ROOT)
+                )
+                contentResolver.query(children, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val name = cursor.getString(1) ?: continue
+                        val baseName = name.substringBeforeLast(".").lowercase(Locale.ROOT)
+                        if (baseName in names && listOf(".png", ".webp", ".jpg", ".jpeg").any { name.endsWith(it, true) }) {
+                            val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+                            contentResolver.openInputStream(uri)?.use { stream ->
+                                android.graphics.BitmapFactory.decodeStream(stream)?.let { return android.graphics.drawable.BitmapDrawable(resources, it) }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+        if (iconPackPackage.isBlank()) return fallback
+        return try {
+            val packResources = packageManager.getResourcesForApplication(iconPackPackage)
+            val targetPackage = info.activityInfo.packageName
+            val targetActivity = info.activityInfo.name
+            val candidates = linkedSetOf<String>()
+            // Common icon-pack appfilter entries use component="ComponentInfo{package/activity}" drawable="icon_name".
+            val xmlId = packResources.getIdentifier("appfilter", "xml", iconPackPackage).takeIf { it != 0 }
+                ?: packResources.getIdentifier("app_filter", "xml", iconPackPackage).takeIf { it != 0 }
+            if (xmlId != null) {
+                val parser = packResources.getXml(xmlId)
+                try {
+                    while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                        if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
+                            val component = parser.getAttributeValue(null, "component").orEmpty()
+                            val drawable = parser.getAttributeValue(null, "drawable").orEmpty()
+                            if (drawable.isNotBlank() && componentMatches(component, targetPackage, targetActivity)) candidates.add(drawable)
+                        }
+                        parser.next()
+                    }
+                } finally { parser.close() }
+            } else {
+                // A few packs ship appfilter.xml in res/raw instead of res/xml.
+                val rawId = packResources.getIdentifier("appfilter", "raw", iconPackPackage).takeIf { it != 0 }
+                if (rawId != null) {
+                    val parser = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
+                    packResources.openRawResource(rawId).use { parser.setInput(it, "UTF-8");
+                        while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                            if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
+                                val component = parser.getAttributeValue(null, "component").orEmpty()
+                                val drawable = parser.getAttributeValue(null, "drawable").orEmpty()
+                                if (drawable.isNotBlank() && componentMatches(component, targetPackage, targetActivity)) candidates.add(drawable)
+                            }
+                            parser.next()
+                        }
+                    }
+                }
+            }
+            val shortName = targetPackage.substringAfterLast(".")
+            candidates.addAll(listOf(targetPackage.replace(".", "_"), shortName, "app_" + shortName))
+            val id = candidates.firstNotNullOfOrNull { name ->
+                packResources.getIdentifier(name, "drawable", iconPackPackage).takeIf { it != 0 }
+                    ?: packResources.getIdentifier(name, "mipmap", iconPackPackage).takeIf { it != 0 }
+            }
+            if (id != null) packResources.getDrawable(id, null) else fallback
+        } catch (_: Exception) { fallback }
     }
 
     private fun rebuildPinnedViews() {
@@ -666,13 +1308,16 @@ class MainActivity : Activity() {
         // When the bottom taskbar is hidden, there is no dock view to rebuild.
         if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         // Rebuild only the dock; keep the open Start panel and its scroll position intact.
-        val dockIndex = shellView.childCount - 1
-        if (dockIndex < 0) return
-        shellView.removeViewAt(dockIndex)
-        shellView.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
+        val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
+        val dockIndex = shell.childCount - 1
+        shell.removeViewAt(dockIndex)
+        shell.addView(buildDock(), LinearLayout.LayoutParams(dp(currentDockWidth()), dp(dockHeightDp)).apply {
+            gravity = currentDockGravity()
+            topMargin = dp(10)
+        })
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
+    private fun launch(app: LaunchableApp) {
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
@@ -681,23 +1326,9 @@ class MainActivity : Activity() {
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            if (asFreeform) {
-                val width = resources.displayMetrics.widthPixels
-                val height = resources.displayMetrics.heightPixels
-                val margin = dp(24)
-                val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                startActivity(launchIntent, options.toBundle())
-            } else {
-                startActivity(launchIntent)
-            }
+            startActivity(launchIntent)
         } catch (_: Exception) {
-            if (asFreeform) {
-                Toast.makeText(this, "Mode jendela tidak didukung; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
-                startActivity(launchIntent)
-            } else {
-                Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -707,9 +1338,10 @@ class MainActivity : Activity() {
         val isPinned = pinnedPackages().contains(app.packageName)
         val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
-            "Buka sebagai jendela",
-            "Buka layar penuh",
+            "Buka aplikasi",
             homeAction,
+            if (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet())?.contains(app.packageName) == true) "Tampilkan aplikasi" else "Sembunyikan aplikasi",
+            "Opsi tata letak layar utama",
             "Pindah posisi ke kiri",
             "Pindah posisi ke kanan",
             "Pindahkan ke layar lain",
@@ -720,18 +1352,25 @@ class MainActivity : Activity() {
         )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
-                0 -> launch(app, asFreeform = true)
-                1 -> launch(app, asFreeform = false)
-                2 -> {
+                0 -> launch(app)
+                1 -> {
                     val current = homePackages()
                     if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
                     saveHomePackages(current)
                     pinnedAdapter.notifyDataSetChanged()
                     Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
                 }
-                3 -> moveHomeApp(app, -1)
-                4 -> moveHomeApp(app, 1)
-                5 -> {
+                2 -> {
+                    val hidden = (preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()).toMutableSet()
+                    if (hidden.contains(app.packageName)) hidden.remove(app.packageName) else hidden.add(app.packageName)
+                    preferences.edit().putStringSet(KEY_HIDDEN_APPS, hidden).apply()
+                    rebuildPinnedViews()
+                    Toast.makeText(this, if (hidden.contains(app.packageName)) "Aplikasi disembunyikan" else "Aplikasi ditampilkan", Toast.LENGTH_SHORT).show()
+                }
+                3 -> showHomeLayoutOptions()
+                4 -> moveHomeApp(app, -1)
+                5 -> moveHomeApp(app, 1)
+                6 -> {
                     val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
                     if (pages.isEmpty()) {
                         addHomePage()
@@ -743,10 +1382,10 @@ class MainActivity : Activity() {
                         }.setNegativeButton("Batal", null).show()
                     }
                 }
-                6 -> togglePinned(app)
-                7 -> openAppInfo(app)
-                8 -> openPlayStore(app)
-                9 -> uninstallApp(app)
+                7 -> togglePinned(app)
+                8 -> openAppInfo(app)
+                9 -> openPlayStore(app)
+                10 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -836,71 +1475,355 @@ class MainActivity : Activity() {
         }.setNegativeButton("Batal", null).show()
     }
 
+    private fun showDiagnosticLog() {
+        val log = android.util.Log.getStackTraceString(Throwable("SakuLauncher diagnostic snapshot"))
+        val runtime = buildString {
+            appendLine("=== SAKU LAUNCHER DIAGNOSTIC ===")
+            appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
+            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            appendLine("App version: ${packageManager.getPackageInfo(packageName, 0).versionName}")
+            appendLine("Default launcher: ${isDefaultLauncher()}")
+            appendLine("Floating dock preference: ${preferences.getBoolean(KEY_OVERLAY_ENABLED, false)}")
+            appendLine("Accessibility service enabled: ${isSakuAccessibilityEnabled()}")
+            appendLine()
+            appendLine("=== RECENT APP-RECORDED ERRORS ===")
+            appendLine(preferences.getString("saku_recent_errors", "No app-recorded errors yet.") ?: "No app-recorded errors yet.")
+            appendLine()
+            appendLine("=== NOTE ===")
+            appendLine("Android restricts access to system-wide logcat for ordinary apps. This report contains app-accessible diagnostics only, not a full system log.")
+        }
+        val box = android.widget.ScrollView(this)
+        val text = android.widget.TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(16, 20, 29))
+            setPadding(24, 20, 24, 20)
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 12f
+            text = runtime
+            setTextIsSelectable(true)
+        }
+        box.addView(text)
+        AlertDialog.Builder(this)
+            .setTitle("Log error · diagnostik")
+            .setView(box)
+            .setPositiveButton("Salin") { _, _ ->
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Saku diagnostic", runtime))
+                Toast.makeText(this, "Laporan diagnostik disalin", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Bagikan") { _, _ ->
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, runtime)
+                }, "Bagikan log diagnostik"))
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun isDefaultLauncher(): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        return resolved?.activityInfo?.packageName == packageName
+    }
+
+    private fun isSakuAccessibilityEnabled(): Boolean {
+        val expected = "$packageName/${SakuNavigationAccessibilityService::class.java.name}"
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+    }
+
     private fun showSettings() {
-        val overlayState = if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Aktif" else "Nonaktif"
-        val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
-        val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
-        val labelState = if (hideLabels) "Sembunyi" else "Tampil"
-        val drawerLabelState = if (hideDrawerLabels) "Sembunyi" else "Tampil"
-        val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
-        val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
         val options = arrayOf(
-            "◧  Taskbar bawah · $hideTaskbarState",
-            "▦  Ukuran ikon · ${iconSizeDp} dp",
-            "◌  Label aplikasi · $labelState",
-            "✧  Liquid Glass · $glassState",
-            "◐  Transparansi · $transparency%",
-            "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
-            "＋  Tambahkan widget",
-            "⌘  Dock mengambang · $overlayState",
-            "▤  Kelola aplikasi dock · $pinnedState",
-            "☾  Mode tampilan · $themeState",
-            "✦  Warna aksen",
-            "▧  Pilih wallpaper",
-            "↺  Reset wallpaper",
-            "ⓘ  Tentang & izin",
-            "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
-            "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
-            "◉  Pengelola proses aplikasi",
-            "◌  Label menu aplikasi · $drawerLabelState"
+            "Mode tampilan · $themeState",
+            "Jumlah layar utama · ${homePageCount()}",
+            "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
+            "Transparansi · ${transparencyPercent}%",
+            "Kustomisasi ikon & icon pack",
+            "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
+            "Kustomisasi landscape",
+            "Orientasi launcher · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Potret"; else -> "Ikuti sensor" }}",
+            "Posisi drawer landscape · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Kanan" else "Kiri"}",
+            "Pilih wallpaper",
+            "Reset wallpaper",
+            "Jadikan launcher default",
+            (if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Nonaktifkan dock dan navigasi mengambang" else "Aktifkan dock dan navigasi mengambang"),
+            "Ukuran bola Saku · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
+            "Posisi navigasi mengambang · ${dockPositionLabel()}",
+            "Mulai otomatis setelah restart",
+            "Izinkan berjalan di latar belakang",
+            "Tentang & izin",
+            "SakuTube · YouTube di dalam aplikasi",
+            "Baca log error untuk analisis"
         )
-        AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
+        AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_TASKBAR, !preferences.getBoolean(KEY_HIDE_TASKBAR, false)).apply()
-                        buildScreen()
+                    0 -> toggleTheme()
+                    1 -> chooseHomePageCount()
+                    2 -> chooseBackgroundBlur()
+                    3 -> chooseTransparency()
+                    4 -> chooseIconCustomization()
+                    5 -> chooseDockSize()
+                    6 -> showLandscapeCustomization()
+                    7 -> chooseLauncherOrientation()
+                    8 -> chooseDrawerPosition()
+                    9 -> chooseWallpaper()
+                    10 -> resetWallpaper()
+                    11 -> openHomeSettings()
+                    12 -> {
+                        val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
+                        if (enabled) {
+                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                            try {
+                                startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_STOP))
+                            } catch (_: Exception) {
+                                stopService(Intent(this, FloatingDockService::class.java))
+                            }
+                            Toast.makeText(this, "Dock dan navigasi mengambang dinonaktifkan", Toast.LENGTH_SHORT).show()
+                        } else if (android.provider.Settings.canDrawOverlays(this)) {
+                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, true).apply()
+                            try {
+                                val serviceIntent = Intent(this, FloatingDockService::class.java)
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+                                else startService(serviceIntent)
+                                Toast.makeText(this, "Dock dan navigasi mengambang diaktifkan", Toast.LENGTH_SHORT).show()
+                            } catch (_: Exception) {
+                                preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                                openOverlaySettings()
+                            }
+                        } else {
+                            preferences.edit().putBoolean(KEY_OVERLAY_PENDING, true).apply()
+                            openOverlaySettings()
+                        }
                     }
-                    1 -> chooseIconSize()
-                    2 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
-                        buildScreen()
+                    13 -> chooseBubbleSize()
+                    14 -> chooseDockNavigationPosition()
+                    15 -> {
+                        val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
+                        preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
+                        Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
                     }
-                    3 -> {
-                        preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
-                        buildScreen()
-                        refreshFloatingDock()
-                    }
-                    4 -> chooseTransparency()
-                    5 -> manageHiddenApps()
-                    6 -> pickWidget()
-                    7 -> toggleOverlay()
-                    8 -> managePins()
-                    9 -> toggleTheme()
-                    10 -> chooseAccent()
-                    11 -> chooseWallpaper()
-                    12 -> resetWallpaper()
-                    13 -> showPermissionInfo()
-                    14 -> chooseHomeGrid()
-                    15 -> chooseDrawerGrid()
-                    16 -> showProcessManager()
-                    17 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
-                        buildScreen()
-                    }
+                    16 -> requestBackgroundRunPermission()
+                    17 -> showPermissionInfo()
+                    18 -> openYouTubeWeb()
+                    19 -> showDiagnosticLog()
                 }
-            }.setNegativeButton("Selesai", null).show()
+            }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openYouTubeWeb() {
+        try {
+            startActivity(Intent(this, YouTubeActivity::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "SakuTube gagal dibuka: ${e.message ?: "kesalahan tidak diketahui"}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun runRootDisplayCommand(title: String, command: String) {
+        val dialog = AlertDialog.Builder(this).setTitle(title)
+            .setMessage("Meminta izin Root dan menjalankan perintah…")
+            .setPositiveButton("Tutup", null).create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+        Thread {
+            val output = try {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                val code = process.waitFor()
+                "Exit code: " + code + "\n\n" + stdout.trim() +
+                    (if (stderr.isNotBlank()) "\n\nSTDERR:\n" + stderr.trim() else "")
+            } catch (e: Exception) {
+                "Root shell gagal: " + e.javaClass.simpleName + ": " + (e.message ?: "tidak ada detail") +
+                    "\nPastikan Magisk terpasang dan izinkan Root untuk Saku Launcher."
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                dialog.setMessage(output.take(12000))
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                dialog.setTitle(title + " · hasil")
+            }
+        }.start()
+    }
+
+
+    private fun requestBackgroundRunPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) {
+            Toast.makeText(this, "Pengaturan ini tidak diperlukan pada versi Android ini", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            Toast.makeText(this, "Pembatasan baterai untuk Saku sudah dinonaktifkan", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(request)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Buka Pengaturan Android > Aplikasi > Saku Launcher > Baterai, lalu pilih Tanpa batas", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showLandscapeCustomization() {
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            Toast.makeText(this, "Putar perangkat ke landscape untuk mengatur layout landscape.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val items = arrayOf(
+            "Lebar drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300) + " dp",
+            "Kolom drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4),
+            "Ukuran ikon drawer: " + preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40) + " dp",
+            "Dock: " + preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) + " dp · " + preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")
+        )
+        AlertDialog.Builder(this).setTitle("Kustomisasi landscape").setItems(items) { _, which ->
+            when (which) {
+                0 -> chooseLandscapeDrawerWidth()
+                1 -> chooseLandscapeDrawerColumns()
+                2 -> chooseLandscapeDrawerIconSize()
+                3 -> chooseLandscapeDockOptions()
+            }
+        }.show()
+    }
+
+    private fun chooseLandscapeDrawerWidth() {
+        val values = intArrayOf(280, 300, 320, 340, 360, 400, 440, 460)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 300).coerceIn(280, 460)
+        AlertDialog.Builder(this).setTitle("Lebar drawer landscape")
+            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 1 else it }) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_WIDTH, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDrawerColumns() {
+        val values = (3..7).map { it.toString() + " kolom" }.toTypedArray()
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4).coerceIn(3, 7) - 3
+        AlertDialog.Builder(this).setTitle("Kolom drawer landscape")
+            .setSingleChoiceItems(values, current) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_COLUMNS, which + 3).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDrawerIconSize() {
+        val values = intArrayOf(28, 32, 36, 40, 42, 48, 52, 56)
+        val current = preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56)
+        AlertDialog.Builder(this).setTitle("Ukuran ikon drawer landscape")
+            .setSingleChoiceItems(values.map { it.toString() + " dp" }.toTypedArray(), values.indexOf(current).let { if (it < 0) 4 else it }) { dialog, which ->
+                preferences.edit().putInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLandscapeDockOptions() {
+        val labels = arrayOf("Lebar: 200 dp", "Lebar: 240 dp", "Lebar: 260 dp", "Lebar: 300 dp", "Lebar: 340 dp", "Posisi: kiri", "Posisi: tengah", "Posisi: kanan")
+        AlertDialog.Builder(this).setTitle("Kustomisasi dock landscape").setItems(labels) { _, which ->
+            when (which) {
+                in 0..4 -> preferences.edit().putInt(KEY_LANDSCAPE_DOCK_WIDTH, intArrayOf(200, 240, 260, 300, 340)[which]).apply()
+                5 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "left").apply()
+                6 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "center").apply()
+                7 -> preferences.edit().putString(KEY_LANDSCAPE_DOCK_POSITION, "right").apply()
+            }
+            buildScreen()
+            refreshFloatingDock()
+        }.show()
+    }
+
+    private fun currentDockWidth(): Int {
+        val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val maxWidth = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
+        return (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, maxWidth)
+    }
+
+    private fun currentDockGravity(): Int {
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) return Gravity.CENTER_HORIZONTAL
+        return when (preferences.getString(KEY_LANDSCAPE_DOCK_POSITION, "center")) {
+            "left" -> Gravity.START
+            "right" -> Gravity.END
+            else -> Gravity.CENTER_HORIZONTAL
+        }
+    }
+
+    private fun drawerColumns(): Int {
+        return if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+            preferences.getInt(KEY_LANDSCAPE_DRAWER_COLUMNS, 4).coerceIn(3, 7)
+        else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, 4).coerceIn(2, 6)
+    }
+
+    private fun chooseDrawerPosition() {
+        val values = arrayOf("Kiri", "Kanan")
+        val current = if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") 1 else 0
+        AlertDialog.Builder(this)
+            .setTitle("Posisi drawer saat landscape")
+            .setSingleChoiceItems(values, current) { dialog, which ->
+                preferences.edit().putString(KEY_DRAWER_POSITION, if (which == 1) "right" else "left").apply()
+                dialog.dismiss()
+                buildScreen()
+                showStartPanel()
+                Toast.makeText(this, "Drawer landscape dipindahkan ke ${values[which].lowercase(Locale.getDefault())}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun openHomeSettings() {
+        val intent = Intent(Settings.ACTION_HOME_SETTINGS)
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Buka Pengaturan Android > Aplikasi default > Aplikasi layar utama", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openOverlaySettings() {
+        if (Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Izin tampil di atas aplikasi sudah aktif", Toast.LENGTH_SHORT).show()
+        } else {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Aktifkan izin tampil di atas aplikasi dari Pengaturan Android", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun chooseLauncherOrientation() {
+        val options = arrayOf("Ikuti sensor", "Kunci potret", "Kunci landscape")
+        val values = intArrayOf(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        )
+        val current = preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        val selected = values.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Orientasi Saku Launcher")
+            .setSingleChoiceItems(options, selected) { dialog, which ->
+                val value = values[which]
+                preferences.edit().putInt("launcher_orientation", value).apply()
+                requestedOrientation = value
+                dialog.dismiss()
+                Toast.makeText(this, "Orientasi launcher diperbarui", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
     }
 
     private fun toggleOverlay() {
@@ -930,6 +1853,10 @@ class MainActivity : Activity() {
     }
 
     private fun reconcileOverlay() {
+        if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            stopService(Intent(this, FloatingDockService::class.java))
+            return
+        }
         val pending = preferences.getBoolean(KEY_OVERLAY_PENDING, false)
         if (pending) {
             preferences.edit().putBoolean(KEY_OVERLAY_PENDING, false).apply()
@@ -977,6 +1904,70 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
+    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "middle")) {
+        "top" -> "Atas"
+        "bottom" -> "Bawah"
+        else -> "Tengah"
+    }
+
+    private fun chooseHomePageCount() {
+        val countText = TextView(this).apply {
+            text = "Jumlah layar utama: " + homePageCount()
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), 0, dp(12), dp(8))
+        }
+        val minus = chipButton("−", cardSurface, primaryText, 14)
+        val plus = chipButton("+", accent, Color.WHITE, 14)
+        fun updateCount(delta: Int) {
+            val next = (homePageCount() + delta).coerceIn(1, 5)
+            preferences.edit().putInt(KEY_HOME_PAGE_COUNT, next).apply()
+            homePage = homePage.coerceAtMost(next - 1)
+            countText.text = "Jumlah layar utama: " + next
+            minus.isEnabled = next > 1
+            minus.alpha = if (next > 1) 1f else 0.45f
+            plus.isEnabled = next < 5
+            plus.alpha = if (next < 5) 1f else 0.45f
+        }
+        minus.setOnClickListener { updateCount(-1) }
+        plus.setOnClickListener { updateCount(1) }
+        controls.addView(minus, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(10) })
+        controls.addView(plus, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(10) })
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(countText, LinearLayout.LayoutParams(-1, -2))
+            addView(controls, LinearLayout.LayoutParams(-1, -2))
+            addView(TextView(this@MainActivity).apply {
+                text = "Batas 1–5 layar. Halaman tambahan bisa diakses dengan menggeser layar utama ke kiri atau kanan."
+                textSize = 12f
+                setTextColor(secondaryText)
+                setPadding(dp(18), 0, dp(18), dp(10))
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Jumlah layar utama").setView(content)
+            .setPositiveButton("Simpan") { _, _ -> buildScreen() }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseHomeIconPosition() {
+        val labels = arrayOf("Atas", "Tengah", "Bawah")
+        val values = arrayOf("top", "middle", "bottom")
+        val current = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+        AlertDialog.Builder(this).setTitle("Posisi ikon layar utama")
+            .setMessage("Pilih area penempatan ikon aplikasi. Pengaturan ini mengubah ruang kosong di atas grid.")
+            .setSingleChoiceItems(labels, values.indexOf(current).coerceAtLeast(0)) { dialog, which ->
+                preferences.edit().putString(KEY_HOME_ICON_POSITION, values[which]).apply()
+                dialog.dismiss()
+                buildScreen()
+            }.setNegativeButton("Batal", null).show()
+    }
+
     private fun chooseHomeGrid() {
         val options = arrayOf("3 kolom · ikon besar", "4 kolom · seimbang", "5 kolom · lebih banyak aplikasi", "6 kolom · padat")
         val values = intArrayOf(3, 4, 5, 6)
@@ -1010,7 +2001,8 @@ class MainActivity : Activity() {
     }
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(if (isDarkTheme) Color.argb(158, 42, 55, 77) else Color.argb(172, 255, 255, 255))
+        val alpha = (transparencyPercent * 255 / 100).coerceIn(0, 255)
+        setColor(if (isDarkTheme) Color.argb(alpha, 42, 55, 77) else Color.argb(alpha, 255, 255, 255))
         cornerRadius = dp(radius).toFloat()
         setStroke(dp(1), if (isDarkTheme) Color.argb(115, 220, 233, 255) else Color.argb(170, 255, 255, 255))
     }
@@ -1249,6 +2241,132 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
+    private fun chooseBackgroundBlur() {
+        if (android.os.Build.VERSION.SDK_INT < 31) {
+            AlertDialog.Builder(this).setTitle("Background blur")
+                .setMessage("Efek blur wallpaper memerlukan Android 12 (API 31) atau lebih baru. Transparansi tetap bisa digunakan di versi ini.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(12), dp(22), dp(4)) }
+        val current = preferences.getInt(KEY_BLUR_RADIUS, 0)
+        val value = TextView(this).apply { text = if (current == 0) "Mati" else "\$current px"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(primaryText) }
+        val slider = SeekBar(this).apply {
+            max = 30; progress = current
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { value.text = if (progress == 0) "Mati" else "$progress px" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(value); layout.addView(slider)
+        AlertDialog.Builder(this).setTitle("Background blur wallpaper").setView(layout)
+            .setPositiveButton("Terapkan") { _, _ -> preferences.edit().putInt(KEY_BLUR_RADIUS, slider.progress).apply(); buildScreen() }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseIconCustomization() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        val sizeLabel = TextView(this).apply { text = "Ukuran ikon: ${iconSizeDp} dp"; setTextColor(primaryText); textSize = 14f }
+        val sizes = intArrayOf(32, 36, 42, 48, 54, 60, 68)
+        val sizeSlider = SeekBar(this).apply {
+            max = sizes.lastIndex; progress = sizes.indexOf(iconSizeDp).takeIf { it >= 0 } ?: 3
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { sizeLabel.text = "Ukuran ikon: ${sizes[progress]} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(sizeLabel); layout.addView(sizeSlider)
+        AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
+            .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
+            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen(); refreshFloatingDock() }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun chooseIconPack() {
+        val actions = listOf("org.adw.launcher.THEMES", "org.adw.ActivityStarter.THEMES", "com.novalauncher.THEME", "com.anddoes.launcher.THEME", "com.teslacoilsw.launcher.THEME", "com.gau.go.launcherex.theme", "com.dlto.atom.launcher.THEME", "ginlemon.smartlauncher.THEMES", "ch.deletescape.lawnchair.ICONPACK", "com.sonymobile.home.ICON_PACK", "net.oneplus.launcher.icons.ACTION_PICK_ICON")
+        val detected = actions.flatMap { action ->
+            try { packageManager.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL).map { it.activityInfo.packageName } }
+            catch (_: Exception) { emptyList() }
+        }
+        // Some Play Store packs (including Simply Minimal) don't advertise a standard theme intent.
+        val packs = (detected + listOf("com.italiano.simplyminimal"))
+            .filter { it != packageName }.distinct()
+            .filter { pack -> try { packageManager.getApplicationInfo(pack, 0); true } catch (_: Exception) { false } }
+            .sorted()
+        val labels = (listOf("Ikon bawaan aplikasi") + packs.map { pack ->
+            try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pack, 0)).toString() } catch (_: Exception) { pack }
+        }).toTypedArray()
+        val menu = (listOf("Ikon bawaan aplikasi") + labels.drop(1) + "Pilih folder ikon dari Download…").toTypedArray()
+        AlertDialog.Builder(this).setTitle("Pilih icon pack")
+            .setMessage("Icon pack terpasang yang kompatibel akan terdeteksi otomatis. Untuk Simply Minimal, pilih paketnya lalu Terapkan; jika ikon tidak berubah, gunakan folder ikon PNG/WebP yang sudah diekstrak.")
+            .setItems(menu) { _, which ->
+                if (which == menu.lastIndex) { chooseLocalIconFolder(); return@setItems }
+                val selected = if (which == 0) "" else packs[which - 1]
+                preferences.edit().putString(KEY_ICON_PACK, selected).remove(KEY_LOCAL_ICON_FOLDER).apply()
+                apps = loadApps(); rebuildPinnedViews(); buildScreen(); refreshFloatingDock()
+                Toast.makeText(this, if (selected.isBlank()) "Ikon bawaan dipakai" else "Icon pack dipilih: ikon yang tersedia di pack akan diterapkan", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun chooseLocalIconFolder() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        try { startActivityForResult(intent, REQUEST_ICON_FOLDER) }
+        catch (_: Exception) { Toast.makeText(this, "Pemilih folder tidak tersedia", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun chooseDockSize() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val widthLabel = TextView(this).apply {
+            text = "Lebar dock: ${dockWidthDp} dp"
+            textSize = 14f
+            setTextColor(primaryText)
+        }
+        val widthSlider = SeekBar(this).apply {
+            max = 200
+            progress = dockWidthDp - 160
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { widthLabel.text = "Lebar dock: ${progress + 160} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val heightLabel = TextView(this).apply {
+            text = "Tinggi dock: ${dockHeightDp} dp"
+            textSize = 14f
+            setTextColor(primaryText)
+        }
+        val heightSlider = SeekBar(this).apply {
+            max = 52
+            progress = dockHeightDp - 48
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { heightLabel.text = "Tinggi dock: ${progress + 48} dp" }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(widthLabel)
+        layout.addView(widthSlider)
+        layout.addView(heightLabel)
+        layout.addView(heightSlider)
+        AlertDialog.Builder(this).setTitle("Ukuran dock").setView(layout)
+            .setPositiveButton("Terapkan") { _, _ ->
+                preferences.edit()
+                    .putInt(KEY_DOCK_WIDTH, widthSlider.progress + 160)
+                    .putInt(KEY_DOCK_HEIGHT, heightSlider.progress + 48)
+                    .apply()
+                buildScreen()
+                refreshFloatingDock()
+                Toast.makeText(this, "Ukuran dock diterapkan", Toast.LENGTH_SHORT).show()
+            }.setNegativeButton("Batal", null).show()
+    }
+
     private fun chooseTransparency() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1256,7 +2374,7 @@ class MainActivity : Activity() {
         }
         val current = preferences.getInt(KEY_TRANSPARENCY, 88)
         val value = TextView(this).apply {
-            text = "$current%"
+            text = "\$current%"
             textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
@@ -1277,6 +2395,58 @@ class MainActivity : Activity() {
                 preferences.edit().putInt(KEY_TRANSPARENCY, slider.progress).apply()
                 buildScreen()
                 refreshFloatingDock()
+            }.setNegativeButton("Batal", null).show()
+    }
+
+    private fun dockPositionLabel(): String = when (preferences.getString(KEY_DOCK_POSITION, "bottom")) {
+        "left" -> "Kiri"
+        "right" -> "Kanan"
+        "top" -> "Atas"
+        else -> "Bawah (standar Android)"
+    }
+
+    private fun chooseDockNavigationPosition() {
+        val values = arrayOf("Bawah — standar Android", "Kiri", "Kanan", "Atas")
+        val keys = arrayOf("bottom", "left", "right", "top")
+        val current = preferences.getString(KEY_DOCK_POSITION, "bottom") ?: "bottom"
+        val selected = keys.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Posisi navigasi mengambang")
+            .setSingleChoiceItems(values, selected) { dialog, which ->
+                preferences.edit().putString(KEY_DOCK_POSITION, keys[which]).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
+                dialog.dismiss()
+                Toast.makeText(this, "Posisi navigasi: ${values[which].substringBefore(" —")}", Toast.LENGTH_SHORT).show()
+                buildScreen()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun chooseBubbleSize() {
+        val current = preferences.getInt(KEY_BUBBLE_SIZE, 54).coerceIn(40, 80)
+        val slider = android.widget.SeekBar(this).apply { max = 40; progress = current - 40 }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(4))
+            addView(TextView(this@MainActivity).apply { text = "Ukuran bola: \$current dp" })
+            addView(slider)
+        }
+        slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                (container.getChildAt(0) as TextView).text = "Ukuran bola: ${progress + 40} dp"
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
+        })
+        AlertDialog.Builder(this).setTitle("Ukuran bola Saku").setView(container)
+            .setPositiveButton("Simpan") { _, _ ->
+                preferences.edit().putInt(KEY_BUBBLE_SIZE, slider.progress + 40).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
             }.setNegativeButton("Batal", null).show()
     }
 
@@ -1426,9 +2596,22 @@ class MainActivity : Activity() {
     }
 
     private fun showPermissionInfo() {
-        AlertDialog.Builder(this).setTitle("Izin dan dukungan")
-            .setMessage("Dock di atas aplikasi memakai izin overlay Android. Fitur dasar launcher tidak memerlukan root. Jika Pengelola Proses dibuka, Saku mencoba membaca PID melalui su; perintah hentikan/freeze baru dijalankan setelah konfirmasi di aplikasi dan tetap memerlukan persetujuan root. Shizuku belum terintegrasi pada versi ini. Jendela bebas tetap bergantung pada dukungan Android dan ROM.")
-            .setPositiveButton("Mengerti", null).show()
+        val items = arrayOf(
+            "Tampil di atas aplikasi lain",
+            "Akses penggunaan aplikasi",
+            "Aksesibilitas untuk tombol Recent Apps",
+            "Jadikan Saku Launcher default"
+        )
+        AlertDialog.Builder(this).setTitle("Izin desktop Saku")
+            .setMessage("Buka tiap pengaturan dan aktifkan izin secara manual. Android tidak mengizinkan aplikasi memberi dirinya sendiri izin khusus secara diam-diam; root tidak diperlukan untuk alur ini.")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> openOverlaySettings()
+                    1 -> try { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } catch (_: Exception) { Toast.makeText(this, "Pengaturan akses penggunaan tidak tersedia", Toast.LENGTH_LONG).show() }
+                    2 -> try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) { Toast.makeText(this, "Pengaturan aksesibilitas tidak tersedia", Toast.LENGTH_LONG).show() }
+                    3 -> openHomeSettings()
+                }
+            }.setNegativeButton("Tutup", null).show()
     }
 
     private fun toggleTheme() {
@@ -1545,73 +2728,93 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
+            val landscapeDrawer = isStartMenu && resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val listLayout = isStartMenu && drawerMode == "list"
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 94 else 102))
+                orientation = if (listLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                gravity = if (listLayout) Gravity.CENTER_VERTICAL else Gravity.CENTER
+                setPadding(dp(if (listLayout) 10 else 4), dp(6), dp(4), dp(6))
+                background = ColorDrawable(Color.TRANSPARENT)
+                elevation = 0f
+                stateListAnimator = null
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else 92))
+                val startIconSize = if (landscapeDrawer) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)))
+                }, LinearLayout.LayoutParams(dp(if (listLayout) 42 else if (isStartMenu) startIconSize else iconSizeDp), dp(if (listLayout) 42 else if (isStartMenu) startIconSize else iconSizeDp)).apply {
+                    if (listLayout) marginEnd = dp(14)
+                    if (landscapeDrawer) bottomMargin = dp(4)
+                })
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
                     setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
-                    gravity = Gravity.CENTER
-                    maxLines = 1
+                    gravity = if (listLayout) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+                    textSize = if (listLayout) 13f else if (landscapeDrawer) 11f else 10.5f
+                    maxLines = if (landscapeDrawer) 2 else 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                    setPadding(0, dp(5), 0, 0)
-                    visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
+                    setPadding(0, dp(if (landscapeDrawer) 1 else 5), 0, 0)
+                    visibility = if (!isStartMenu && hideLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(-1, -2))
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
-            cell.findViewById<TextView>(android.R.id.text1).visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
+            cell.findViewById<TextView>(android.R.id.text1).visibility = if (!isStartMenu && hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
                 if (!isStartMenu && homePackages().contains(app.packageName)) {
-                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
+                    val clip = android.content.ClipData.newPlainText("saku-app", app.packageName)
                     val shadow = View.DragShadowBuilder(cell)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        cell.startDragAndDrop(clip, shadow, app.packageName, 0)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        cell.startDrag(clip, shadow, app.packageName, 0)
-                    }
+                    if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
+                    else cell.startDrag(clip, shadow, app.packageName, 0)
+                    Toast.makeText(this@MainActivity, "Mode bebas: seret ikon ke posisi yang diinginkan", Toast.LENGTH_SHORT).show()
                     true
-                } else {
-                    showAppMenu(app)
-                    true
-                }
+                } else { showAppMenu(app); true }
             }
             return cell
         }
     }
 
     companion object {
+        private const val EXTRA_SECONDARY_DISPLAY_LAUNCH = "com.sakuhome.launcher.EXTRA_SECONDARY_DISPLAY_LAUNCH"
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
-        private const val KEY_LAST_HOME_PAGE = "last_home_screen_page"
+        private const val KEY_HOME_ICON_POSITION = "home_icon_position"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+        private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
+        private const val KEY_DOCK_POSITION = "dock_navigation_position"
+        private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val KEY_HIDE_TASKBAR = "hide_bottom_taskbar"
         private const val KEY_HIDE_LABELS = "hide_app_labels"
-        private const val KEY_HIDE_DRAWER_LABELS = "hide_drawer_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
+        private const val KEY_DOCK_WIDTH = "dock_width_dp"
+        private const val KEY_DOCK_HEIGHT = "dock_height_dp"
+        private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
+        private const val KEY_LANDSCAPE_DRAWER_WIDTH = "landscape_drawer_width_dp"
+        private const val KEY_LANDSCAPE_DRAWER_COLUMNS = "landscape_drawer_columns"
+        private const val KEY_LANDSCAPE_DRAWER_ICON_SIZE = "landscape_drawer_icon_size_dp"
+        private const val KEY_LANDSCAPE_DOCK_WIDTH = "landscape_dock_width_dp"
+        private const val KEY_LANDSCAPE_DOCK_POSITION = "landscape_dock_position"
+        private const val REQUEST_ICON_FOLDER = 7214
+        private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
+        private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
+        private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
         private const val KEY_TRANSPARENCY = "dock_transparency"
+        private const val KEY_BLUR_RADIUS = "background_blur_radius"
+        private const val KEY_ICON_PACK = "custom_icon_pack_package"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_FROZEN_APPS = "frozen_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
