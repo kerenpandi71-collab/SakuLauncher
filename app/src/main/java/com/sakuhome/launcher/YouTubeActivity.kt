@@ -719,6 +719,7 @@ class YouTubeActivity : Activity() {
     }
 
     private var downloadsDialog: AlertDialog? = null
+    private var downloadsListView: LinearLayout? = null
 
     private fun showDownloadsMenu() {
         AlertDialog.Builder(this).setTitle("Unduhan")
@@ -735,6 +736,7 @@ class YouTubeActivity : Activity() {
     private fun showTrackedDownloads() {
         val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)) }
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        downloadsListView = list
         container.addView(list, LinearLayout.LayoutParams(-1, -2))
         container.addView(makeButton("Segarkan", 13f, 8, 4) { populateTrackedDownloads(list) })
         downloadsDialog = AlertDialog.Builder(this).setTitle("Progres unduhan").setView(ScrollView(this).apply { addView(container) }).setNegativeButton("Tutup", null).create()
@@ -744,12 +746,8 @@ class YouTubeActivity : Activity() {
     }
 
     private fun refreshDownloadsDialogIfOpen() {
-        val dialog = downloadsDialog ?: return
-        if (!dialog.isShowing) return
-        val scroll = dialog.findViewById<ScrollView>(android.R.id.content) ?: return
-        val container = scroll.getChildAt(0) as? LinearLayout ?: return
-        val list = container.getChildAt(0) as? LinearLayout ?: return
-        populateTrackedDownloads(list)
+        if (downloadsDialog?.isShowing != true) return
+        downloadsListView?.let { list -> populateTrackedDownloads(list) }
     }
 
     private fun populateTrackedDownloads(list: LinearLayout) {
