@@ -93,7 +93,7 @@ class YouTubeActivity : Activity() {
 
         // Controls use a minimum 48dp touch target for reliable use on a phone.
         toolbar.addView(makeButton("⋮", 21f, 10, 8) { showSettingsMenu() })
-        toolbar.addView(makeButton("‹", 24f, 10, 8) { if (session.canGoBack()) session.goBack() })
+        toolbar.addView(makeButton("‹", 24f, 10, 8) { session.goBack() })
         toolbar.addView(makeButton("Mini", 13f, 10, 8) { enterMiniPlayer() })
         toolbar.addView(makeButton("⟳", 20f, 10, 8) { session.reload() })
         toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
