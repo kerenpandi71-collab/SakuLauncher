@@ -1,1 +1,4 @@
 body{margin:0;width:280px;background:#151515;color:#f4f4f4;font:14px system-ui,sans-serif}main{padding:15px}h1{font-size:18px}p,small,#status{color:#ffb4d8;font-size:12px}label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:15px 0}button{margin:3px;padding:8px;border:0;border-radius:8px;background:#ff4fa3;color:#181018;font-weight:700}select{max-width:110px}
+.option { display:flex; align-items:flex-start; gap:8px; margin:12px 0; }
+.option input { margin-top:3px; }
+.option small { color:#aaa; }
