@@ -297,7 +297,7 @@ class YouTubeActivity : Activity() {
             .accept(
                 { extension ->
                     allowUboInstallPrompt = false
-                    if (extension?.id == uboId && extension.metaData?.name == "uBlock Origin") {
+                    if (extension != null && extension.id == uboId && extension.metaData?.name == "uBlock Origin") {
                         uboExtension = extension
                         Toast.makeText(this, "uBlock Origin berhasil dipasang. Memuat ulang halaman…", Toast.LENGTH_LONG).show()
                         session.reload()
