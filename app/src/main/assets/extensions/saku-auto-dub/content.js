@@ -1,7 +1,7 @@
 (() => {
   if (window.__sakuAutoDubBundled) return;
   window.__sakuAutoDubBundled = true;
-  const prefs = { enabled: true, rate: 1, volume: 1, duckOriginal: false };
+  const prefs = { enabled: true, rate: 1, volume: 1, duckOriginal: true };
   let lastCaption = "", lastSpoken = "", timer = null, translating = false, queued = "";
   let badge = null, originalVolume = null;
 
@@ -69,16 +69,21 @@
     translating = true;
     status("Auto Dub: menerjemahkan…");
     try {
-      const result = await browser.runtime.sendMessage({ type: "SAKU_TRANSLATE", text });
+      // Prevent a stalled bridge from leaving the status stuck forever.
+      const result = await Promise.race([
+        browser.runtime.sendMessage({ type: "SAKU_TRANSLATE", text }),
+        new Promise(resolve => setTimeout(() => resolve({ ok: false, error: "timeout" }), 12000))
+      ]);
       if (prefs.enabled && result && result.ok && result.text && result.text !== lastSpoken) {
         lastSpoken = result.text;
         speak(result.text);
+      } else if (result && result.error === "timeout") {
+        status("Auto Dub: terjemahan timeout · muat ulang video");
       } else if (!result || !result.ok) {
         status("Auto Dub: terjemahan gagal · cek koneksi");
       }
     } catch (_) {
-      status("Auto Dub: layanan terjemahan tidak tersedia");
-    } finally {
+      status("Auto Dub: layanan terjemahan tidak tersedia");    } finally {
       translating = false;
       if (queued && prefs.enabled) {
         const next = queued; queued = "";
