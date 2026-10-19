@@ -12,7 +12,11 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.text.InputType
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -36,11 +40,20 @@ class YouTubeActivity : Activity() {
     private lateinit var session: GeckoSession
     private lateinit var toolbar: LinearLayout
     private lateinit var root: LinearLayout
+    private lateinit var addressField: EditText
+    private lateinit var zoomLabel: TextView
+    private lateinit var zoomLockButton: TextView
     private lateinit var runtime: GeckoRuntime
     private var uboExtension: WebExtension? = null
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
+    private var backgroundAudioEnabled = true
+    private var zoomLocked = false
+    private var zoomFactor = 1.0f
+    private var swipeStartX = 0f
+    private var swipeStartY = 0f
+    private val browserPrefs by lazy { getSharedPreferences("sakutube_browser", MODE_PRIVATE) }
 
     private val uboId = "uBlock0@raymondhill.net"
     private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
@@ -53,12 +66,18 @@ class YouTubeActivity : Activity() {
 
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
+        backgroundAudioEnabled = browserPrefs.getBoolean("background_audio", true)
+        zoomLocked = browserPrefs.getBoolean("zoom_locked", false)
+        zoomFactor = browserPrefs.getFloat("zoom_factor", 1.0f).coerceIn(0.7f, 1.6f)
+        runtime.settings.setAutomaticFontSizeAdjustment(false)
+        runtime.settings.setFontSizeFactor(zoomFactor)
         session = GeckoSession(
             GeckoSessionSettings.Builder()
                 .allowJavascript(true)
                 .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
                 .build()
         )
+        session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
         session.open(runtime)
 
         root = LinearLayout(this).apply {
@@ -72,21 +91,83 @@ class YouTubeActivity : Activity() {
             setBackgroundColor(Color.rgb(18, 18, 18))
         }
 
-        // Settings is deliberately the first and larger control on the left.
-        toolbar.addView(makeButton("⋮", 18f, 14, 10) { showSettingsMenu() })
-        toolbar.addView(makeButton("‹", 20f, 12, 10) {
-            session.goBack()
-        })
-        toolbar.addView(makeButton("Mini", 12f, 10, 10) { enterMiniPlayer() })
-        toolbar.addView(makeButton("⟳", 16f, 12, 10) { session.reload() })
-        toolbar.addView(makeButton("✕", 16f, 12, 10) { finish() })
+        // Controls use a minimum 48dp touch target for reliable use on a phone.
+        toolbar.addView(makeButton("⋮", 21f, 10, 8) { showSettingsMenu() })
+        toolbar.addView(makeButton("‹", 24f, 10, 8) { if (session.canGoBack()) session.goBack() })
+        toolbar.addView(makeButton("Mini", 13f, 10, 8) { enterMiniPlayer() })
+        toolbar.addView(makeButton("⟳", 20f, 10, 8) { session.reload() })
+        toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
         root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+
+        val addressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            setBackgroundColor(Color.rgb(26, 26, 26))
+        }
+        addressField = EditText(this).apply {
+            hint = "Cari atau masukkan URL"
+            textSize = 14f
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = EditorInfo.IME_ACTION_GO
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY)
+            setPadding(dp(12), dp(4), dp(8), dp(4))
+            background = roundedBackground(Color.rgb(42, 42, 42), 18)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
+                    loadAddressFromField()
+                    true
+                } else false
+            }
+        }
+        addressRow.addView(addressField, LinearLayout.LayoutParams(0, dp(44), 1f))
+        addressRow.addView(makeButton("Buka", 14f, 12, 8) { loadAddressFromField() })
+        root.addView(addressRow, LinearLayout.LayoutParams(-1, -2))
+
+        val zoomRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(2), dp(8), dp(2))
+            setBackgroundColor(Color.rgb(18, 18, 18))
+        }
+        zoomLabel = TextView(this).apply {
+            textSize = 12f
+            setTextColor(Color.LTGRAY)
+            text = "Geser kiri/kanan untuk zoom"
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        zoomRow.addView(zoomLabel, LinearLayout.LayoutParams(0, dp(38), 1f))
+        zoomLockButton = makeButton(if (zoomLocked) "Zoom 🔒" else "Zoom 🔓", 12f, 10, 6) { toggleZoomLock() }
+        zoomRow.addView(zoomLockButton)
+        zoomRow.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    swipeStartX = event.x
+                    swipeStartY = event.y
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - swipeStartX
+                    val dy = event.y - swipeStartY
+                    if (kotlin.math.abs(dx) > dp(28) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                        changeZoom(if (dx > 0) 0.1f else -0.1f)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
+        }
+        root.addView(zoomRow, LinearLayout.LayoutParams(-1, -2))
 
         geckoView = GeckoView(this)
         geckoView.setBackgroundColor(Color.BLACK)
         geckoView.setSession(session)
         root.addView(geckoView, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+        updateZoomLabel()
 
         refreshInstalledExtension()
         session.loadUri("https://m.youtube.com/")
@@ -124,9 +205,63 @@ class YouTubeActivity : Activity() {
         textSize = size
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
-        setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+        setPadding(dp(horizontalPadding), dp(verticalPadding), dp(horizontalPadding), dp(verticalPadding))
+        minWidth = dp(48)
+        minHeight = dp(48)
         contentDescription = label
         setOnClickListener { action() }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun roundedBackground(color: Int, radiusDp: Int) = android.graphics.drawable.GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(radiusDp).toFloat()
+    }
+
+    private fun loadAddressFromField() {
+        val raw = addressField.text.toString().trim()
+        if (raw.isEmpty()) return
+        val target = when {
+            raw.startsWith("https://", true) || raw.startsWith("http://", true) -> raw
+            raw.contains(" ") || !raw.contains(".") -> "https://www.google.com/search?q=" + Uri.encode(raw)
+            else -> "https://$raw"
+        }
+        try {
+            addressField.hideKeyboard()
+        } catch (_: Exception) { }
+        session.loadUri(target)
+    }
+
+    private fun EditText.hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(windowToken, 0)
+    }
+
+    private fun toggleZoomLock() {
+        zoomLocked = !zoomLocked
+        browserPrefs.edit().putBoolean("zoom_locked", zoomLocked).apply()
+        zoomLockButton.text = if (zoomLocked) "Zoom 🔒" else "Zoom 🔓"
+        updateZoomLabel()
+        Toast.makeText(this, if (zoomLocked) "Zoom dikunci." else "Zoom bisa diubah dengan geser.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun changeZoom(delta: Float) {
+        if (zoomLocked) {
+            Toast.makeText(this, "Buka kunci zoom dulu untuk mengubah ukuran.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        zoomFactor = (zoomFactor + delta).coerceIn(0.7f, 1.6f)
+        runtime.settings.setAutomaticFontSizeAdjustment(false)
+        runtime.settings.setFontSizeFactor(zoomFactor)
+        browserPrefs.edit().putFloat("zoom_factor", zoomFactor).apply()
+        updateZoomLabel()
+        session.reload()
+    }
+
+    private fun updateZoomLabel() {
+        if (!::zoomLabel.isInitialized) return
+        zoomLabel.text = "Geser kiri/kanan • teks " + (zoomFactor * 100).toInt() + "%"
     }
 
     private fun showSettingsMenu() {
@@ -139,6 +274,12 @@ class YouTubeActivity : Activity() {
         actions += { showInstalledExtensions() }
         items += "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF"
         actions += { toggleDesktopMode() }
+        items += "Audio latar belakang: " + if (backgroundAudioEnabled) "ON" else "OFF"
+        actions += { toggleBackgroundAudio() }
+        items += "Kelola semua extension"
+        actions += { showInstalledExtensions() }
+        items += "Kunci zoom: " + if (zoomLocked) "ON" else "OFF"
+        actions += { toggleZoomLock() }
 
         if (uboExtension == null) {
             items += "Pasang uBlock Origin dari Mozilla"
@@ -258,15 +399,21 @@ class YouTubeActivity : Activity() {
             { extensions ->
                 runOnUiThread {
                     val installed = extensions.orEmpty()
+                    if (installed.isEmpty()) {
+                        AlertDialog.Builder(this).setTitle("Extension terpasang")
+                            .setMessage("Belum ada extension terpasang.")
+                            .setPositiveButton("Tutup", null).show()
+                        return@runOnUiThread
+                    }
                     val labels = installed.map { extension ->
-                        (extension.metaData?.name ?: extension.id ?: "Extension") + if (extension.isBuiltIn) " — bawaan" else " — terpasang"
+                        val name = extension.metaData?.name ?: extension.id ?: "Extension"
+                        val state = if (extension.metaData?.enabled == false) "OFF" else "ON"
+                        "$name · $state" + if (extension.isBuiltIn) " · bawaan" else ""
                     }.toTypedArray()
                     AlertDialog.Builder(this)
-                        .setTitle("Extension terpasang")
+                        .setTitle("Kelola extension")
                         .setItems(labels) { _, which ->
-                            val optionsUrl = installed.getOrNull(which)?.metaData?.optionsPageUrl
-                            if (!optionsUrl.isNullOrBlank()) session.loadUri(optionsUrl)
-                            else Toast.makeText(this, "Extension ini tidak menyediakan halaman pengaturan.", Toast.LENGTH_SHORT).show()
+                            installed.getOrNull(which)?.let { showExtensionActions(it) }
                         }
                         .setPositiveButton("Selesai", null)
                         .show()
@@ -274,6 +421,69 @@ class YouTubeActivity : Activity() {
             },
             { Toast.makeText(this, "Tidak bisa membaca daftar extension.", Toast.LENGTH_LONG).show() }
         )
+    }
+
+    private fun showExtensionActions(extension: WebExtension) {
+        val name = extension.metaData?.name ?: extension.id ?: "Extension"
+        val enabled = extension.metaData?.enabled != false
+        val items = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+        val optionsUrl = extension.metaData?.optionsPageUrl
+        if (!optionsUrl.isNullOrBlank()) {
+            items += "Buka pengaturan"
+            actions += { session.loadUri(optionsUrl) }
+        }
+        items += if (enabled) "Nonaktifkan extension" else "Aktifkan extension"
+        actions += {
+            val operation = if (enabled) {
+                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
+            } else {
+                runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
+            }
+            operation.accept(
+                { updated ->
+                    val state = if (updated?.metaData?.enabled == false) "dinonaktifkan" else "diaktifkan"
+                    Toast.makeText(this, "$name $state.", Toast.LENGTH_SHORT).show()
+                    refreshInstalledExtension()
+                },
+                { Toast.makeText(this, "Tidak bisa mengubah status $name.", Toast.LENGTH_LONG).show() }
+            )
+        }
+        if (!extension.isBuiltIn) {
+            items += "Hapus extension"
+            actions += {
+                AlertDialog.Builder(this)
+                    .setTitle("Hapus $name?")
+                    .setMessage("Extension dan data lokalnya akan dihapus dari SakuTube.")
+                    .setPositiveButton("Hapus") { _, _ ->
+                        runtime.webExtensionController.uninstall(extension).accept(
+                            {
+                                Toast.makeText(this, "$name dihapus.", Toast.LENGTH_SHORT).show()
+                                refreshInstalledExtension()
+                            },
+                            { Toast.makeText(this, "Gagal menghapus $name.", Toast.LENGTH_LONG).show() }
+                        )
+                    }
+                    .setNegativeButton("Batal", null)
+                    .show()
+            }
+        }
+        AlertDialog.Builder(this).setTitle(name)
+            .setItems(items.toTypedArray()) { _, which -> actions[which].invoke() }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun toggleBackgroundAudio() {
+        backgroundAudioEnabled = !backgroundAudioEnabled
+        browserPrefs.edit().putBoolean("background_audio", backgroundAudioEnabled).apply()
+        session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
+        if (backgroundAudioEnabled) session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+        else session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        Toast.makeText(
+            this,
+            if (backgroundAudioEnabled) "Audio latar belakang diaktifkan. Putar audio dulu; Android tetap bisa membatasi aplikasi di latar." else "Audio latar belakang dimatikan.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun confirmInstallUbo() {
@@ -380,12 +590,18 @@ class YouTubeActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        if (::session.isInitialized) session.setActive(isInPictureInPictureMode)
+        if (::session.isInitialized) {
+            session.setActive(isInPictureInPictureMode || backgroundAudioEnabled)
+            if (backgroundAudioEnabled) session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        if (::session.isInitialized) session.setActive(true)
+        if (::session.isInitialized) {
+            session.setActive(true)
+            session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        }
     }
 
     override fun onDestroy() {
