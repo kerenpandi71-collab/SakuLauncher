@@ -210,8 +210,8 @@ class YouTubeActivity : Activity() {
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
         setPadding(dp(horizontalPadding), dp(verticalPadding), dp(horizontalPadding), dp(verticalPadding))
-        minWidth = dp(48)
-        minHeight = dp(48)
+        minWidth = dp(54)
+        minHeight = dp(54)
         contentDescription = label
         setOnClickListener { action() }
     }
@@ -632,11 +632,22 @@ class YouTubeActivity : Activity() {
         backgroundAudioEnabled = !backgroundAudioEnabled
         browserPrefs.edit().putBoolean("background_audio", backgroundAudioEnabled).apply()
         session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
-        if (backgroundAudioEnabled) session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
-        else session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        if (backgroundAudioEnabled) {
+            session.setActive(true)
+            session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+            try {
+                val serviceIntent = Intent(this, SakuTubePlaybackService::class.java).setAction(SakuTubePlaybackService.ACTION_START)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+            } catch (error: Exception) {
+                Toast.makeText(this, "Layanan audio gagal dimulai: " + (error.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        } else {
+            session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            stopService(Intent(this, SakuTubePlaybackService::class.java))
+        }
         Toast.makeText(
             this,
-            if (backgroundAudioEnabled) "Audio latar belakang diaktifkan. Putar audio dulu; Android tetap bisa membatasi aplikasi di latar." else "Audio latar belakang dimatikan.",
+            if (backgroundAudioEnabled) "Audio latar diaktifkan. Putar audio dahulu; notifikasi SakuTube akan muncul." else "Audio latar dimatikan.",
             Toast.LENGTH_LONG
         ).show()
     }
