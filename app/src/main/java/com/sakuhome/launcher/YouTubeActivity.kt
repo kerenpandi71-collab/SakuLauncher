@@ -1,6 +1,10 @@
 package com.sakuhome.launcher
 
 import android.app.Activity
+import android.content.Intent
+import android.database.Cursor
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.graphics.Color
@@ -19,6 +23,8 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import java.io.File
+import java.io.IOException
 
 /**
  * SakuTube browser surface backed by GeckoView so real WebExtensions can run.
@@ -33,10 +39,12 @@ class YouTubeActivity : Activity() {
     private lateinit var runtime: GeckoRuntime
     private var uboExtension: WebExtension? = null
     private var allowUboInstallPrompt = false
+    private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
 
     private val uboId = "uBlock0@raymondhill.net"
     private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
+    private val pickExtensionRequest = 4207
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +105,7 @@ class YouTubeActivity : Activity() {
                         extension.id == uboId
                     // Permission approval is only possible after the explicit
                     // confirmation dialog shown by SakuTube's settings menu.
-                    val approved = isOfficialUbo && allowUboInstallPrompt
+                    val approved = (isOfficialUbo && allowUboInstallPrompt) || allowLocalExtensionInstallPrompt
                     return GeckoResult.fromValue(
                         WebExtension.PermissionPromptResponse(approved, false, false)
                     )
@@ -123,30 +131,149 @@ class YouTubeActivity : Activity() {
     }
 
     private fun showSettingsMenu() {
-        val installed = uboExtension != null
-        val items = if (installed) {
-            arrayOf("uBlock Origin: aktif", "Pengaturan uBlock Origin", "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF")
+        val items = arrayListOf<String>()
+        val actions = arrayListOf<() -> Unit>()
+
+        items += "Pasang extension dari file (.xpi)"
+        actions += { confirmLocalExtensionInstall() }
+        items += "Daftar extension terpasang"
+        actions += { showInstalledExtensions() }
+        items += "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF"
+        actions += { toggleDesktopMode() }
+
+        if (uboExtension == null) {
+            items += "Pasang uBlock Origin dari Mozilla"
+            actions += { confirmInstallUbo() }
         } else {
-            arrayOf("Pasang uBlock Origin", "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF")
+            items += "Pengaturan uBlock Origin"
+            actions += { openUboSettings() }
         }
+
         AlertDialog.Builder(this)
             .setTitle("Pengaturan SakuTube")
-            .setItems(items) { _, which ->
-                if (installed) {
-                    when (which) {
-                        0 -> Toast.makeText(this, "uBlock Origin terpasang. Pemfilteran aktif di mesin GeckoView.", Toast.LENGTH_LONG).show()
-                        1 -> openUboSettings()
-                        2 -> toggleDesktopMode()
-                    }
-                } else {
-                    when (which) {
-                        0 -> confirmInstallUbo()
-                        1 -> toggleDesktopMode()
-                    }
-                }
-            }
+            .setItems(items.toTypedArray()) { _, which -> actions[which].invoke() }
             .setNegativeButton("Tutup", null)
             .show()
+    }
+
+    private fun confirmLocalExtensionInstall() {
+        AlertDialog.Builder(this)
+            .setTitle("Pasang extension dari file")
+            .setMessage(
+                "Pilih file extension .xpi dari penyimpanan perangkat. Extension dapat meminta izin " +
+                    "membaca atau mengubah situs yang dibuka. Pasang hanya file yang kamu percaya. " +
+                    "GeckoView akan memvalidasi paket dan tanda tangannya."
+            )
+            .setPositiveButton("Pilih file") { _, _ -> openExtensionPicker() }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun openExtensionPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                "application/x-xpinstall", "application/zip",
+                "application/octet-stream", "application/x-zip-compressed"
+            ))
+        }
+        try {
+            startActivityForResult(intent, pickExtensionRequest)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Pemilih file tidak tersedia.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("Kept compatible with the current Activity implementation")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != pickExtensionRequest || resultCode != RESULT_OK) return
+        data?.data?.let { copyAndInstallExtension(it) }
+    }
+
+    private fun copyAndInstallExtension(uri: Uri) {
+        val displayName = queryDisplayName(uri) ?: "extension.xpi"
+        if (!displayName.endsWith(".xpi", ignoreCase = true)) {
+            Toast.makeText(this, "Pilih file extension berformat .xpi.", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val extensionDir = File(cacheDir, "selected-extensions")
+            if (!extensionDir.exists() && !extensionDir.mkdirs()) {
+                throw IOException("Tidak bisa membuat folder sementara")
+            }
+            val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val destination = File(extensionDir, safeName)
+            contentResolver.openInputStream(uri).use { input ->
+                if (input == null) throw IOException("File tidak bisa dibaca")
+                destination.outputStream().use { output -> input.copyTo(output) }
+            }
+            installLocalExtension(destination)
+        } catch (error: Exception) {
+            Toast.makeText(this, "Gagal membaca file: " + (error.message ?: "kesalahan file"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        var cursor: Cursor? = null
+        return try {
+            cursor = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) cursor.getString(index) else null
+            } else null
+        } catch (_: Exception) {
+            null
+        } finally {
+            cursor?.close()
+        }
+    }
+
+    private fun installLocalExtension(file: File) {
+        Toast.makeText(this, "Memvalidasi dan memasang " + file.name + "…", Toast.LENGTH_LONG).show()
+        allowLocalExtensionInstallPrompt = true
+        runtime.webExtensionController
+            .install(Uri.fromFile(file).toString(), WebExtensionController.INSTALLATION_METHOD_FROM_FILE)
+            .accept(
+                { extension ->
+                    allowLocalExtensionInstallPrompt = false
+                    Toast.makeText(this, "Extension terpasang: " + extension.metaData.name, Toast.LENGTH_LONG).show()
+                    refreshInstalledExtension()
+                    session.reload()
+                },
+                { error ->
+                    allowLocalExtensionInstallPrompt = false
+                    Toast.makeText(
+                        this,
+                        "Gagal memasang extension. Pastikan XPI valid dan ditandatangani Mozilla. " +
+                            (error.message ?: ""),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
+    }
+
+    private fun showInstalledExtensions() {
+        runtime.webExtensionController.list().accept(
+            { extensions ->
+                runOnUiThread {
+                    val labels = extensions.map { extension ->
+                        extension.metaData.name + if (extension.isBuiltIn) " — bawaan" else " — terpasang"
+                    }.toTypedArray()
+                    AlertDialog.Builder(this)
+                        .setTitle("Extension terpasang")
+                        .setItems(labels) { _, which ->
+                            val optionsUrl = extensions[which].metaData.optionsPageUrl
+                            if (!optionsUrl.isNullOrBlank()) session.loadUri(optionsUrl)
+                            else Toast.makeText(this, "Extension ini tidak menyediakan halaman pengaturan.", Toast.LENGTH_SHORT).show()
+                        }
+                        .setPositiveButton("Selesai", null)
+                        .show()
+                }
+            },
+            { Toast.makeText(this, "Tidak bisa membaca daftar extension.", Toast.LENGTH_LONG).show() }
+        )
     }
 
     private fun confirmInstallUbo() {
