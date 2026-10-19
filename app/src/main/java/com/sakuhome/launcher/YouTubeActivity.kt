@@ -44,6 +44,8 @@ class YouTubeActivity : Activity() {
     private lateinit var toolbar: LinearLayout
     private lateinit var root: LinearLayout
     private lateinit var addressField: EditText
+    private lateinit var addressRowView: LinearLayout
+    private lateinit var zoomRowView: LinearLayout
     private lateinit var zoomLabel: TextView
     private lateinit var zoomLockButton: TextView
     private lateinit var runtime: GeckoRuntime
@@ -113,7 +115,7 @@ class YouTubeActivity : Activity() {
         toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
         root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
-        val addressRow = LinearLayout(this).apply {
+        addressRowView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(5), dp(8), dp(5))
@@ -136,11 +138,11 @@ class YouTubeActivity : Activity() {
                 } else false
             }
         }
-        addressRow.addView(addressField, LinearLayout.LayoutParams(0, dp(44), 1f))
-        addressRow.addView(makeButton("Buka", 14f, 12, 8) { loadAddressFromField() })
-        root.addView(addressRow, LinearLayout.LayoutParams(-1, -2))
+        addressRowView.addView(addressField, LinearLayout.LayoutParams(0, dp(44), 1f))
+        addressRowView.addView(makeButton("Buka", 14f, 12, 8) { loadAddressFromField() })
+        root.addView(addressRowView, LinearLayout.LayoutParams(-1, -2))
 
-        val zoomRow = LinearLayout(this).apply {
+        zoomRowView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(2), dp(8), dp(2))
@@ -152,10 +154,10 @@ class YouTubeActivity : Activity() {
             text = "Geser kiri/kanan untuk zoom"
             gravity = Gravity.CENTER_VERTICAL
         }
-        zoomRow.addView(zoomLabel, LinearLayout.LayoutParams(0, dp(38), 1f))
+        zoomRowView.addView(zoomLabel, LinearLayout.LayoutParams(0, dp(38), 1f))
         zoomLockButton = makeButton(if (zoomLocked) "Zoom 🔒" else "Zoom 🔓", 12f, 10, 6) { toggleZoomLock() }
-        zoomRow.addView(zoomLockButton)
-        zoomRow.setOnTouchListener { _, event ->
+        zoomRowView.addView(zoomLockButton)
+        zoomRowView.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     swipeStartX = event.x
@@ -174,7 +176,7 @@ class YouTubeActivity : Activity() {
                 else -> true
             }
         }
-        root.addView(zoomRow, LinearLayout.LayoutParams(-1, -2))
+        root.addView(zoomRowView, LinearLayout.LayoutParams(-1, -2))
 
         session.setNavigationDelegate(createPopupNavigationDelegate())
 
@@ -585,20 +587,10 @@ class YouTubeActivity : Activity() {
     private data class StoreExtension(val name: String, val summary: String, val xpiUrl: String)
 
     private fun showExtensionStore() {
-        val input = EditText(this).apply {
-            hint = "Cari extension (contoh: subtitle atau translator)"
-            textSize = 16f
-            setSingleLine(true)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Toko extension Mozilla")
-            .setMessage("Katalog resmi Mozilla Add-ons. Extension Chrome tidak otomatis kompatibel; dukungan extension bergantung pada GeckoView.")
-            .setView(input)
-            .setPositiveButton("Cari") { _, _ -> searchExtensionStore(input.text.toString().trim()) }
-            .setNeutralButton("Populer") { _, _ -> searchExtensionStore("") }
-            .setNegativeButton("Batal", null)
-            .show()
+        // Open Mozilla's real Add-ons storefront in the current GeckoView session.
+        val storeUrl = "https://addons.mozilla.org/firefox/"
+        addressField.setText(storeUrl)
+        session.loadUri(storeUrl)
     }
 
     private fun searchExtensionStore(query: String) {
@@ -872,6 +864,13 @@ class YouTubeActivity : Activity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         if (::toolbar.isInitialized) toolbar.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        if (::addressRowView.isInitialized) addressRowView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        if (::zoomRowView.isInitialized) zoomRowView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        // Keep only the webpage/video surface visible in the PiP window.
+        if (::geckoView.isInitialized) {
+            geckoView.visibility = View.VISIBLE
+            geckoView.requestLayout()
+        }
     }
 
     override fun onBackPressed() {
