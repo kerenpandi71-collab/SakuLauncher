@@ -206,7 +206,7 @@ class YouTubeActivity : Activity() {
                             .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
                             .build()
                     )
-                    popupSession.setSuspendMediaWhenInactive(false)
+                    popupSession.settings.setSuspendMediaWhenInactive(false)
                     popupSession.setNavigationDelegate(createPopupNavigationDelegate())
                     popupSession.open(runtime)
                     popupSessions.add(popupSession)
