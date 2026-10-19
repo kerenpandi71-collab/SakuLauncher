@@ -13,7 +13,9 @@
     "storage",
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",
-    "https://translate.googleapis.com/*"
+    "https://translate.googleapis.com/*",
+    "geckoViewAddons",
+    "nativeMessaging"
   ],
   "content_scripts": [
     {
