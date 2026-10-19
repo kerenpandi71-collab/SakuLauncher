@@ -3,392 +3,267 @@ package com.sakuhome.launcher
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.PictureInPictureParams
-import android.content.Context
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.Gravity
-import android.widget.FrameLayout
 import android.view.View
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.webkit.WebChromeClient
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import java.io.ByteArrayInputStream
-import java.util.Locale
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebExtensionController
 
 /**
- * Lightweight in-app YouTube client. Request filtering blocks known ad/tracker
- * endpoints, but cannot guarantee removal of every YouTube ad.
+ * SakuTube browser surface backed by GeckoView so real WebExtensions can run.
+ * uBlock Origin is installed only from the official Mozilla Add-ons endpoint;
+ * GeckoView verifies the Mozilla signature before accepting the XPI.
  */
 class YouTubeActivity : Activity() {
-    private lateinit var webView: WebView
-    private lateinit var adButton: TextView
-    private lateinit var audioButton: TextView
-    private lateinit var settingsButton: TextView
+    private lateinit var geckoView: GeckoView
+    private lateinit var session: GeckoSession
     private lateinit var toolbar: LinearLayout
-    private lateinit var contentRoot: LinearLayout
-    private lateinit var playerFrame: FrameLayout
-    private lateinit var miniOverlayButton: TextView
-    private var videoPlaying = false
-    private var adBlockingEnabled = true
-    private var backgroundAudioEnabled = false
+    private lateinit var root: LinearLayout
+    private lateinit var runtime: GeckoRuntime
+    private var uboExtension: WebExtension? = null
+    private var allowUboInstallPrompt = false
     private var desktopSiteEnabled = false
-    private var zoomLocked = false
-    private var lockedZoomScale = 1.0f
-    private var audioManager: AudioManager? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
 
-    private val blockedHosts = listOf(
-        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-        "adservice.google.com", "pagead2.googlesyndication.com",
-        "googleads.g.doubleclick.net", "ad.doubleclick.net",
-        "securepubads.g.doubleclick.net", "ads.youtube.com",
-        "youtube.com/pagead", "youtube.com/ptracking", "youtube.com/api/stats/ads",
-        "youtube.com/get_video_info?adformat"
-    )
+    private val uboId = "uBlock0@raymondhill.net"
+    private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        contentRoot = LinearLayout(this).apply {
+        runtime = GeckoRuntime.getDefault(this)
+        configureExtensionPrompts()
+        session = GeckoSession(
+            GeckoSessionSettings.Builder()
+                .allowJavascript(true)
+                .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .build()
+        )
+        session.open(runtime)
+
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
         }
         toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(8, 4, 8, 4)
+            setPadding(6, 3, 6, 3)
             setBackgroundColor(Color.rgb(18, 18, 18))
         }
-        val title = TextView(this).apply {
-            text = "SakuTube"
-            textSize = 17f
-            setTextColor(Color.WHITE)
-            setPadding(8, 8, 4, 8)
-        }
-        toolbar.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-        adButton = makeButton("Iklan: ON") {
-            adBlockingEnabled = !adBlockingEnabled
-            adButton.text = if (adBlockingEnabled) "Iklan: ON" else "Iklan: OFF"
-            Toast.makeText(this, if (adBlockingEnabled) "Pemblokir permintaan iklan aktif" else "Pemblokir iklan nonaktif", Toast.LENGTH_SHORT).show()
-            webView.reload()
-        }
-        toolbar.addView(adButton)
-        audioButton = makeButton("Audio BG: OFF") { showPlayerSettings() }
-        settingsButton = makeButton("⋮") { showPlayerSettings() }
-        toolbar.addView(settingsButton)
-        toolbar.addView(makeButton("Mini") { enterMiniPlayer() })
-        toolbar.addView(makeButton("⟳") { webView.reload() })
-        toolbar.addView(makeButton("✕") { finish() })
-        contentRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
-        webView = WebView(this).apply {
-            setBackgroundColor(Color.BLACK)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            settings.setSupportZoom(true)
-            settings.builtInZoomControls = true
-            settings.displayZoomControls = false
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.loadsImagesAutomatically = true
-            settings.useWideViewPort = true
-            settings.loadWithOverviewMode = true
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    super.onProgressChanged(view, newProgress)
-                }
-            }
-            webViewClient = object : WebViewClient() {
-                override fun onScaleChanged(view: WebView?, oldScale: Float, newScale: Float) {
-                    super.onScaleChanged(view, oldScale, newScale)
-                    if (!zoomLocked && newScale > 0f) {
-                        lockedZoomScale = newScale
-                    } else if (zoomLocked && newScale > 0f && kotlin.math.abs(newScale - lockedZoomScale) > 0.03f) {
-                        view?.post { view.zoomBy(lockedZoomScale / newScale) }
-                    }
-                }
+        // Settings is deliberately the first and larger control on the left.
+        toolbar.addView(makeButton("⋮", 18f, 14, 10) { showSettingsMenu() })
+        toolbar.addView(makeButton("‹", 20f, 12, 10) {
+            session.goBack()
+        })
+        toolbar.addView(makeButton("Mini", 12f, 10, 10) { enterMiniPlayer() })
+        toolbar.addView(makeButton("⟳", 16f, 12, 10) { session.reload() })
+        toolbar.addView(makeButton("✕", 16f, 12, 10) { finish() })
+        root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val uri = request?.url ?: return false
-                    val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
-                    return !(host == "youtube.com" || host.endsWith(".youtube.com") ||
-                        host == "youtu.be" || host == "googlevideo.com" ||
-                        host.endsWith(".googlevideo.com") || host == "youtube-nocookie.com" ||
-                        host.endsWith(".youtube-nocookie.com") || host == "ytimg.com" ||
-                        host.endsWith(".ytimg.com") || host == "google.com" || host.endsWith(".google.com") ||
-                        host == "gstatic.com" || host.endsWith(".gstatic.com"))
-                }
+        geckoView = GeckoView(this)
+        geckoView.setBackgroundColor(Color.BLACK)
+        geckoView.setSession(session)
+        root.addView(geckoView, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
 
-                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                    if (!adBlockingEnabled) return super.shouldInterceptRequest(view, request)
-                    val uri = request?.url
-                    val url = uri?.toString()?.lowercase(Locale.ROOT).orEmpty()
-                    val host = uri?.host?.lowercase(Locale.ROOT).orEmpty()
-                    val blockedHost = blockedHosts.any { token ->
-                        !token.contains('/') && !token.contains('?') &&
-                            (host == token || host.endsWith(".$token"))
-                    }
-                    if (blockedHost) {
-                        return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
-                    }
-                    return super.shouldInterceptRequest(view, request)
-                }
-            }
-            loadUrl("https://m.youtube.com/")
-        }
-        // Keep YouTube's own controls, and add a native shortcut to Android PiP.
-        playerFrame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        playerFrame.addView(
-            webView,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        )
-        miniOverlayButton = TextView(this).apply {
-            text = "▣ Mini"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(16, 10, 16, 10)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(35, 35, 35))
-                cornerRadius = 48f
-                setStroke(1, Color.rgb(100, 100, 100))
-            }
-            elevation = 12f
-            visibility = View.GONE
-            contentDescription = "Minimalkan video ke jendela mini"
-            setOnClickListener { enterMiniPlayer() }
-        }
-        val miniParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.END
-        ).apply { setMargins(0, 0, 18, 18) }
-        playerFrame.addView(miniOverlayButton, miniParams)
-        contentRoot.addView(playerFrame, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(contentRoot)
-
-        val sampler = android.os.Handler(mainLooper)
-        val sample = object : Runnable {
-            override fun run() {
-                if (!isFinishing && ::webView.isInitialized) {
-                    webView.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})()") { value ->
-                        videoPlaying = value == "true"
-                        miniOverlayButton.visibility = if (videoPlaying && !isInPictureInPictureMode) View.VISIBLE else View.GONE
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            try {
-                                setPictureInPictureParams(
-                                    PictureInPictureParams.Builder()
-                                        .setAspectRatio(Rational(16, 9))
-                                        .setAutoEnterEnabled(videoPlaying)
-                                        .build()
-                                )
-                            } catch (_: Exception) {
-                                // Some device builds reject PiP parameter updates.
-                            }
-                        }
-                    }
-                    sampler.postDelayed(this, 1000)
-                }
-            }
-        }
-        sampler.post(sample)
+        refreshInstalledExtension()
+        session.loadUri("https://m.youtube.com/")
     }
 
-    private fun showPlayerSettings() {
-        val labels = arrayOf(
-            "Filter permintaan iklan (tidak menjamin semua iklan YouTube hilang)",
-            "Audio latar (dukungan dibatasi YouTube/WebView)",
-            "Situs desktop",
-            "Kunci zoom saat ini"
+    private fun configureExtensionPrompts() {
+        runtime.webExtensionController.setPromptDelegate(
+            object : WebExtensionController.PromptDelegate {
+                override fun onInstallPromptRequest(
+                    extension: WebExtension,
+                    permissions: Array<out String>,
+                    origins: Array<out String>,
+                    dataCollectionPermissions: Array<out String>
+                ): GeckoResult<WebExtension.PermissionPromptResponse>? {
+                    val isOfficialUbo = extension.metaData.name == "uBlock Origin" &&
+                        extension.id == uboId
+                    // Permission approval is only possible after the explicit
+                    // confirmation dialog shown by SakuTube's settings menu.
+                    val approved = isOfficialUbo && allowUboInstallPrompt
+                    return GeckoResult.fromValue(
+                        WebExtension.PermissionPromptResponse(approved, false, false)
+                    )
+                }
+            }
         )
-        val enabled = booleanArrayOf(adBlockingEnabled, backgroundAudioEnabled, desktopSiteEnabled, zoomLocked)
+    }
+
+    private fun makeButton(
+        label: String,
+        size: Float,
+        horizontalPadding: Int,
+        verticalPadding: Int,
+        action: () -> Unit
+    ) = TextView(this).apply {
+        text = label
+        textSize = size
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+        contentDescription = label
+        setOnClickListener { action() }
+    }
+
+    private fun showSettingsMenu() {
+        val installed = uboExtension != null
+        val items = if (installed) {
+            arrayOf("uBlock Origin: aktif", "Pengaturan uBlock Origin", "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF")
+        } else {
+            arrayOf("Pasang uBlock Origin", "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF")
+        }
         AlertDialog.Builder(this)
             .setTitle("Pengaturan SakuTube")
-            .setMultiChoiceItems(labels, enabled) { _, which, checked ->
-                when (which) {
-                    0 -> {
-                        adBlockingEnabled = checked
-                        Toast.makeText(this, if (checked) "Filter host iklan aktif; iklan dalam video mungkin tetap muncul." else "Filter permintaan iklan dinonaktifkan.", Toast.LENGTH_LONG).show()
+            .setItems(items) { _, which ->
+                if (installed) {
+                    when (which) {
+                        0 -> Toast.makeText(this, "uBlock Origin terpasang. Pemfilteran aktif di mesin GeckoView.", Toast.LENGTH_LONG).show()
+                        1 -> openUboSettings()
+                        2 -> toggleDesktopMode()
                     }
-                    1 -> {
-                        backgroundAudioEnabled = checked
-                        if (checked) {
-                            requestAudioFocus()
-                            enableBackgroundPlayback()
-                        } else {
-                            abandonAudioFocus()
-                        }
-                        Toast.makeText(this, if (checked) "Mode audio latar dicoba. Gunakan Mini agar video tetap terlihat; audio latar WebView tidak dapat dijamin." else "Mode audio latar dinonaktifkan.", Toast.LENGTH_LONG).show()
-                    }
-                    2 -> {
-                        desktopSiteEnabled = checked
-                        applyDesktopSiteMode()
-                    }
-                    3 -> {
-                        zoomLocked = checked
-                        if (checked) lockedZoomScale = webView.scale
-                        Toast.makeText(this, if (checked) "Zoom dikunci pada " + (lockedZoomScale * 100).toInt() + "%." else "Kunci zoom dilepas.", Toast.LENGTH_SHORT).show()
+                } else {
+                    when (which) {
+                        0 -> confirmInstallUbo()
+                        1 -> toggleDesktopMode()
                     }
                 }
             }
-            .setNeutralButton("Zoom −") { _, _ -> changeZoom(false) }
-            .setPositiveButton("Zoom +") { _, _ -> changeZoom(true) }
             .setNegativeButton("Tutup", null)
             .show()
     }
 
-    private fun changeZoom(zoomIn: Boolean) {
-        if (!::webView.isInitialized) return
-        val factor = if (zoomIn) 1.15f else (1f / 1.15f)
-        webView.zoomBy(factor)
-        if (zoomLocked) lockedZoomScale = webView.scale
+    private fun confirmInstallUbo() {
+        AlertDialog.Builder(this)
+            .setTitle("Pasang uBlock Origin")
+            .setMessage(
+                "SakuTube akan mengambil uBlock Origin normal dari situs resmi Mozilla Add-ons. " +
+                    "Ekstensi ini perlu membaca dan memfilter permintaan pada situs yang dibuka. " +
+                    "GeckoView akan memeriksa tanda tangan Mozilla sebelum memasangnya. Lanjutkan?"
+            )
+            .setPositiveButton("Pasang") { _, _ -> installUbo() }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
-    private fun applyDesktopSiteMode() {
-        if (!::webView.isInitialized) return
-        webView.settings.useWideViewPort = desktopSiteEnabled
-        webView.settings.loadWithOverviewMode = !desktopSiteEnabled
-        webView.settings.userAgentString = if (desktopSiteEnabled) {
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        } else {
-            WebSettings.getDefaultUserAgent(this)
-        }
-        webView.reload()
-        Toast.makeText(this, if (desktopSiteEnabled) "Situs desktop aktif." else "Situs mobile aktif.", Toast.LENGTH_SHORT).show()
+    private fun installUbo() {
+        Toast.makeText(this, "Mengunduh dan memverifikasi uBlock Origin…", Toast.LENGTH_LONG).show()
+        allowUboInstallPrompt = true
+        runtime.webExtensionController
+            .install(uboXpiUrl, WebExtensionController.INSTALLATION_METHOD_MANAGER)
+            .accept(
+                { extension ->
+                    allowUboInstallPrompt = false
+                    if (extension.id == uboId && extension.metaData.name == "uBlock Origin") {
+                        uboExtension = extension
+                        Toast.makeText(this, "uBlock Origin berhasil dipasang. Memuat ulang halaman…", Toast.LENGTH_LONG).show()
+                        session.reload()
+                    } else {
+                        Toast.makeText(this, "Ekstensi yang diterima bukan uBlock Origin; tidak diaktifkan.", Toast.LENGTH_LONG).show()
+                    }
+                },
+                { error ->
+                    allowUboInstallPrompt = false
+                    Toast.makeText(
+                        this,
+                        "Gagal memasang uBlock Origin: " + (error.message ?: "periksa koneksi dan kompatibilitas GeckoView"),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
     }
 
-    private fun makeButton(label: String, action: () -> Unit): TextView =
-        TextView(this).apply {
-            text = label
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(7, 10, 7, 10)
-            setOnClickListener { action() }
-        }
-
-    private fun enterMiniPlayer() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            Toast.makeText(this, "Jendela mini membutuhkan Android 8 atau lebih baru", Toast.LENGTH_SHORT).show()
-            return
-        }
-        try {
-            val builder = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(videoPlaying)
-            }
-            val params = builder.build()
-            enterPictureInPictureMode(params)
-        } catch (_: Exception) {
-            Toast.makeText(this, "Mode jendela mini tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * Applies inline playback hints and attempts to resume the current video from
-     * the explicit user action. YouTube/WebView may still enforce its own
-     * background-playback restrictions; this is a best-effort integration.
-     */
-    private fun enableBackgroundPlayback() {
-        if (!::webView.isInitialized) return
-        webView.evaluateJavascript(
-            "(function(){var v=document.querySelector('video');if(!v)return false;" +
-                "v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');" +
-                "v.muted=false;var p=v.play();if(p&&p.catch)p.catch(function(){});return true;})()",
-            null
+    private fun refreshInstalledExtension() {
+        runtime.webExtensionController.list().accept(
+            { extensions ->
+                uboExtension = extensions.firstOrNull { it.id == uboId && it.metaData.name == "uBlock Origin" }
+            },
+            { /* The settings menu still offers installation if listing fails. */ }
         )
     }
 
-    private fun requestAudioFocus() {
-        val manager = audioManager ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setOnAudioFocusChangeListener { }
-                .build()
-            audioFocusRequest = request
-            manager.requestAudioFocus(request)
+    private fun openUboSettings() {
+        val extension = uboExtension
+        val optionsUrl = extension?.metaData?.optionsPageUrl
+        if (!optionsUrl.isNullOrBlank()) {
+            session.loadUri(optionsUrl)
         } else {
-            @Suppress("DEPRECATION")
-            manager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            Toast.makeText(this, "Halaman pengaturan uBlock Origin belum tersedia di build GeckoView ini.", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun abandonAudioFocus() {
-        val manager = audioManager ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { manager.abandonAudioFocusRequest(it) }
-            audioFocusRequest = null
-        } else {
-            @Suppress("DEPRECATION")
-            manager.abandonAudioFocus(null)
+    private fun toggleDesktopMode() {
+        desktopSiteEnabled = !desktopSiteEnabled
+        val settings = session.settings
+        settings.setUserAgentMode(
+            if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+            else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        )
+        settings.setViewportMode(
+            if (desktopSiteEnabled) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
+            else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
+        )
+        session.reload()
+        Toast.makeText(this, if (desktopSiteEnabled) "Situs desktop aktif." else "Situs mobile aktif.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun enterMiniPlayer() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Toast.makeText(this, "Jendela mini membutuhkan Android 8 atau lebih baru.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            enterPictureInPictureMode(
+                PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+            )
+        } catch (_: Exception) {
+            Toast.makeText(this, "Picture-in-Picture tidak tersedia pada perangkat ini.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (::toolbar.isInitialized) {
-            toolbar.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
-        }
-        if (::miniOverlayButton.isInitialized) {
-            miniOverlayButton.visibility =
-                if (isInPictureInPictureMode || !videoPlaying) View.GONE else View.VISIBLE
-        }
+        if (::toolbar.isInitialized) toolbar.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+    }
+
+    override fun onBackPressed() {
+        session.goBack()
     }
 
     override fun onPause() {
-        // Keep WebView alive in background-audio mode; playback still depends on WebView/YouTube policy.
-        if (!backgroundAudioEnabled && !isInPictureInPictureMode && ::webView.isInitialized) webView.onPause()
         super.onPause()
+        if (::session.isInitialized) session.setActive(isInPictureInPictureMode)
     }
 
     override fun onResume() {
         super.onResume()
-        if (::webView.isInitialized) webView.onResume()
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (videoPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            enterMiniPlayer()
-        }
-    }
-
-    override fun onBackPressed() {
-        if (::webView.isInitialized && webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        if (::session.isInitialized) session.setActive(true)
     }
 
     override fun onDestroy() {
-        abandonAudioFocus()
-        if (::webView.isInitialized) {
-            webView.stopLoading()
-            webView.destroy()
-        }
+        if (::geckoView.isInitialized) geckoView.releaseSession()
+        if (::session.isInitialized) session.close()
         super.onDestroy()
     }
 }
