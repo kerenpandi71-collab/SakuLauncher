@@ -21,6 +21,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -52,6 +55,8 @@ class YouTubeActivity : Activity() {
     private lateinit var runtime: GeckoRuntime
     private var uboExtension: WebExtension? = null
     private var autoDubExtension: WebExtension? = null
+    private var autoDubTts: TextToSpeech? = null
+    private var autoDubTtsReady = false
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
@@ -89,6 +94,13 @@ class YouTubeActivity : Activity() {
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
 
+        autoDubTts = TextToSpeech(this) { status ->
+            autoDubTtsReady = status == TextToSpeech.SUCCESS
+            if (autoDubTtsReady) {
+                val languageResult = autoDubTts?.setLanguage(Locale("id", "ID"))
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) autoDubTtsReady = false
+            }
+        }
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
         installBundledAutoDub()
@@ -1291,6 +1303,22 @@ class YouTubeActivity : Activity() {
         ).accept(
             { extension ->
                 autoDubExtension = extension
+                extension?.setMessageDelegate(object : WebExtension.MessageDelegate {
+                    override fun onMessage(nativeApp: String, message: Any, sender: WebExtension.MessageSender): GeckoResult<Any>? {
+                        val data = message as? JSONObject ?: return GeckoResult.fromValue(JSONObject().put("ok", false))
+                        val type = data.optString("type")
+                        if (type == "SPEAK_TEXT") {
+                            val text = data.optString("text").trim().take(700)
+                            runOnUiThread {
+                                if (text.isNotEmpty() && autoDubTtsReady) autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
+                                else if (!autoDubTtsReady) Toast.makeText(this@YouTubeActivity, "Mesin TTS Android belum siap atau bahasa Indonesia belum tersedia.", Toast.LENGTH_LONG).show()
+                            }
+                            return GeckoResult.fromValue(JSONObject().put("ok", text.isNotEmpty() && autoDubTtsReady))
+                        }
+                        if (type == "STOP_SPEECH") { runOnUiThread { autoDubTts?.stop() }; return GeckoResult.fromValue(JSONObject().put("ok", true)) }
+                        return GeckoResult.fromValue(JSONObject().put("ok", false))
+                    }
+                }, "saku.autodub")
                 runOnUiThread {
                     if (extension != null) {
                         Toast.makeText(this, "SakuTube Auto Dub siap · aktif saat subtitle YouTube tersedia", Toast.LENGTH_LONG).show()
@@ -1424,6 +1452,8 @@ class YouTubeActivity : Activity() {
 
     override fun onDestroy() {
         if (::geckoView.isInitialized) geckoView.releaseSession()
+        try { autoDubTts?.stop(); autoDubTts?.shutdown() } catch (_: Exception) { }
+        autoDubTts = null
         browserTabs.forEach { try { it.session.close() } catch (_: Exception) { } }
         browserTabs.clear()
         popupDialogs.toList().forEach { try { it.dismiss() } catch (_: Exception) { } }
