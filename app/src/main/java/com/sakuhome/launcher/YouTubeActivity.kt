@@ -52,6 +52,7 @@ class YouTubeActivity : Activity() {
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
     private var backgroundAudioEnabled = true
+    private var pipEnabled = true
     private var zoomLocked = false
     private var zoomFactor = 1.0f
     private var swipeStartX = 0f
@@ -71,6 +72,7 @@ class YouTubeActivity : Activity() {
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
         backgroundAudioEnabled = browserPrefs.getBoolean("background_audio", true)
+        pipEnabled = browserPrefs.getBoolean("pip_enabled", true)
         zoomLocked = browserPrefs.getBoolean("zoom_locked", false)
         zoomFactor = browserPrefs.getFloat("zoom_factor", 1.0f).coerceIn(0.7f, 1.6f)
         runtime.settings.setAutomaticFontSizeAdjustment(false)
@@ -290,6 +292,8 @@ class YouTubeActivity : Activity() {
         actions += { toggleDesktopMode() }
         items += "Audio latar belakang: " + if (backgroundAudioEnabled) "ON" else "OFF"
         actions += { toggleBackgroundAudio() }
+        items += "Picture-in-Picture (popup): " + if (pipEnabled) "ON" else "OFF"
+        actions += { togglePip() }
         items += "Kelola semua extension"
         actions += { showInstalledExtensions() }
         items += "Buka halaman di browser eksternal"
@@ -744,7 +748,21 @@ class YouTubeActivity : Activity() {
         Toast.makeText(this, if (desktopSiteEnabled) "Situs desktop aktif." else "Situs mobile aktif.", Toast.LENGTH_SHORT).show()
     }
 
+    private fun togglePip() {
+        pipEnabled = !pipEnabled
+        browserPrefs.edit().putBoolean("pip_enabled", pipEnabled).apply()
+        Toast.makeText(
+            this,
+            if (pipEnabled) "Picture-in-Picture diaktifkan. Tombol Mini membuka popup video." else "Picture-in-Picture dimatikan.",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     private fun enterMiniPlayer() {
+        if (!pipEnabled) {
+            Toast.makeText(this, "Picture-in-Picture sedang OFF. Aktifkan dari menu ⋮.", Toast.LENGTH_LONG).show()
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             Toast.makeText(this, "Jendela mini membutuhkan Android 8 atau lebih baru.", Toast.LENGTH_SHORT).show()
             return
