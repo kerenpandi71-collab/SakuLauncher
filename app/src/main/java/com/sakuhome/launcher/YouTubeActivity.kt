@@ -18,6 +18,7 @@ import android.view.inputmethod.EditorInfo
 import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import org.mozilla.geckoview.GeckoResult
@@ -67,6 +68,10 @@ class YouTubeActivity : Activity() {
     private val storeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val popupSessions = mutableSetOf<GeckoSession>()
     private val popupDialogs = mutableSetOf<AlertDialog>()
+    private data class BrowserTab(val id: Int, val session: GeckoSession, var url: String, var title: String, val privateMode: Boolean = false)
+    private val browserTabs = mutableListOf<BrowserTab>()
+    private var nextTabId = 1
+    private var tabsDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,6 +119,7 @@ class YouTubeActivity : Activity() {
         toolbar.addView(makeButton("⟳", 20f, 10, 8) { session.reload() })
         toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
         toolbar.addView(makeButton("+ Tab", 12f, 8, 8) { openNewTab() })
+        toolbar.addView(makeButton("Tabs 1", 11f, 6, 8) { showTabsOverview() }.apply { contentDescription = "Tabs" })
         toolbar.addView(makeButton("↓", 18f, 8, 8) { showDownloadsMenu() })
         root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
@@ -193,9 +199,11 @@ class YouTubeActivity : Activity() {
 
         refreshInstalledExtension()
         val initialUrl = intent.getStringExtra("sakutube_url") ?: "https://m.youtube.com/"
+        browserTabs.add(BrowserTab(nextTabId++, session, initialUrl, "Tab 1"))
         addressField.setText(initialUrl)
         session.loadUri(initialUrl)
         recordHistory(initialUrl)
+        updateTabsButton()
     }
 
     /**
@@ -477,10 +485,117 @@ class YouTubeActivity : Activity() {
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
-    private fun openNewTab() {
-        val intent = Intent(this, YouTubeActivity::class.java)
-            .putExtra("sakutube_url", "https://m.youtube.com/")
-        startActivity(intent)
+    private fun openNewTab(privateMode: Boolean = false) {
+        try {
+            val settings = GeckoSessionSettings.Builder()
+                .allowJavascript(true)
+                .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .usePrivateMode(privateMode)
+                .build()
+            val newSession = GeckoSession(settings)
+            newSession.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
+            newSession.open(runtime)
+            newSession.setNavigationDelegate(createPopupNavigationDelegate())
+            newSession.setProgressDelegate(createProgressDelegate())
+            newSession.setContentDelegate(createDownloadContentDelegate())
+            newSession.setContentDelegate(createTabContentDelegate())
+            val url = "https://m.youtube.com/"
+            val tab = BrowserTab(nextTabId++, newSession, url, if (privateMode) "Tab Samaran" else "Tab baru", privateMode)
+            browserTabs.add(tab)
+            switchToTab(tab.id)
+            newSession.loadUri(url)
+            updateTabsButton()
+            Toast.makeText(this, if (privateMode) "Tab samaran dibuka." else "Tab baru dibuka.", Toast.LENGTH_SHORT).show()
+        } catch (error: Exception) {
+            Toast.makeText(this, "Tidak bisa membuka tab: " + (error.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun createTabContentDelegate(): GeckoSession.ContentDelegate {
+        return object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                val tab = browserTabs.firstOrNull { it.session === session } ?: return
+                tab.title = title?.takeIf { it.isNotBlank() } ?: tab.url
+                runOnUiThread { updateTabsButton() }
+            }
+        }
+    }
+
+    private fun switchToTab(id: Int) {
+        val tab = browserTabs.firstOrNull { it.id == id } ?: return
+        if (::session.isInitialized && session !== tab.session) session.setActive(false)
+        session = tab.session
+        if (::geckoView.isInitialized) geckoView.setSession(session)
+        session.setActive(true)
+        addressField.setText(tab.url)
+        updateTabsButton()
+    }
+
+    private fun closeTab(id: Int) {
+        val tab = browserTabs.firstOrNull { it.id == id } ?: return
+        if (browserTabs.size <= 1) {
+            tab.session.loadUri("https://m.youtube.com/")
+            tab.url = "https://m.youtube.com/"
+            tab.title = "Tab baru"
+            addressField.setText(tab.url)
+            updateTabsButton()
+            return
+        }
+        val wasActive = tab.session === session
+        browserTabs.remove(tab)
+        if (wasActive) switchToTab(browserTabs.last().id)
+        try { tab.session.close() } catch (_: Exception) { }
+        updateTabsButton()
+    }
+
+    private fun updateTabsButton() {
+        if (!::toolbar.isInitialized) return
+        for (i in 0 until toolbar.childCount) {
+            val child = toolbar.getChildAt(i)
+            if (child is TextView && child.contentDescription == "Tabs") {
+                child.text = "Tabs " + browserTabs.size
+                break
+            }
+        }
+    }
+
+    private fun showTabsOverview() {
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        actions.addView(makeButton("+ Tab", 13f, 4, 4) { openNewTab(); tabsDialog?.dismiss() })
+        actions.addView(makeButton("Samaran", 12f, 4, 4) { openNewTab(true); tabsDialog?.dismiss() })
+        actions.addView(makeButton("Tutup lain", 12f, 4, 4) {
+            val activeId = browserTabs.firstOrNull { it.session === session }?.id
+            browserTabs.toList().filter { it.id != activeId }.forEach { closeTab(it.id) }
+            tabsDialog?.dismiss()
+        })
+        outer.addView(actions)
+        val scroll = ScrollView(this)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        browserTabs.toList().forEach { tab ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                background = roundedBackground(if (tab.session === session) Color.rgb(48, 56, 68) else Color.rgb(30, 30, 30), 12)
+            }
+            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(4), 0) }
+            val title = TextView(this).apply { text = (if (tab.privateMode) "Samaran • " else "") + tab.title; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1 }
+            val url = TextView(this).apply { text = tab.url; setTextColor(Color.LTGRAY); textSize = 11f; maxLines = 2 }
+            details.addView(title)
+            details.addView(url)
+            card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(makeButton("Buka", 12f, 4, 4) { switchToTab(tab.id); tabsDialog?.dismiss() })
+            card.addView(makeButton("×", 18f, 4, 4) { closeTab(tab.id); tabsDialog?.dismiss(); showTabsOverview() })
+            val params = LinearLayout.LayoutParams(-1, -2)
+            params.bottomMargin = dp(8)
+            list.addView(card, params)
+        }
+        scroll.addView(list)
+        outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        tabsDialog = AlertDialog.Builder(this).setTitle("Tab terbuka (" + browserTabs.size + ")").setView(outer).setNegativeButton("Selesai", null).create()
+        tabsDialog?.show()
+        tabsDialog?.window?.setLayout((resources.displayMetrics.widthPixels * 0.96f).toInt(), (resources.displayMetrics.heightPixels * 0.82f).toInt())
     }
 
     private fun recordHistory(url: String) {
@@ -1144,7 +1259,8 @@ class YouTubeActivity : Activity() {
 
     override fun onDestroy() {
         if (::geckoView.isInitialized) geckoView.releaseSession()
-        if (::session.isInitialized) session.close()
+        browserTabs.forEach { try { it.session.close() } catch (_: Exception) { } }
+        browserTabs.clear()
         popupDialogs.toList().forEach { try { it.dismiss() } catch (_: Exception) { } }
         popupSessions.toList().forEach { try { it.close() } catch (_: Exception) { } }
         popupDialogs.clear()
