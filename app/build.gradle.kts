@@ -30,3 +30,6 @@ dependencies {
     // GeckoView is required for real WebExtension support; Android WebView cannot host uBlock Origin.
     implementation("org.mozilla.geckoview:geckoview:160.0.20261017034010")
 }
+
+// Bundle uBlock Origin as a built-in extension. Place the XPI in app/src/main/assets/extensions/
+// and enable via GeckoRuntime's WebExtensionController at runtime.
