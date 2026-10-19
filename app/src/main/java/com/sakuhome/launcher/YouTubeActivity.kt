@@ -181,6 +181,14 @@ class YouTubeActivity : Activity() {
         root.addView(zoomRowView, LinearLayout.LayoutParams(-1, -2))
 
         session.setNavigationDelegate(createPopupNavigationDelegate())
+        session.setProgressDelegate(object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(session: GeckoSession, url: String) {
+                runOnUiThread {
+                    if (::addressField.isInitialized) addressField.setText(url)
+                    recordHistory(url)
+                }
+            }
+        })
 
         geckoView = GeckoView(this)
         geckoView.setBackgroundColor(Color.BLACK)
