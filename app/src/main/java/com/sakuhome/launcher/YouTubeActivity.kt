@@ -309,7 +309,7 @@ class YouTubeActivity : Activity() {
                     allowUboInstallPrompt = false
                     Toast.makeText(
                         this,
-                        "Gagal memasang uBlock Origin: " + (error.message ?: "periksa koneksi dan kompatibilitas GeckoView"),
+                        "Gagal memasang uBlock Origin: " + (error?.message ?: "periksa koneksi dan kompatibilitas GeckoView"),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -319,7 +319,7 @@ class YouTubeActivity : Activity() {
     private fun refreshInstalledExtension() {
         runtime.webExtensionController.list().accept(
             { extensions ->
-                uboExtension = extensions.firstOrNull { it.id == uboId && it.metaData.name == "uBlock Origin" }
+                uboExtension = extensions?.firstOrNull { it.id == uboId && it.metaData.name == "uBlock Origin" }
             },
             { /* The settings menu still offers installation if listing fails. */ }
         )
