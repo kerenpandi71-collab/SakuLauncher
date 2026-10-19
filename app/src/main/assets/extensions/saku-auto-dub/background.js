@@ -1,6 +1,12 @@
 // Free translation endpoint; availability and rate limits are controlled by the provider.
 browser.runtime.onMessage.addListener(async (msg) => {
-  if (!msg || msg.type !== "SAKU_TRANSLATE") return;
+  if (!msg) return;
+  if (msg.type === "SAKU_SPEAK") {
+    try {
+      return await browser.runtime.sendNativeMessage("saku.autodub", { type: "SPEAK_TEXT", text: String(msg.text || "").slice(0, 700) });
+    } catch (error) { return { ok: false, error: String(error && error.message || "TTS Android tidak tersedia") }; }
+  }
+  if (msg.type !== "SAKU_TRANSLATE") return;
   const text = String(msg.text || "").trim().slice(0, 700);
   if (!text) return { ok: false };
   try {
