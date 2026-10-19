@@ -113,6 +113,8 @@ class YouTubeActivity : Activity() {
         toolbar.addView(makeButton("Mini", 13f, 10, 8) { enterMiniPlayer() })
         toolbar.addView(makeButton("⟳", 20f, 10, 8) { session.reload() })
         toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
+        toolbar.addView(makeButton("+ Tab", 12f, 8, 8) { openNewTab() })
+        toolbar.addView(makeButton("↓", 18f, 8, 8) { showDownloadsMenu() })
         root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
         addressRowView = LinearLayout(this).apply {
@@ -188,7 +190,10 @@ class YouTubeActivity : Activity() {
         updateZoomLabel()
 
         refreshInstalledExtension()
-        session.loadUri("https://m.youtube.com/")
+        val initialUrl = intent.getStringExtra("sakutube_url") ?: "https://m.youtube.com/"
+        addressField.setText(initialUrl)
+        session.loadUri(initialUrl)
+        recordHistory(initialUrl)
     }
 
     /**
@@ -356,12 +361,106 @@ class YouTubeActivity : Activity() {
         try {
             addressField.hideKeyboard()
         } catch (_: Exception) { }
+        addressField.setText(target)
         session.loadUri(target)
+        recordHistory(target)
     }
 
     private fun EditText.hideKeyboard() {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         imm.hideSoftInputFromWindow(windowToken, 0)
+    }
+
+    private fun openNewTab() {
+        val intent = Intent(this, YouTubeActivity::class.java)
+            .putExtra("sakutube_url", "https://m.youtube.com/")
+        startActivity(intent)
+    }
+
+    private fun recordHistory(url: String) {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        val history = browserPrefs.getStringSet("history_urls", emptySet())?.toMutableList() ?: mutableListOf()
+        history.remove(url)
+        history.add(0, url)
+        browserPrefs.edit().putStringSet("history_urls", history.take(300).toSet()).apply()
+    }
+
+    private fun showHistory() {
+        val history = browserPrefs.getStringSet("history_urls", emptySet())?.toList()?.sortedDescending() ?: emptyList()
+        if (history.isEmpty()) {
+            AlertDialog.Builder(this).setTitle("Riwayat penelusuran")
+                .setMessage("Belum ada riwayat yang tersimpan.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Riwayat penelusuran")
+            .setItems(history.toTypedArray()) { _, which ->
+                val url = history[which]
+                addressField.setText(url)
+                session.loadUri(url)
+                recordHistory(url)
+            }
+            .setNeutralButton("Hapus riwayat") { _, _ ->
+                AlertDialog.Builder(this).setTitle("Hapus riwayat?")
+                    .setMessage("Semua riwayat penelusuran SakuTube akan dihapus. Cookie dan sesi login tidak ikut dihapus.")
+                    .setPositiveButton("Hapus") { _, _ ->
+                        browserPrefs.edit().remove("history_urls").apply()
+                        Toast.makeText(this, "Riwayat dihapus.", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Batal", null).show()
+            }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun downloadCurrentUrl() {
+        val raw = addressField.text.toString().trim()
+        if (!raw.startsWith("https://") && !raw.startsWith("http://")) {
+            Toast.makeText(this, "Buka halaman atau file yang ingin diunduh terlebih dahulu.", Toast.LENGTH_LONG).show()
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Unduh URL saat ini")
+            .setMessage("SakuTube akan meminta Android mengunduh URL halaman saat ini. Untuk mengunduh file, buka URL file langsung terlebih dahulu.")
+            .setPositiveButton("Unduh") { _, _ ->
+                try {
+                    val request = android.app.DownloadManager.Request(Uri.parse(raw))
+                        .setTitle(raw.substringAfterLast('/').ifBlank { "unduhan" })
+                        .setDescription("Unduhan dari SakuTube")
+                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        .setAllowedOverMetered(true)
+                        .setAllowedOverRoaming(false)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, raw.substringAfterLast('/').substringBefore('?').ifBlank { "download" })
+                    } else {
+                        request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, raw.substringAfterLast('/').substringBefore('?').ifBlank { "download" })
+                    }
+                    val manager = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
+                    manager.enqueue(request)
+                    Toast.makeText(this, "Unduhan dimulai. Lokasi: Download", Toast.LENGTH_LONG).show()
+                } catch (error: Exception) {
+                    Toast.makeText(this, "Tidak dapat memulai unduhan: " + (error.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun showDownloadsMenu() {
+        AlertDialog.Builder(this).setTitle("Unduhan")
+            .setItems(arrayOf("Unduh URL saat ini", "Buka daftar unduhan Android")) { _, which ->
+                if (which == 0) downloadCurrentUrl() else openDownloads()
+            }
+            .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openDownloads() {
+        try {
+            startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS))
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("content://downloads/my_downloads")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Daftar unduhan Android tidak tersedia.", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun toggleZoomLock() {
@@ -402,6 +501,12 @@ class YouTubeActivity : Activity() {
         actions += { showExtensionStore() }
         items += "Manajemen cache"
         actions += { showCacheManager() }
+        items += "Riwayat penelusuran"
+        actions += { showHistory() }
+        items += "Unduh URL halaman saat ini"
+        actions += { downloadCurrentUrl() }
+        items += "Unduhan tersimpan"
+        actions += { openDownloads() }
         items += "Situs desktop: " + if (desktopSiteEnabled) "ON" else "OFF"
         actions += { toggleDesktopMode() }
         items += "Audio latar belakang: " + if (backgroundAudioEnabled) "ON" else "OFF"
