@@ -117,7 +117,11 @@ class YouTubeActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun onScaleChanged(view: WebView?, oldScale: Float, newScale: Float) {
                     super.onScaleChanged(view, oldScale, newScale)
-                    if (!zoomLocked && newScale > 0f) lockedZoomScale = newScale
+                    if (!zoomLocked && newScale > 0f) {
+                        lockedZoomScale = newScale
+                    } else if (zoomLocked && newScale > 0f && kotlin.math.abs(newScale - lockedZoomScale) > 0.03f) {
+                        view?.post { view.zoomBy(lockedZoomScale / newScale) }
+                    }
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
