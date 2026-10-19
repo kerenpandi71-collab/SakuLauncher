@@ -3,7 +3,7 @@
  let prefs={enabled:false,rate:1,volume:1}, last="", lastSpoken="", timer=null, busy=false, queued="";
  let badge;
  function status(s){ if(!badge || !badge.isConnected){badge=document.createElement("div");badge.id="saku-auto-dub-badge";document.documentElement.appendChild(badge);} badge.textContent=s;badge.style.display="block"; }
- function captions(){return [...document.querySelectorAll(".ytp-caption-segment")].map(n=>(n.textContent||"").trim()).filter(Boolean).join(" ").replace(/\\s+/g," ").trim();}
+ function captions(){return [...document.querySelectorAll(".ytp-caption-segment")].map(n=>(n.textContent||"").trim()).filter(Boolean).join(" ").replace(/\s+/g," ").trim();}
  function enableCC(){const b=document.querySelector(".ytp-subtitles-button");if(b && b.getAttribute("aria-pressed")!=="true") b.click();}
  function speak(text){
   if(!("speechSynthesis" in window)){status("TTS tidak tersedia di perangkat");return;}
