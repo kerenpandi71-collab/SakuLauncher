@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.Gravity
+import android.widget.FrameLayout
 import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -34,6 +36,8 @@ class YouTubeActivity : Activity() {
     private lateinit var audioButton: TextView
     private lateinit var toolbar: LinearLayout
     private lateinit var contentRoot: LinearLayout
+    private lateinit var playerFrame: FrameLayout
+    private lateinit var miniOverlayButton: TextView
     private var videoPlaying = false
     private var adBlockingEnabled = true
     private var backgroundAudioEnabled = false
@@ -91,7 +95,11 @@ class YouTubeActivity : Activity() {
             } else {
                 abandonAudioFocus()
             }
-            Toast.makeText(this, if (backgroundAudioEnabled) "Audio latar diaktifkan. Pemutaran tetap mengikuti dukungan YouTube/WebView." else "Mode audio latar dinonaktifkan", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                if (backgroundAudioEnabled) "Mode audio latar aktif. Untuk menjaga video tetap berjalan saat keluar, gunakan tombol Mini agar masuk ke jendela PiP." else "Mode audio latar dinonaktifkan",
+                Toast.LENGTH_LONG
+            ).show()
         }
         toolbar.addView(audioButton)
         toolbar.addView(makeButton("Mini") { enterMiniPlayer() })
@@ -143,7 +151,38 @@ class YouTubeActivity : Activity() {
             }
             loadUrl("https://m.youtube.com/")
         }
-        contentRoot.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
+        // Keep YouTube's own controls, and add a native shortcut to Android PiP.
+        playerFrame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        playerFrame.addView(
+            webView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        miniOverlayButton = TextView(this).apply {
+            text = "▣ Mini"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(16, 10, 16, 10)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(35, 35, 35))
+                cornerRadius = 48f
+                setStroke(1, Color.rgb(100, 100, 100))
+            }
+            elevation = 12f
+            visibility = View.GONE
+            contentDescription = "Minimalkan video ke jendela mini"
+            setOnClickListener { enterMiniPlayer() }
+        }
+        val miniParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END
+        ).apply { setMargins(0, 0, 18, 18) }
+        playerFrame.addView(miniOverlayButton, miniParams)
+        contentRoot.addView(playerFrame, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(contentRoot)
 
         val sampler = android.os.Handler(mainLooper)
@@ -152,6 +191,19 @@ class YouTubeActivity : Activity() {
                 if (!isFinishing && ::webView.isInitialized) {
                     webView.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})()") { value ->
                         videoPlaying = value == "true"
+                        miniOverlayButton.visibility = if (videoPlaying && !isInPictureInPictureMode) View.VISIBLE else View.GONE
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            try {
+                                setPictureInPictureParams(
+                                    PictureInPictureParams.Builder()
+                                        .setAspectRatio(Rational(16, 9))
+                                        .setAutoEnterEnabled(videoPlaying)
+                                        .build()
+                                )
+                            } catch (_: Exception) {
+                                // Some device builds reject PiP parameter updates.
+                            }
+                        }
                     }
                     sampler.postDelayed(this, 1000)
                 }
@@ -176,9 +228,12 @@ class YouTubeActivity : Activity() {
             return
         }
         try {
-            val params = PictureInPictureParams.Builder()
+            val builder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
-                .build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(videoPlaying)
+            }
+            val params = builder.build()
             enterPictureInPictureMode(params)
         } catch (_: Exception) {
             Toast.makeText(this, "Mode jendela mini tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show()
@@ -235,6 +290,10 @@ class YouTubeActivity : Activity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         if (::toolbar.isInitialized) {
             toolbar.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        }
+        if (::miniOverlayButton.isInitialized) {
+            miniOverlayButton.visibility =
+                if (isInPictureInPictureMode || !videoPlaying) View.GONE else View.VISIBLE
         }
     }
 
