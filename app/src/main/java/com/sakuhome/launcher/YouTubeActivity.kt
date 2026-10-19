@@ -1,6 +1,7 @@
 package com.sakuhome.launcher
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.graphics.Color
@@ -34,6 +35,7 @@ class YouTubeActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var adButton: TextView
     private lateinit var audioButton: TextView
+    private lateinit var settingsButton: TextView
     private lateinit var toolbar: LinearLayout
     private lateinit var contentRoot: LinearLayout
     private lateinit var playerFrame: FrameLayout
@@ -41,6 +43,9 @@ class YouTubeActivity : Activity() {
     private var videoPlaying = false
     private var adBlockingEnabled = true
     private var backgroundAudioEnabled = false
+    private var desktopSiteEnabled = false
+    private var zoomLocked = false
+    private var lockedZoomScale = 1.0f
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
 
@@ -51,9 +56,6 @@ class YouTubeActivity : Activity() {
         "securepubads.g.doubleclick.net", "ads.youtube.com",
         "youtube.com/pagead", "youtube.com/ptracking", "youtube.com/api/stats/ads",
         "youtube.com/get_video_info?adformat"
-    )
-    private val blockedPathTokens = listOf(
-        "/pagead/", "/ptracking", "/api/stats/ads", "/pagead/lvz"
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,22 +88,9 @@ class YouTubeActivity : Activity() {
             webView.reload()
         }
         toolbar.addView(adButton)
-        audioButton = makeButton("Audio BG: OFF") {
-            backgroundAudioEnabled = !backgroundAudioEnabled
-            audioButton.text = if (backgroundAudioEnabled) "Audio BG: ON" else "Audio BG: OFF"
-            if (backgroundAudioEnabled) {
-                requestAudioFocus()
-                enableBackgroundPlayback()
-            } else {
-                abandonAudioFocus()
-            }
-            Toast.makeText(
-                this,
-                if (backgroundAudioEnabled) "Mode audio latar aktif. Untuk menjaga video tetap berjalan saat keluar, gunakan tombol Mini agar masuk ke jendela PiP." else "Mode audio latar dinonaktifkan",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        toolbar.addView(audioButton)
+        audioButton = makeButton("Audio BG: OFF") { showPlayerSettings() }
+        settingsButton = makeButton("⋮") { showPlayerSettings() }
+        toolbar.addView(settingsButton)
         toolbar.addView(makeButton("Mini") { enterMiniPlayer() })
         toolbar.addView(makeButton("⟳") { webView.reload() })
         toolbar.addView(makeButton("✕") { finish() })
@@ -112,6 +101,9 @@ class YouTubeActivity : Activity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.loadsImagesAutomatically = true
@@ -123,6 +115,11 @@ class YouTubeActivity : Activity() {
                 }
             }
             webViewClient = object : WebViewClient() {
+                override fun onScaleChanged(view: WebView?, oldScale: Float, newScale: Float) {
+                    super.onScaleChanged(view, oldScale, newScale)
+                    if (!zoomLocked && newScale > 0f) lockedZoomScale = newScale
+                }
+
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val uri = request?.url ?: return false
                     val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
@@ -140,10 +137,10 @@ class YouTubeActivity : Activity() {
                     val url = uri?.toString()?.lowercase(Locale.ROOT).orEmpty()
                     val host = uri?.host?.lowercase(Locale.ROOT).orEmpty()
                     val blockedHost = blockedHosts.any { token ->
-                        if (token.contains('/') || token.contains('?')) url.contains(token)
-                        else host == token || host.endsWith(".$token")
+                        !token.contains('/') && !token.contains('?') &&
+                            (host == token || host.endsWith(".$token"))
                     }
-                    if (blockedHost || blockedPathTokens.any { url.contains(it) }) {
+                    if (blockedHost) {
                         return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
                     }
                     return super.shouldInterceptRequest(view, request)
@@ -210,6 +207,69 @@ class YouTubeActivity : Activity() {
             }
         }
         sampler.post(sample)
+    }
+
+    private fun showPlayerSettings() {
+        val labels = arrayOf(
+            "Filter permintaan iklan (tidak menjamin semua iklan YouTube hilang)",
+            "Audio latar (dukungan dibatasi YouTube/WebView)",
+            "Situs desktop",
+            "Kunci zoom saat ini"
+        )
+        val enabled = booleanArrayOf(adBlockingEnabled, backgroundAudioEnabled, desktopSiteEnabled, zoomLocked)
+        AlertDialog.Builder(this)
+            .setTitle("Pengaturan SakuTube")
+            .setMultiChoiceItems(labels, enabled) { _, which, checked ->
+                when (which) {
+                    0 -> {
+                        adBlockingEnabled = checked
+                        Toast.makeText(this, if (checked) "Filter host iklan aktif; iklan dalam video mungkin tetap muncul." else "Filter permintaan iklan dinonaktifkan.", Toast.LENGTH_LONG).show()
+                    }
+                    1 -> {
+                        backgroundAudioEnabled = checked
+                        if (checked) {
+                            requestAudioFocus()
+                            enableBackgroundPlayback()
+                        } else {
+                            abandonAudioFocus()
+                        }
+                        Toast.makeText(this, if (checked) "Mode audio latar dicoba. Gunakan Mini agar video tetap terlihat; audio latar WebView tidak dapat dijamin." else "Mode audio latar dinonaktifkan.", Toast.LENGTH_LONG).show()
+                    }
+                    2 -> {
+                        desktopSiteEnabled = checked
+                        applyDesktopSiteMode()
+                    }
+                    3 -> {
+                        zoomLocked = checked
+                        if (checked) lockedZoomScale = webView.scale
+                        Toast.makeText(this, if (checked) "Zoom dikunci pada " + (lockedZoomScale * 100).toInt() + "%." else "Kunci zoom dilepas.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNeutralButton("Zoom −") { _, _ -> changeZoom(false) }
+            .setPositiveButton("Zoom +") { _, _ -> changeZoom(true) }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun changeZoom(zoomIn: Boolean) {
+        if (!::webView.isInitialized) return
+        val factor = if (zoomIn) 1.15f else (1f / 1.15f)
+        webView.zoomBy(factor)
+        if (zoomLocked) lockedZoomScale = webView.scale
+    }
+
+    private fun applyDesktopSiteMode() {
+        if (!::webView.isInitialized) return
+        webView.settings.useWideViewPort = desktopSiteEnabled
+        webView.settings.loadWithOverviewMode = !desktopSiteEnabled
+        webView.settings.userAgentString = if (desktopSiteEnabled) {
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        } else {
+            WebSettings.getDefaultUserAgent(this)
+        }
+        webView.reload()
+        Toast.makeText(this, if (desktopSiteEnabled) "Situs desktop aktif." else "Situs mobile aktif.", Toast.LENGTH_SHORT).show()
     }
 
     private fun makeButton(label: String, action: () -> Unit): TextView =
