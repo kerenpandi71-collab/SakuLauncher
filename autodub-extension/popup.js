@@ -1,6 +1,6 @@
-const $=id=>document.getElementById(id), enabled=$("enabled"),rate=$("rate"),volume=$("volume"),status=$("status");
+const $=id=>document.getElementById(id), enabled=$("enabled"),rate=$("rate"),volume=$("volume"),duckOriginal=$("duckOriginal"),status=$("status");
 async function send(message){const tabs=await browser.tabs.query({active:true,currentWindow:true}),t=tabs[0];if(!t||!t.id||!/^https:\/\/(www\.|m\.)?youtube\.com\//.test(t.url||"")){status.textContent="Buka YouTube terlebih dahulu.";return;}try{await browser.tabs.sendMessage(t.id,message);}catch(_){status.textContent="Muat ulang halaman YouTube, lalu coba lagi.";}}
-async function save(){const prefs={enabled:enabled.checked,rate:Number(rate.value),volume:Number(volume.value)};await browser.storage.local.set(prefs);await send({type:"SET_PREFS",prefs});status.textContent=enabled.checked?"Aktif — nyalakan CC pada video.":"Dubbing dimatikan.";}
-browser.storage.local.get({enabled:false,rate:1,volume:1}).then(p=>{enabled.checked=p.enabled;rate.value=String(p.rate);volume.value=String(p.volume);});
-enabled.addEventListener("change",save);rate.addEventListener("change",save);volume.addEventListener("change",save);
+async function save(){const prefs={enabled:enabled.checked,rate:Number(rate.value),volume:Number(volume.value),duckOriginal:duckOriginal.checked};await browser.storage.local.set(prefs);await send({type:"SET_PREFS",prefs});status.textContent=enabled.checked?"Aktif — nyalakan CC pada video.":"Dubbing dimatikan.";}
+browser.storage.local.get({enabled:false,rate:1,volume:1,duckOriginal:false}).then(p=>{enabled.checked=p.enabled;rate.value=String(p.rate);volume.value=String(p.volume);duckOriginal.checked=!!p.duckOriginal;});
+enabled.addEventListener("change",save);rate.addEventListener("change",save);volume.addEventListener("change",save);duckOriginal.addEventListener("change",save);
 $("test").addEventListener("click",async()=>{await save();await send({type:"TEST_TTS"});});$("stop").addEventListener("click",()=>send({type:"STOP_TTS"}));
