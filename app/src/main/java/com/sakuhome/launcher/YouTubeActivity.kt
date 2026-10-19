@@ -181,14 +181,8 @@ class YouTubeActivity : Activity() {
         root.addView(zoomRowView, LinearLayout.LayoutParams(-1, -2))
 
         session.setNavigationDelegate(createPopupNavigationDelegate())
-        session.setProgressDelegate(object : GeckoSession.ProgressDelegate {
-            override fun onPageStart(session: GeckoSession, url: String) {
-                runOnUiThread {
-                    if (::addressField.isInitialized) addressField.setText(url)
-                    recordHistory(url)
-                }
-            }
-        })
+        session.setProgressDelegate(createProgressDelegate())
+        session.setContentDelegate(createDownloadContentDelegate())
 
         geckoView = GeckoView(this)
         geckoView.setBackgroundColor(Color.BLACK)
@@ -208,6 +202,110 @@ class YouTubeActivity : Activity() {
      * Handle target=_blank/window.open requests inside SakuTube instead of silently
      * dropping them. OAuth pages and extension links can use these new-window requests.
      */
+    private fun createProgressDelegate(): GeckoSession.ProgressDelegate {
+        return object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(session: GeckoSession, url: String) {
+                runOnUiThread {
+                    if (this@YouTubeActivity.session === session && ::addressField.isInitialized) addressField.setText(url)
+                    recordHistory(url)
+                }
+            }
+        }
+    }
+
+    private fun createDownloadContentDelegate(): GeckoSession.ContentDelegate {
+        return object : GeckoSession.ContentDelegate {
+            override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
+                val url = response.uri
+                val contentType = response.headers.entries.firstOrNull { it.key.equals("content-type", true) }?.value ?: ""
+                val disposition = response.headers.entries.firstOrNull { it.key.equals("content-disposition", true) }?.value ?: ""
+                val rawName = disposition.substringAfter("filename=", "").trim().trim('"').substringBefore(";")
+                val filename = (if (rawName.isNotBlank()) rawName else Uri.parse(url).lastPathSegment ?: "download").substringAfterLast("/").substringBefore("?")
+                if (url.contains("addons.mozilla.org", true) && (url.substringBefore("?").endsWith(".xpi", true) || contentType.contains("x-xpinstall", true) || filename.endsWith(".xpi", true))) {
+                    installExtensionFromResponse(response, filename)
+                } else {
+                    downloadResponse(response, filename, contentType)
+                }
+            }
+        }
+    }
+
+    private fun installExtensionFromResponse(response: org.mozilla.geckoview.WebResponse, filename: String) {
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Pasang extension Mozilla?")
+                .setMessage("SakuTube menerima paket dari addons.mozilla.org. GeckoView akan memvalidasi paket dan meminta persetujuan izin sebelum pemasangan.")
+                .setPositiveButton("Lanjutkan") { _, _ ->
+                    storeExecutor.execute {
+                        var tempFile: File? = null
+                        try {
+                            tempFile = File.createTempFile("sakutube-addon-", ".xpi", cacheDir)
+                            val body = response.body ?: throw IOException("Respons extension kosong.")
+                            body.use { input -> tempFile!!.outputStream().use { output -> input.copyTo(output) } }
+                            val localUri = Uri.fromFile(tempFile!!).toString()
+                            runOnUiThread {
+                                runtime.webExtensionController.install(localUri, WebExtensionController.INSTALLATION_METHOD_FROM_FILE).accept(
+                                    { installed ->
+                                        if (installed != null) {
+                                            Toast.makeText(this, "Extension terpasang: " + (installed.metaData?.name ?: filename), Toast.LENGTH_LONG).show()
+                                            refreshInstalledExtension()
+                                            session.reload()
+                                        } else Toast.makeText(this, "Pemasangan tidak mengembalikan hasil.", Toast.LENGTH_LONG).show()
+                                        tempFile?.delete()
+                                    },
+                                    { error ->
+                                        Toast.makeText(this, "Pemasangan gagal: " + (error?.message ?: "extension tidak kompatibel"), Toast.LENGTH_LONG).show()
+                                        tempFile?.delete()
+                                    }
+                                )
+                            }
+                        } catch (error: Exception) {
+                            tempFile?.delete()
+                            runOnUiThread { Toast.makeText(this, "Gagal menyiapkan extension: " + (error.message ?: ""), Toast.LENGTH_LONG).show() }
+                        }
+                    }
+                }
+                .setNegativeButton("Batal") { _, _ -> try { response.body?.close() } catch (_: Exception) { } }
+                .setOnCancelListener { try { response.body?.close() } catch (_: Exception) { } }
+                .show()
+        }
+    }
+
+    private fun downloadResponse(response: org.mozilla.geckoview.WebResponse, filenameHint: String, contentType: String) {
+        val safeName = filenameHint.map { if (it.isLetterOrDigit() || it in "._-") it else '_' }.joinToString("").ifBlank { "download" }
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Unduh file?")
+                .setMessage("Simpan " + safeName + " ke folder Download?")
+                .setPositiveButton("Unduh") { _, _ ->
+                    storeExecutor.execute {
+                        var outputUri: Uri? = null
+                        try {
+                            val values = android.content.ContentValues().apply {
+                                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, safeName)
+                                put(android.provider.MediaStore.Downloads.MIME_TYPE, contentType.substringBefore(";").ifBlank { "application/octet-stream" })
+                                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                            }
+                            outputUri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                                ?: throw IOException("Android tidak bisa membuat file di Download.")
+                            val body = response.body ?: throw IOException("Respons unduhan kosong.")
+                            body.use { input -> contentResolver.openOutputStream(outputUri!!)?.use { output -> input.copyTo(output) } ?: throw IOException("Tidak bisa membuka file tujuan.") }
+                            val done = android.content.ContentValues().apply { put(android.provider.MediaStore.Downloads.IS_PENDING, 0) }
+                            contentResolver.update(outputUri!!, done, null, null)
+                            runOnUiThread { Toast.makeText(this, "File disimpan: Download/" + safeName, Toast.LENGTH_LONG).show() }
+                        } catch (error: Exception) {
+                            outputUri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) { } }
+                            try { response.body?.close() } catch (_: Exception) { }
+                            runOnUiThread { Toast.makeText(this, "Unduhan gagal: " + (error.message ?: ""), Toast.LENGTH_LONG).show() }
+                        }
+                    }
+                }
+                .setNegativeButton("Batal") { _, _ -> try { response.body?.close() } catch (_: Exception) { } }
+                .setOnCancelListener { try { response.body?.close() } catch (_: Exception) { } }
+                .show()
+        }
+    }
+
     private fun createPopupNavigationDelegate(): GeckoSession.NavigationDelegate {
         return object : GeckoSession.NavigationDelegate {
             override fun onNewSession(
