@@ -76,6 +76,7 @@ class YouTubeActivity : Activity() {
         val id: Long,
         val name: String,
         var bytesDownloaded: Long = 0L,
+        var totalBytes: Long = -1L,
         var status: String = "Menunggu",
         var outputUri: Uri? = null
     )
@@ -322,7 +323,8 @@ class YouTubeActivity : Activity() {
                 .setTitle("Unduh file?")
                 .setMessage("Simpan " + safeName + " ke folder Download? Progres tersedia di menu ↓.")
                 .setPositiveButton("Unduh") { _, _ ->
-                    val entry = DownloadEntry(nextDownloadId++, safeName)
+                    val totalBytes = response.headers.entries.firstOrNull { it.key.equals("content-length", true) }?.value?.toLongOrNull() ?: -1L
+                    val entry = DownloadEntry(nextDownloadId++, safeName, totalBytes = totalBytes)
                     trackedDownloads.add(0, entry)
                     storeExecutor.execute {
                         var outputUri: Uri? = null
@@ -760,9 +762,13 @@ class YouTubeActivity : Activity() {
             val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8)); background = roundedBackground(Color.rgb(32, 32, 32), 10) }
             card.addView(TextView(this).apply { text = item.name; setTextColor(Color.WHITE); textSize = 14f })
             val amount = if (item.bytesDownloaded >= 1024L * 1024L) String.format(java.util.Locale.US, "%.2f MB", item.bytesDownloaded / (1024.0 * 1024.0)) else "${item.bytesDownloaded / 1024} KB"
-            card.addView(TextView(this).apply { text = "$amount • ${item.status}"; setTextColor(Color.LTGRAY); textSize = 12f })
+            val progressText = if (item.totalBytes > 0L) " • " + ((item.bytesDownloaded * 100L / item.totalBytes).coerceIn(0L, 100L)) + "%" else ""
+            card.addView(TextView(this).apply { text = "$amount$progressText • ${item.status}"; setTextColor(Color.LTGRAY); textSize = 12f })
             if (item.status == "Mengunduh") {
-                val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true }
+                val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    isIndeterminate = item.totalBytes <= 0L
+                    if (item.totalBytes > 0L) { max = 100; this.progress = (item.bytesDownloaded * 100L / item.totalBytes).toInt().coerceIn(0, 100) }
+                }
                 card.addView(progress, LinearLayout.LayoutParams(-1, dp(6)))
             } else if (item.status == "Selesai") {
                 card.addView(makeButton("Buka file", 12f, 4, 2) {
