@@ -51,6 +51,7 @@ class YouTubeActivity : Activity() {
     private lateinit var zoomLockButton: TextView
     private lateinit var runtime: GeckoRuntime
     private var uboExtension: WebExtension? = null
+    private var autoDubExtension: WebExtension? = null
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
@@ -90,6 +91,7 @@ class YouTubeActivity : Activity() {
 
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
+        installBundledAutoDub()
         backgroundAudioEnabled = browserPrefs.getBoolean("background_audio", true)
         pipEnabled = browserPrefs.getBoolean("pip_enabled", true)
         zoomLocked = browserPrefs.getBoolean("zoom_locked", false)
@@ -1277,6 +1279,34 @@ class YouTubeActivity : Activity() {
                     ).show()
                 }
             )
+    }
+
+    /**
+     * Install the bundled Auto Dub WebExtension from APK assets. This keeps the
+     * feature inside SakuTube; users do not need to import an XPI manually.
+     */
+    private fun installBundledAutoDub() {
+        runtime.webExtensionController.installBuiltIn(
+            "resource://android/assets/extensions/saku-auto-dub/"
+        ).accept(
+            { extension ->
+                autoDubExtension = extension
+                runOnUiThread {
+                    if (extension != null) {
+                        Toast.makeText(this, "SakuTube Auto Dub siap · aktif saat subtitle YouTube tersedia", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            { error ->
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        "Auto Dub belum dapat dimuat: " + (error?.message ?: "GeckoView gagal memuat extension"),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        )
     }
 
     private fun refreshInstalledExtension() {
