@@ -41,28 +41,26 @@
     originalVolume = null;
   }
   function speak(text) {
-    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      status("Auto Dub: TTS tidak tersedia pada mesin browser ini");
-      return;
-    }
-    try {
-      speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "id-ID";
-      utterance.rate = Number(prefs.rate) || 1;
-      utterance.volume = Math.max(0, Math.min(1, Number(prefs.volume)));
-      const voices = speechSynthesis.getVoices();
-      const voice = voices.find(item => /^id(-|_)?ID$/i.test(item.lang)) ||
-                    voices.find(item => /^id/i.test(item.lang));
-      if (voice) utterance.voice = voice;
-      utterance.onstart = () => { lowerOriginal(); status("SakuTube Auto Dub: suara Indonesia"); };
-      utterance.onend = () => { restoreOriginal(); status("Auto Dub aktif · menunggu subtitle"); };
-      utterance.onerror = () => { restoreOriginal(); status("Auto Dub: suara gagal, periksa TTS Android"); };
-      speechSynthesis.speak(utterance);
-    } catch (_) {
-      restoreOriginal();
-      status("Auto Dub: tidak dapat memulai suara");
-    }
+    const v = video();
+    const previousVolume = v ? v.volume : null;
+    if (v && prefs.duckOriginal) v.volume = Math.min(v.volume, 0.08);
+    status("Auto Dub: meminta suara Indonesia dari Android…");
+    browser.runtime.sendMessage({ type: "SAKU_SPEAK", text: text }).then(result => {
+      if (!result || !result.ok) {
+        if (v && previousVolume !== null) v.volume = previousVolume;
+        status("Auto Dub: TTS Android gagal · periksa mesin suara");
+        return;
+      }
+      status("SakuTube Auto Dub: suara Indonesia");
+      const estimatedMs = Math.max(2200, Math.min(18000, text.length * 75));
+      setTimeout(() => {
+        if (v && previousVolume !== null) v.volume = previousVolume;
+        status("Auto Dub aktif · menunggu subtitle");
+      }, estimatedMs);
+    }).catch(() => {
+      if (v && previousVolume !== null) v.volume = previousVolume;
+      status("Auto Dub: jembatan suara Android gagal");
+    });
   }
   async function translate(text) {
     if (translating) { queued = text; return; }
