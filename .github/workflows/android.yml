@@ -8,6 +8,7 @@ on:
       - feature/saku-desktop-overhaul
       - feature/saku-trackpad-integration
       - feature/saku-droidos-minimal-desktop
+      - feature/sakutube-audio-miniplayer
   pull_request:
     branches:
       - main
