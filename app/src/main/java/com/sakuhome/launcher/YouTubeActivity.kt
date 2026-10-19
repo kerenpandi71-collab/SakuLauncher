@@ -72,6 +72,15 @@ class YouTubeActivity : Activity() {
     private val browserTabs = mutableListOf<BrowserTab>()
     private var nextTabId = 1
     private var tabsDialog: AlertDialog? = null
+    private data class DownloadEntry(
+        val id: Long,
+        val name: String,
+        var bytesDownloaded: Long = 0L,
+        var status: String = "Menunggu",
+        var outputUri: Uri? = null
+    )
+    private val trackedDownloads = mutableListOf<DownloadEntry>()
+    private var nextDownloadId = 1L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -311,8 +320,10 @@ class YouTubeActivity : Activity() {
         runOnUiThread {
             AlertDialog.Builder(this)
                 .setTitle("Unduh file?")
-                .setMessage("Simpan " + safeName + " ke folder Download?")
+                .setMessage("Simpan " + safeName + " ke folder Download? Progres tersedia di menu ↓.")
                 .setPositiveButton("Unduh") { _, _ ->
+                    val entry = DownloadEntry(nextDownloadId++, safeName)
+                    trackedDownloads.add(0, entry)
                     storeExecutor.execute {
                         var outputUri: Uri? = null
                         try {
@@ -323,15 +334,32 @@ class YouTubeActivity : Activity() {
                             }
                             outputUri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                                 ?: throw IOException("Android tidak bisa membuat file di Download.")
+                            entry.outputUri = outputUri
+                            entry.status = "Mengunduh"
                             val body = response.body ?: throw IOException("Respons unduhan kosong.")
-                            body.use { input -> contentResolver.openOutputStream(outputUri!!)?.use { output -> input.copyTo(output) } ?: throw IOException("Tidak bisa membuka file tujuan.") }
+                            body.use { input ->
+                                val output = contentResolver.openOutputStream(outputUri!!) ?: throw IOException("Tidak bisa membuka file tujuan.")
+                                output.use { sink ->
+                                    val buffer = ByteArray(32 * 1024)
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        if (count == 0) continue
+                                        sink.write(buffer, 0, count)
+                                        entry.bytesDownloaded += count
+                                        runOnUiThread { refreshDownloadsDialogIfOpen() }
+                                    }
+                                }
+                            }
                             val done = android.content.ContentValues().apply { put(android.provider.MediaStore.Downloads.IS_PENDING, 0) }
                             contentResolver.update(outputUri!!, done, null, null)
-                            runOnUiThread { Toast.makeText(this, "File disimpan: Download/" + safeName, Toast.LENGTH_LONG).show() }
+                            entry.status = "Selesai"
+                            runOnUiThread { Toast.makeText(this, "File disimpan: Download/" + safeName, Toast.LENGTH_LONG).show(); refreshDownloadsDialogIfOpen() }
                         } catch (error: Exception) {
                             outputUri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) { } }
                             try { response.body?.close() } catch (_: Exception) { }
-                            runOnUiThread { Toast.makeText(this, "Unduhan gagal: " + (error.message ?: ""), Toast.LENGTH_LONG).show() }
+                            entry.status = "Gagal: " + (error.message ?: "kesalahan")
+                            runOnUiThread { Toast.makeText(this, "Unduhan gagal: " + (error.message ?: ""), Toast.LENGTH_LONG).show(); refreshDownloadsDialogIfOpen() }
                         }
                     }
                 }
@@ -356,6 +384,8 @@ class YouTubeActivity : Activity() {
                     )
                     popupSession.settings.setSuspendMediaWhenInactive(false)
                     popupSession.setNavigationDelegate(createPopupNavigationDelegate())
+                    popupSession.setProgressDelegate(createProgressDelegate())
+                    popupSession.setContentDelegate(createDownloadContentDelegate())
                     popupSession.open(runtime)
                     popupSessions.add(popupSession)
                     showInAppPopup(popupSession, uri)
@@ -688,12 +718,66 @@ class YouTubeActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
+    private var downloadsDialog: AlertDialog? = null
+
     private fun showDownloadsMenu() {
         AlertDialog.Builder(this).setTitle("Unduhan")
-            .setItems(arrayOf("Unduh URL saat ini", "Buka daftar unduhan Android")) { _, which ->
-                if (which == 0) downloadCurrentUrl() else openDownloads()
+            .setItems(arrayOf("Lihat progres unduhan SakuTube", "Unduh URL saat ini", "Buka daftar unduhan Android")) { _, which ->
+                when (which) {
+                    0 -> showTrackedDownloads()
+                    1 -> downloadCurrentUrl()
+                    else -> openDownloads()
+                }
             }
             .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun showTrackedDownloads() {
+        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        container.addView(list, LinearLayout.LayoutParams(-1, -2))
+        container.addView(makeButton("Segarkan", 13f, 8, 4) { populateTrackedDownloads(list) })
+        downloadsDialog = AlertDialog.Builder(this).setTitle("Progres unduhan").setView(ScrollView(this).apply { addView(container) }).setNegativeButton("Tutup", null).create()
+        populateTrackedDownloads(list)
+        downloadsDialog?.show()
+        downloadsDialog?.window?.setLayout((resources.displayMetrics.widthPixels * 0.94f).toInt(), (resources.displayMetrics.heightPixels * 0.75f).toInt())
+    }
+
+    private fun refreshDownloadsDialogIfOpen() {
+        val dialog = downloadsDialog ?: return
+        if (!dialog.isShowing) return
+        val scroll = dialog.findViewById<ScrollView>(android.R.id.content) ?: return
+        val container = scroll.getChildAt(0) as? LinearLayout ?: return
+        val list = container.getChildAt(0) as? LinearLayout ?: return
+        populateTrackedDownloads(list)
+    }
+
+    private fun populateTrackedDownloads(list: LinearLayout) {
+        list.removeAllViews()
+        if (trackedDownloads.isEmpty()) {
+            list.addView(TextView(this).apply { text = "Belum ada unduhan dari SakuTube."; setTextColor(Color.LTGRAY); setPadding(0, dp(12), 0, dp(12)) })
+            return
+        }
+        trackedDownloads.toList().forEach { item ->
+            val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8)); background = roundedBackground(Color.rgb(32, 32, 32), 10) }
+            card.addView(TextView(this).apply { text = item.name; setTextColor(Color.WHITE); textSize = 14f })
+            val amount = if (item.bytesDownloaded >= 1024L * 1024L) String.format(java.util.Locale.US, "%.2f MB", item.bytesDownloaded / (1024.0 * 1024.0)) else "${item.bytesDownloaded / 1024} KB"
+            card.addView(TextView(this).apply { text = "$amount • ${item.status}"; setTextColor(Color.LTGRAY); textSize = 12f })
+            if (item.status == "Mengunduh") {
+                val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true }
+                card.addView(progress, LinearLayout.LayoutParams(-1, dp(6)))
+            } else if (item.status == "Selesai") {
+                card.addView(makeButton("Buka file", 12f, 4, 2) {
+                    item.outputUri?.let { uri ->
+                        try { startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, contentResolver.getType(uri) ?: "*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                        catch (_: Exception) { Toast.makeText(this, "Tidak ada aplikasi untuk membuka file ini.", Toast.LENGTH_SHORT).show() }
+                    }
+                })
+            }
+            val params = LinearLayout.LayoutParams(-1, -2)
+            params.bottomMargin = dp(8)
+            list.addView(card, params)
+        }
     }
 
     private fun openDownloads() {
