@@ -260,7 +260,22 @@ class YouTubeActivity : Activity() {
                         var tempFile: File? = null
                         try {
                             tempFile = File.createTempFile("sakutube-addon-", ".xpi", cacheDir)
-                            val body = response.body ?: throw IOException("Respons extension kosong.")
+                            val body = response.body
+                            if (body == null) {
+                                runOnUiThread {
+                                    runtime.webExtensionController.install(response.uri, WebExtensionController.INSTALLATION_METHOD_MANAGER).accept(
+                                        { installed ->
+                                            if (installed != null) {
+                                                Toast.makeText(this, "Extension terpasang: " + (installed.metaData?.name ?: filename), Toast.LENGTH_LONG).show()
+                                                refreshInstalledExtension()
+                                                session.reload()
+                                            } else Toast.makeText(this, "Pemasangan tidak mengembalikan hasil.", Toast.LENGTH_LONG).show()
+                                        },
+                                        { error -> Toast.makeText(this, "Pemasangan gagal: " + (error?.message ?: ""), Toast.LENGTH_LONG).show() }
+                                    )
+                                }
+                                return@execute
+                            }
                             body.use { input -> tempFile!!.outputStream().use { output -> input.copyTo(output) } }
                             val localUri = Uri.fromFile(tempFile!!).toString()
                             runOnUiThread {
@@ -601,14 +616,22 @@ class YouTubeActivity : Activity() {
 
     private fun recordHistory(url: String) {
         if (!url.startsWith("http://") && !url.startsWith("https://")) return
-        val history = browserPrefs.getStringSet("history_urls", emptySet())?.toMutableList() ?: mutableListOf()
+        val history = try {
+            val saved = org.json.JSONArray(browserPrefs.getString("history_json", "[]") ?: "[]")
+            (0 until saved.length()).mapNotNull { saved.optString(it).takeIf { value -> value.isNotBlank() } }.toMutableList()
+        } catch (_: Exception) { mutableListOf() }
         history.remove(url)
         history.add(0, url)
-        browserPrefs.edit().putStringSet("history_urls", history.take(300).toSet()).apply()
+        val ordered = org.json.JSONArray()
+        history.take(300).forEach { ordered.put(it) }
+        browserPrefs.edit().putString("history_json", ordered.toString()).apply()
     }
 
     private fun showHistory() {
-        val history = browserPrefs.getStringSet("history_urls", emptySet())?.toList()?.sortedDescending() ?: emptyList()
+        val history = try {
+            val saved = org.json.JSONArray(browserPrefs.getString("history_json", "[]") ?: "[]")
+            (0 until saved.length()).mapNotNull { saved.optString(it).takeIf { value -> value.isNotBlank() } }
+        } catch (_: Exception) { emptyList() }
         if (history.isEmpty()) {
             AlertDialog.Builder(this).setTitle("Riwayat penelusuran")
                 .setMessage("Belum ada riwayat yang tersimpan.")
@@ -626,7 +649,7 @@ class YouTubeActivity : Activity() {
                 AlertDialog.Builder(this).setTitle("Hapus riwayat?")
                     .setMessage("Semua riwayat penelusuran SakuTube akan dihapus. Cookie dan sesi login tidak ikut dihapus.")
                     .setPositiveButton("Hapus") { _, _ ->
-                        browserPrefs.edit().remove("history_urls").apply()
+                        browserPrefs.edit().remove("history_json").remove("history_urls").apply()
                         Toast.makeText(this, "Riwayat dihapus.", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Batal", null).show()
