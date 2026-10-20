@@ -467,8 +467,12 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             clipToPadding = false
             clipChildren = false
-            // Fixed compact layout: no configurable vertical icon-position mode.
-            setPadding(dp(2), dp(40), dp(2), dp(12))
+            // Vertical placement is configurable; drag-and-drop reorders shortcuts like a normal launcher.
+            setPadding(dp(2), dp(homeGridTopPaddingDp()), dp(2), dp(12))
+            setOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                val desired = dp(homeGridTopPaddingDp())
+                if (paddingTop != desired) setPadding(dp(2), desired, dp(2), dp(12))
+            }
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -1556,7 +1560,10 @@ class MainActivity : Activity() {
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
             "SakuTube · YouTube di dalam aplikasi",
-            "Baca log error untuk analisis"
+            "Baca log error untuk analisis",
+            "Label nama ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
+            "Tambahkan widget ke layar utama",
+            "Posisi ikon layar utama · ${homeIconPositionLabel()}"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1610,6 +1617,13 @@ class MainActivity : Activity() {
                     17 -> showPermissionInfo()
                     18 -> openYouTubeWeb()
                     19 -> showDiagnosticLog()
+                    20 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
+                        buildScreen()
+                        Toast.makeText(this, if (hideLabels) "Label ikon disembunyikan" else "Label ikon ditampilkan", Toast.LENGTH_SHORT).show()
+                    }
+                    21 -> showWidgetInfo()
+                    22 -> chooseHomeIconPosition()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
@@ -1908,6 +1922,22 @@ class MainActivity : Activity() {
         "top" -> "Atas"
         "bottom" -> "Bawah"
         else -> "Tengah"
+    }
+
+    private fun homeGridTopPaddingDp(): Int {
+        val position = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+        if (position == "top") return 8
+        // Reserve a predictable vertical offset so icons can start in the middle or lower area.
+        val rows = ((homeApps().size + preferences.getInt(KEY_HOME_GRID_COLUMNS, 5).coerceIn(3, 6) - 1) /
+            preferences.getInt(KEY_HOME_GRID_COLUMNS, 5).coerceIn(3, 6)).coerceAtLeast(1)
+        val rowHeight = if (hideLabels) 76 else 92
+        val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
+        val fixedUiDp = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 180 else 250
+        val freeSpace = (screenHeightDp - fixedUiDp - rows * rowHeight).coerceAtLeast(8)
+        return when (position) {
+            "bottom" -> (freeSpace + 8).coerceAtMost(320)
+            else -> (freeSpace / 2 + 8).coerceAtMost(220)
+        }
     }
 
     private fun chooseHomePageCount() {
