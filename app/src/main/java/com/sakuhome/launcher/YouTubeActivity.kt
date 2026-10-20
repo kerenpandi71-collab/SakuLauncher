@@ -154,6 +154,7 @@ class YouTubeActivity : Activity() {
         installBundledAutoDub()
         backgroundAudioEnabled = browserPrefs.getBoolean("background_audio", true)
         pipEnabled = browserPrefs.getBoolean("pip_enabled", true)
+        desktopSiteEnabled = browserPrefs.getBoolean("desktop_site_enabled", false)
         zoomLocked = browserPrefs.getBoolean("zoom_locked", false)
         zoomFactor = browserPrefs.getFloat("zoom_factor", 1.0f).coerceIn(0.7f, 1.6f)
         runtime.settings.setAutomaticFontSizeAdjustment(false)
@@ -161,7 +162,8 @@ class YouTubeActivity : Activity() {
         session = GeckoSession(
             GeckoSessionSettings.Builder()
                 .allowJavascript(true)
-                .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .viewportMode(if (desktopSiteEnabled) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .userAgentMode(if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
                 .build()
         )
         session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
@@ -443,10 +445,14 @@ class YouTubeActivity : Activity() {
                     // Treat window.open()/target=_blank as a normal browser tab, not a
                     // modal dialog. OAuth and extension sign-in flows often need to
                     // navigate through several redirects and must remain visible.
+                    val sourceTab = browserTabs.firstOrNull { it.session === sourceSession }
+                    val inheritPrivateMode = sourceTab?.privateMode == true
                     val newSession = GeckoSession(
                         GeckoSessionSettings.Builder()
                             .allowJavascript(true)
-                            .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                            .usePrivateMode(inheritPrivateMode)
+                            .viewportMode(if (desktopSiteEnabled) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                            .userAgentMode(if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
                             .build()
                     )
                     newSession.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
@@ -460,7 +466,8 @@ class YouTubeActivity : Activity() {
                         nextTabId++,
                         newSession,
                         startUrl,
-                        Uri.parse(startUrl).host ?: "Login / Tab baru"
+                        Uri.parse(startUrl).host ?: "Login / Tab baru",
+                        inheritPrivateMode
                     )
                     browserTabs.add(tab)
                     runOnUiThread {
@@ -547,14 +554,14 @@ class YouTubeActivity : Activity() {
                     val result = GeckoResult<WebExtension.PermissionPromptResponse>()
                     val name = extension.metaData.name ?: extension.id ?: "Extension"
                     val permissionText = buildString {
-                        append("Extension: ").append(name).append("\\n\\n")
+                        append("Extension: ").append(name).append("\n\n")
                         if (permissions.isNotEmpty()) {
-                            append("Izin: ").append(permissions.joinToString(", ")).append("\\n")
+                            append("Izin: ").append(permissions.joinToString(", ")).append("\n")
                         }
                         if (origins.isNotEmpty()) {
-                            append("Akses situs: ").append(origins.joinToString(", ")).append("\\n")
+                            append("Akses situs: ").append(origins.joinToString(", ")).append("\n")
                         }
-                        append("\\nPasang hanya jika kamu mempercayai extension ini.")
+                        append("\nPasang hanya jika kamu mempercayai extension ini.")
                     }
                     runOnUiThread {
                         if (isFinishing || isDestroyed) {
@@ -631,7 +638,8 @@ class YouTubeActivity : Activity() {
         try {
             val settings = GeckoSessionSettings.Builder()
                 .allowJavascript(true)
-                .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .viewportMode(if (desktopSiteEnabled) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                .userAgentMode(if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
                 .usePrivateMode(privateMode)
                 .build()
             val newSession = GeckoSession(settings)
@@ -1449,6 +1457,7 @@ class YouTubeActivity : Activity() {
 
     private fun toggleDesktopMode() {
         desktopSiteEnabled = !desktopSiteEnabled
+        browserPrefs.edit().putBoolean("desktop_site_enabled", desktopSiteEnabled).apply()
         val settings = session.settings
         settings.setUserAgentMode(
             if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
