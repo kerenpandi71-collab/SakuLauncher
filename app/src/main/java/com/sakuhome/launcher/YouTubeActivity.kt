@@ -85,8 +85,14 @@ class YouTubeActivity : Activity() {
     private val trackedDownloads = mutableListOf<DownloadEntry>()
     private var nextDownloadId = 1L
 
+    companion object {
+        @Volatile private var crashHandlerInstalled = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installSakuCrashHandler()
+        recordSakuEvent("YouTubeActivity.onCreate", "SakuTube mulai dibuat; intentAction=${intent?.action ?: "null"}; dataScheme=${intent?.data?.scheme ?: "null"}")
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
 
@@ -218,6 +224,57 @@ class YouTubeActivity : Activity() {
         session.loadUri(initialUrl)
         recordHistory(initialUrl)
         updateTabsButton()
+    }
+
+    /**
+     * Keep crash diagnostics in the same preferences file read by MainActivity.
+     * A process-level handler captures uncaught Kotlin/Java exceptions before Android
+     * terminates the process; normal caught errors are recorded with a stage label.
+     */
+    private fun installSakuCrashHandler() {
+        synchronized(YouTubeActivity::class.java) {
+            if (crashHandlerInstalled) return
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                try {
+                    val prefs = getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
+                    val report = buildString {
+                        appendLine("=== UNCAUGHT CRASH ===")
+                        appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine("Thread: ${thread.name} (id=${thread.id})")
+                        appendLine("Activity: YouTubeActivity / SakuTube")
+                        appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+                        appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+                        appendLine("Exception: ${error.javaClass.name}: ${error.message}")
+                        appendLine(android.util.Log.getStackTraceString(error))
+                    }
+                    val previousLog = prefs.getString("saku_recent_errors", "").orEmpty()
+                    prefs.edit().putString("saku_recent_errors", (report + "\\n" + previousLog).take(18000)).commit()
+                } catch (_: Throwable) { }
+                try { previous?.uncaughtException(thread, error) } catch (_: Throwable) { }
+            }
+            crashHandlerInstalled = true
+        }
+    }
+
+    private fun recordSakuEvent(stage: String, detail: String, error: Throwable? = null) {
+        try {
+            val line = buildString {
+                append("[")
+                append(java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                append("] ")
+                append(stage)
+                append(": ")
+                append(detail)
+                if (error != null) {
+                    appendLine()
+                    append(android.util.Log.getStackTraceString(error))
+                }
+            }
+            val prefs = getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
+            val previous = prefs.getString("saku_recent_errors", "").orEmpty()
+            prefs.edit().putString("saku_recent_errors", (line + "\\n" + previous).take(18000)).apply()
+        } catch (_: Exception) { }
     }
 
     /**
@@ -371,6 +428,7 @@ class YouTubeActivity : Activity() {
                             entry.status = "Selesai"
                             runOnUiThread { Toast.makeText(this, "File disimpan: Download/" + safeName, Toast.LENGTH_LONG).show(); refreshDownloadsDialogIfOpen() }
                         } catch (error: Exception) {
+                            recordSakuEvent("downloadResponse", "filename=${safeName}; contentType=${contentType}; bytes=${entry.bytesDownloaded}", error)
                             outputUri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) { } }
                             try { response.body?.close() } catch (_: Exception) { }
                             entry.status = "Gagal: " + (error.message ?: "kesalahan")
@@ -1286,6 +1344,7 @@ class YouTubeActivity : Activity() {
                 else Toast.makeText(this, "Tidak ada aplikasi yang dapat membuka tautan ini.", Toast.LENGTH_LONG).show()
             }
         } catch (error: Exception) {
+            recordSakuEvent("openExternalLink", "url=${raw.take(500)}", error)
             Toast.makeText(this, "Tautan tidak dapat dibuka: ${error.message ?: "aplikasi tujuan tidak tersedia"}", Toast.LENGTH_LONG).show()
         }
     }
@@ -1479,6 +1538,7 @@ class YouTubeActivity : Activity() {
     }
 
     override fun onDestroy() {
+        recordSakuEvent("YouTubeActivity.onDestroy", "finishing=$isFinishing; destroyed=$isDestroyed")
         if (::geckoView.isInitialized) geckoView.releaseSession()
         browserTabs.forEach { try { it.session.close() } catch (_: Exception) { } }
         browserTabs.clear()
