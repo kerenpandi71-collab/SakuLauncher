@@ -211,6 +211,11 @@ class MainActivity : Activity() {
         applyDisplayAwareOrientation()
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
+        val firstPage = homePackages(0)
+        if (INTERNAL_SAKUTUBE_PACKAGE !in firstPage) {
+            firstPage.add(0, INTERNAL_SAKUTUBE_PACKAGE)
+            saveHomePackages(firstPage, 0)
+        }
         buildScreen()
         restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
@@ -1217,10 +1222,15 @@ class MainActivity : Activity() {
     private fun loadApps(): List<LaunchableApp> {
         val queryIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
-        return matches.filter { it.activityInfo.packageName != packageName }
+        val installed = matches.filter { it.activityInfo.packageName != packageName }
             .distinctBy { it.activityInfo.packageName }
             .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, loadThemedIcon(info)) }
-            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+        val sakuTubeShortcut = LaunchableApp(
+            "SakuTube",
+            INTERNAL_SAKUTUBE_PACKAGE,
+            packageManager.getApplicationIcon(packageName)
+        )
+        return (installed + sakuTubeShortcut).sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
     private fun componentMatches(component: String, targetPackage: String, targetActivity: String): Boolean {
@@ -1324,6 +1334,10 @@ class MainActivity : Activity() {
 
     private fun launch(app: LaunchableApp) {
         hideStartPanel()
+        if (app.packageName == INTERNAL_SAKUTUBE_PACKAGE) {
+            openYouTubeWeb()
+            return
+        }
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
@@ -1338,6 +1352,23 @@ class MainActivity : Activity() {
     }
 
     private fun showAppMenu(app: LaunchableApp) {
+        if (app.packageName == INTERNAL_SAKUTUBE_PACKAGE) {
+            val isHome = homePackages().contains(INTERNAL_SAKUTUBE_PACKAGE)
+            val actions = if (isHome) arrayOf("Buka SakuTube", "Hapus dari layar utama") else arrayOf("Buka SakuTube", "Tambahkan ke layar utama")
+            AlertDialog.Builder(this).setTitle("SakuTube").setItems(actions) { _, which ->
+                when (which) {
+                    0 -> openYouTubeWeb()
+                    1 -> {
+                        val current = homePackages()
+                        if (isHome) current.remove(INTERNAL_SAKUTUBE_PACKAGE) else current.add(0, INTERNAL_SAKUTUBE_PACKAGE)
+                        saveHomePackages(current)
+                        pinnedAdapter.notifyDataSetChanged()
+                        Toast.makeText(this, if (isHome) "SakuTube dihapus dari layar utama" else "SakuTube ditambahkan ke layar utama", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.setNegativeButton("Tutup", null).show()
+            return
+        }
         val isHome = homePackages().contains(app.packageName)
         val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
         val isPinned = pinnedPackages().contains(app.packageName)
@@ -2815,6 +2846,7 @@ class MainActivity : Activity() {
     companion object {
         private const val EXTRA_SECONDARY_DISPLAY_LAUNCH = "com.sakuhome.launcher.EXTRA_SECONDARY_DISPLAY_LAUNCH"
         private const val PREFS_NAME = "saku_dock_settings"
+        private const val INTERNAL_SAKUTUBE_PACKAGE = "com.sakuhome.launcher.internal.SAKUTUBE"
         private const val KEY_PINNED = "pinned_packages_order"
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
