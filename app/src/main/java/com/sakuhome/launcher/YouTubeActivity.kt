@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -388,12 +389,12 @@ class YouTubeActivity : Activity() {
             override fun onLoadRequest(
                 session: GeckoSession,
                 request: GeckoSession.NavigationDelegate.LoadRequest
-            ): GeckoResult<GeckoSession.NavigationDelegate.AllowOrDeny>? {
+            ): GeckoResult<AllowOrDeny>? {
                 val uri = request.uri
                 val scheme = Uri.parse(uri).scheme?.lowercase()
                 if (scheme !in setOf("http", "https", "about", "resource", "moz-extension", "data", "blob", "file")) {
                     runOnUiThread { openExternalLink(uri) }
-                    return GeckoResult.fromValue(GeckoSession.NavigationDelegate.AllowOrDeny.DENY)
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 return null
             }
