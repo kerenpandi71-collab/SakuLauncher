@@ -21,9 +21,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
-import java.util.Locale
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -54,11 +51,6 @@ class YouTubeActivity : Activity() {
     private lateinit var zoomLockButton: TextView
     private lateinit var runtime: GeckoRuntime
     private var uboExtension: WebExtension? = null
-    private var autoDubExtension: WebExtension? = null
-    private var autoDubTts: TextToSpeech? = null
-    private var autoDubTtsReady = false
-    private var autoDubPendingText: String? = null
-    private val autoDubSpeakResults = java.util.concurrent.ConcurrentHashMap<String, GeckoResult<Any>>()
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
@@ -70,6 +62,7 @@ class YouTubeActivity : Activity() {
     private var swipeStartY = 0f
     private val browserPrefs by lazy { getSharedPreferences("sakutube_browser", MODE_PRIVATE) }
 
+    private val homeUrl = "resource://android/assets/sakutube-home.html"
     private val uboId = "uBlock0@raymondhill.net"
     private val uboXpiUrl = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
     private val pickExtensionRequest = 4207
@@ -96,62 +89,8 @@ class YouTubeActivity : Activity() {
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
 
-        autoDubTts = TextToSpeech(this) { status ->
-            runOnUiThread {
-                val engineReady = status == TextToSpeech.SUCCESS
-                val languageResult = if (engineReady) {
-                    try { autoDubTts?.setLanguage(Locale("id", "ID")) ?: TextToSpeech.LANG_NOT_SUPPORTED }
-                    catch (_: Exception) { TextToSpeech.LANG_NOT_SUPPORTED }
-                } else {
-                    TextToSpeech.LANG_NOT_SUPPORTED
-                }
-                autoDubTtsReady = engineReady && languageResult >= TextToSpeech.LANG_AVAILABLE
-                if (autoDubTtsReady) {
-                    val pending = autoDubPendingText
-                    autoDubPendingText = null
-                    if (!pending.isNullOrBlank()) {
-                        try {
-                            autoDubTts?.speak(pending, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
-                        } catch (_: Exception) {
-                            Toast.makeText(this, "Mesin TTS gagal membacakan teks.", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                } else {
-                    Toast.makeText(
-                        this,
-                        if (!engineReady)
-                            "Auto Dub perlu mesin TTS Android. Pasang/aktifkan mesin Text-to-Speech di Setelan."
-                        else
-                            "Suara Indonesia belum tersedia. Buka Setelan > Text-to-speech > instal data suara Bahasa Indonesia.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-        autoDubTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-
-            override fun onDone(utteranceId: String?) {
-                utteranceId?.let { id ->
-                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", true))
-                }
-            }
-
-            override fun onError(utteranceId: String?) {
-                utteranceId?.let { id ->
-                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", false).put("error", "TTS gagal membacakan teks"))
-                }
-            }
-
-            override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                utteranceId?.let { id ->
-                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", false).put("error", "Pembacaan dihentikan"))
-                }
-            }
-        })
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
-        installBundledAutoDub()
         backgroundAudioEnabled = browserPrefs.getBoolean("background_audio", true)
         pipEnabled = browserPrefs.getBoolean("pip_enabled", true)
         desktopSiteEnabled = browserPrefs.getBoolean("desktop_site_enabled", false)
@@ -272,9 +211,9 @@ class YouTubeActivity : Activity() {
         updateZoomLabel()
 
         refreshInstalledExtension()
-        val initialUrl = intent.getStringExtra("sakutube_url") ?: "https://m.youtube.com/"
-        browserTabs.add(BrowserTab(nextTabId++, session, initialUrl, "Tab 1"))
-        addressField.setText(initialUrl)
+        val initialUrl = intent.getStringExtra("sakutube_url")?.takeIf { it.isNotBlank() } ?: homeUrl
+        browserTabs.add(BrowserTab(nextTabId++, session, initialUrl, if (initialUrl == homeUrl) "Beranda SakuTube" else "Tab 1"))
+        addressField.setText(if (initialUrl == homeUrl) "SakuTube • Beranda" else initialUrl)
         session.loadUri(initialUrl)
         recordHistory(initialUrl)
         updateTabsButton()
@@ -293,7 +232,7 @@ class YouTubeActivity : Activity() {
                         tab.url = url
                         if (tab.title == "Tab baru" || tab.title == "Tab Samaran" || tab.title == "Tab 1") tab.title = Uri.parse(url).host ?: url
                     }
-                    if (this@YouTubeActivity.session === session && ::addressField.isInitialized) addressField.setText(url)
+                    if (this@YouTubeActivity.session === session && ::addressField.isInitialized) addressField.setText(if (url == homeUrl) "SakuTube • Beranda" else url)
                     updateTabsButton()
                     if (tab?.privateMode != true) recordHistory(url)
                 }
@@ -648,8 +587,8 @@ class YouTubeActivity : Activity() {
             newSession.setNavigationDelegate(createPopupNavigationDelegate())
             newSession.setProgressDelegate(createProgressDelegate())
             newSession.setContentDelegate(createDownloadContentDelegate())
-            val url = "https://m.youtube.com/"
-            val tab = BrowserTab(nextTabId++, newSession, url, if (privateMode) "Tab Samaran" else "Tab baru", privateMode)
+            val url = homeUrl
+            val tab = BrowserTab(nextTabId++, newSession, url, if (privateMode) "Tab Samaran" else "Beranda SakuTube", privateMode)
             browserTabs.add(tab)
             switchToTab(tab.id)
             newSession.loadUri(url)
@@ -673,10 +612,10 @@ class YouTubeActivity : Activity() {
     private fun closeTab(id: Int) {
         val tab = browserTabs.firstOrNull { it.id == id } ?: return
         if (browserTabs.size <= 1) {
-            tab.session.loadUri("https://m.youtube.com/")
-            tab.url = "https://m.youtube.com/"
-            tab.title = "Tab baru"
-            addressField.setText(tab.url)
+            tab.session.loadUri(homeUrl)
+            tab.url = homeUrl
+            tab.title = "Beranda SakuTube"
+            addressField.setText("SakuTube • Beranda")
             updateTabsButton()
             return
         }
@@ -1370,72 +1309,6 @@ class YouTubeActivity : Activity() {
             )
     }
 
-    /**
-     * Install the bundled Auto Dub WebExtension from APK assets. This keeps the
-     * feature inside SakuTube; users do not need to import an XPI manually.
-     */
-    private fun installBundledAutoDub() {
-        runtime.webExtensionController.installBuiltIn(
-            "resource://android/assets/extensions/saku-auto-dub/"
-        ).accept(
-            { extension ->
-                autoDubExtension = extension
-                extension?.setMessageDelegate(object : WebExtension.MessageDelegate {
-                    override fun onMessage(nativeApp: String, message: Any, sender: WebExtension.MessageSender): GeckoResult<Any>? {
-                        val data = message as? JSONObject ?: return GeckoResult.fromValue(JSONObject().put("ok", false))
-                        val type = data.optString("type")
-                        if (type == "SPEAK_TEXT") {
-                            val text = data.optString("text").trim().take(700)
-                            if (text.isEmpty()) return GeckoResult.fromValue(JSONObject().put("ok", false).put("error", "Teks kosong"))
-                            val speakResult = GeckoResult<Any>()
-                            runOnUiThread {
-                                if (autoDubTtsReady && autoDubTts != null) {
-                                    val utteranceId = "saku-auto-dub-${System.nanoTime()}"
-                                    autoDubSpeakResults[utteranceId] = speakResult
-                                    val result = try {
-                                        autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) ?: TextToSpeech.ERROR
-                                    } catch (_: Exception) {
-                                        TextToSpeech.ERROR
-                                    }
-                                    if (result == TextToSpeech.ERROR) {
-                                        autoDubSpeakResults.remove(utteranceId)
-                                        speakResult.complete(JSONObject().put("ok", false).put("error", "Mesin TTS gagal membacakan teks"))
-                                    }
-                                } else {
-                                    // Do not play a stale subtitle later after the browser has moved on.
-                                    speakResult.complete(JSONObject().put("ok", false).put("error", "TTS Indonesia belum siap"))
-                                    Toast.makeText(
-                                        this@YouTubeActivity,
-                                        "TTS belum siap. Periksa mesin TTS dan data suara Bahasa Indonesia di Setelan.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                            // Keep the native-message request open until Android TTS actually finishes.
-                            return speakResult
-                        }
-                        if (type == "STOP_SPEECH") { runOnUiThread { autoDubTts?.stop() }; return GeckoResult.fromValue(JSONObject().put("ok", true)) }
-                        return GeckoResult.fromValue(JSONObject().put("ok", false))
-                    }
-                }, "saku.autodub")
-                runOnUiThread {
-                    if (extension != null) {
-                        Toast.makeText(this, "SakuTube Auto Dub siap · aktif saat subtitle YouTube tersedia", Toast.LENGTH_LONG).show()
-                    }
-                }
-            },
-            { error ->
-                runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        "Auto Dub belum dapat dimuat: " + (error?.message ?: "GeckoView gagal memuat extension"),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        )
-    }
-
     private fun refreshInstalledExtension() {
         runtime.webExtensionController.list().accept(
             { extensions ->
@@ -1552,8 +1425,6 @@ class YouTubeActivity : Activity() {
 
     override fun onDestroy() {
         if (::geckoView.isInitialized) geckoView.releaseSession()
-        try { autoDubTts?.stop(); autoDubTts?.shutdown() } catch (_: Exception) { }
-        autoDubTts = null
         browserTabs.forEach { try { it.session.close() } catch (_: Exception) { } }
         browserTabs.clear()
         popupDialogs.toList().forEach { try { it.dismiss() } catch (_: Exception) { } }
