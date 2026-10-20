@@ -1679,7 +1679,7 @@ class MainActivity : Activity() {
                 append(android.util.Log.getStackTraceString(error))
             }
             val previous = preferences.getString("saku_recent_errors", "").orEmpty()
-            preferences.edit().putString("saku_recent_errors", (line + "\\n" + previous).take(18000)).apply()
+            preferences.edit().putString("saku_recent_errors", (line + "\n" + previous).take(18000)).apply()
         } catch (_: Exception) { }
     }
 
