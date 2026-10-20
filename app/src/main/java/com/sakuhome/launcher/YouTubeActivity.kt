@@ -56,6 +56,7 @@ class YouTubeActivity : Activity() {
     private var autoDubExtension: WebExtension? = null
     private var autoDubTts: TextToSpeech? = null
     private var autoDubTtsReady = false
+    private var autoDubPendingText: String? = null
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
@@ -94,10 +95,35 @@ class YouTubeActivity : Activity() {
         window.navigationBarColor = Color.BLACK
 
         autoDubTts = TextToSpeech(this) { status ->
-            autoDubTtsReady = status == TextToSpeech.SUCCESS
-            if (autoDubTtsReady) {
-                val languageResult = autoDubTts?.setLanguage(Locale("id", "ID"))
-                if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) autoDubTtsReady = false
+            runOnUiThread {
+                val engineReady = status == TextToSpeech.SUCCESS
+                val languageResult = if (engineReady) {
+                    try { autoDubTts?.setLanguage(Locale("id", "ID")) ?: TextToSpeech.LANG_NOT_SUPPORTED }
+                    catch (_: Exception) { TextToSpeech.LANG_NOT_SUPPORTED }
+                } else {
+                    TextToSpeech.LANG_NOT_SUPPORTED
+                }
+                autoDubTtsReady = engineReady && languageResult >= TextToSpeech.LANG_AVAILABLE
+                if (autoDubTtsReady) {
+                    val pending = autoDubPendingText
+                    autoDubPendingText = null
+                    if (!pending.isNullOrBlank()) {
+                        try {
+                            autoDubTts?.speak(pending, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
+                        } catch (_: Exception) {
+                            Toast.makeText(this, "Mesin TTS gagal membacakan teks.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    Toast.makeText(
+                        this,
+                        if (!engineReady)
+                            "Auto Dub perlu mesin TTS Android. Pasang/aktifkan mesin Text-to-Speech di Setelan."
+                        else
+                            "Suara Indonesia belum tersedia. Buka Setelan > Text-to-speech > instal data suara Bahasa Indonesia.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
         runtime = GeckoRuntime.getDefault(this)
@@ -1309,8 +1335,21 @@ class YouTubeActivity : Activity() {
                         if (type == "SPEAK_TEXT") {
                             val text = data.optString("text").trim().take(700)
                             runOnUiThread {
-                                if (text.isNotEmpty() && autoDubTtsReady) autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
-                                else if (!autoDubTtsReady) Toast.makeText(this@YouTubeActivity, "Mesin TTS Android belum siap atau bahasa Indonesia belum tersedia.", Toast.LENGTH_LONG).show()
+                                if (text.isNotEmpty() && autoDubTtsReady) {
+                                    try {
+                                        autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
+                                    } catch (_: Exception) {
+                                        Toast.makeText(this@YouTubeActivity, "Mesin TTS gagal membacakan teks.", Toast.LENGTH_LONG).show()
+                                    }
+                                } else if (text.isNotEmpty()) {
+                                    // Keep the latest caption so it can be spoken if engine initialization finishes shortly.
+                                    autoDubPendingText = text
+                                    Toast.makeText(
+                                        this@YouTubeActivity,
+                                        "TTS belum siap. Periksa mesin TTS dan data suara Bahasa Indonesia di Setelan.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
                             }
                             return GeckoResult.fromValue(JSONObject().put("ok", text.isNotEmpty() && autoDubTtsReady))
                         }
