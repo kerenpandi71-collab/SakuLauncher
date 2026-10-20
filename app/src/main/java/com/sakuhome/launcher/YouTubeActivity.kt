@@ -488,7 +488,9 @@ class YouTubeActivity : Activity() {
                     newSession.setNavigationDelegate(createPopupNavigationDelegate())
                     newSession.setProgressDelegate(createProgressDelegate())
                     newSession.setContentDelegate(createDownloadContentDelegate())
-                    newSession.open(runtime)
+                    // GeckoView opens the session returned from onNewSession itself.
+                    // Returning an already-open session triggers:
+                    // "Must use an unopened GeckoSession instance".
 
                     val startUrl = uri.ifBlank { "about:blank" }
                     val tab = BrowserTab(
