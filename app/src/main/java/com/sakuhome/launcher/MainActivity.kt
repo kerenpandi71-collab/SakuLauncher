@@ -1540,7 +1540,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(16, 20, 29))
         }
-        val clearButton = Button(this).apply {
+        val clearButton = android.widget.Button(this).apply {
             text = "Hapus riwayat log"
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.rgb(145, 48, 58))
