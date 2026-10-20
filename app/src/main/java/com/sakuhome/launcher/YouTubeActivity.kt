@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
@@ -57,6 +58,7 @@ class YouTubeActivity : Activity() {
     private var autoDubTts: TextToSpeech? = null
     private var autoDubTtsReady = false
     private var autoDubPendingText: String? = null
+    private val autoDubSpeakResults = java.util.concurrent.ConcurrentHashMap<String, GeckoResult<Any>>()
     private var allowUboInstallPrompt = false
     private var allowLocalExtensionInstallPrompt = false
     private var desktopSiteEnabled = false
@@ -126,6 +128,27 @@ class YouTubeActivity : Activity() {
                 }
             }
         }
+        autoDubTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+
+            override fun onDone(utteranceId: String?) {
+                utteranceId?.let { id ->
+                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", true))
+                }
+            }
+
+            override fun onError(utteranceId: String?) {
+                utteranceId?.let { id ->
+                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", false).put("error", "TTS gagal membacakan teks"))
+                }
+            }
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                utteranceId?.let { id ->
+                    autoDubSpeakResults.remove(id)?.complete(JSONObject().put("ok", false).put("error", "Pembacaan dihentikan"))
+                }
+            }
+        })
         runtime = GeckoRuntime.getDefault(this)
         configureExtensionPrompts()
         installBundledAutoDub()
@@ -1334,16 +1357,24 @@ class YouTubeActivity : Activity() {
                         val type = data.optString("type")
                         if (type == "SPEAK_TEXT") {
                             val text = data.optString("text").trim().take(700)
+                            if (text.isEmpty()) return GeckoResult.fromValue(JSONObject().put("ok", false).put("error", "Teks kosong"))
+                            val speakResult = GeckoResult<Any>()
                             runOnUiThread {
-                                if (text.isNotEmpty() && autoDubTtsReady) {
-                                    try {
-                                        autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "saku-auto-dub")
+                                if (autoDubTtsReady && autoDubTts != null) {
+                                    val utteranceId = "saku-auto-dub-${System.nanoTime()}"
+                                    autoDubSpeakResults[utteranceId] = speakResult
+                                    val result = try {
+                                        autoDubTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) ?: TextToSpeech.ERROR
                                     } catch (_: Exception) {
-                                        Toast.makeText(this@YouTubeActivity, "Mesin TTS gagal membacakan teks.", Toast.LENGTH_LONG).show()
+                                        TextToSpeech.ERROR
                                     }
-                                } else if (text.isNotEmpty()) {
-                                    // Keep the latest caption so it can be spoken if engine initialization finishes shortly.
+                                    if (result == TextToSpeech.ERROR) {
+                                        autoDubSpeakResults.remove(utteranceId)
+                                        speakResult.complete(JSONObject().put("ok", false).put("error", "Mesin TTS gagal membacakan teks"))
+                                    }
+                                } else {
                                     autoDubPendingText = text
+                                    speakResult.complete(JSONObject().put("ok", false).put("error", "TTS Indonesia belum siap"))
                                     Toast.makeText(
                                         this@YouTubeActivity,
                                         "TTS belum siap. Periksa mesin TTS dan data suara Bahasa Indonesia di Setelan.",
@@ -1351,7 +1382,8 @@ class YouTubeActivity : Activity() {
                                     ).show()
                                 }
                             }
-                            return GeckoResult.fromValue(JSONObject().put("ok", text.isNotEmpty() && autoDubTtsReady))
+                            // Keep the native-message request open until Android TTS actually finishes.
+                            return speakResult
                         }
                         if (type == "STOP_SPEECH") { runOnUiThread { autoDubTts?.stop() }; return GeckoResult.fromValue(JSONObject().put("ok", true)) }
                         return GeckoResult.fromValue(JSONObject().put("ok", false))
