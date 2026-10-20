@@ -113,7 +113,6 @@ class YouTubeActivity : Activity() {
                 .build()
         )
         session.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
-        session.open(runtime)
         if (backgroundAudioEnabled) {
             try {
                 val audioService = Intent(this, SakuTubePlaybackService::class.java).setAction(SakuTubePlaybackService.ACTION_START)
@@ -206,9 +205,11 @@ class YouTubeActivity : Activity() {
         }
         root.addView(zoomRowView, LinearLayout.LayoutParams(-1, -2))
 
+        // GeckoSession configuration and delegates must be installed before open().
         session.setNavigationDelegate(createPopupNavigationDelegate())
         session.setProgressDelegate(createProgressDelegate())
         session.setContentDelegate(createDownloadContentDelegate())
+        session.open(runtime)
 
         geckoView = GeckoView(this)
         geckoView.setBackgroundColor(Color.BLACK)
@@ -672,10 +673,12 @@ class YouTubeActivity : Activity() {
                 .build()
             val newSession = GeckoSession(settings)
             newSession.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
-            newSession.open(runtime)
+            // Install delegates before opening the session to avoid GeckoView's
+            // "Must use an unopened GeckoSession instance" assertion.
             newSession.setNavigationDelegate(createPopupNavigationDelegate())
             newSession.setProgressDelegate(createProgressDelegate())
             newSession.setContentDelegate(createDownloadContentDelegate())
+            newSession.open(runtime)
             val url = homeUrl
             val tab = BrowserTab(nextTabId++, newSession, url, if (privateMode) "Tab Samaran" else "Beranda SakuTube", privateMode)
             browserTabs.add(tab)
