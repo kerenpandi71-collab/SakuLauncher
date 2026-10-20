@@ -249,15 +249,24 @@ class YouTubeActivity : Activity() {
             }
 
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
-                val url = response.uri
-                val contentType = response.headers.entries.firstOrNull { it.key.equals("content-type", true) }?.value ?: ""
-                val disposition = response.headers.entries.firstOrNull { it.key.equals("content-disposition", true) }?.value ?: ""
-                val rawName = disposition.substringAfter("filename=", "").trim().trim('"').substringBefore(";")
-                val filename = (if (rawName.isNotBlank()) rawName else Uri.parse(url).lastPathSegment ?: "download").substringAfterLast("/").substringBefore("?")
-                if (url.contains("addons.mozilla.org", true) && (url.substringBefore("?").endsWith(".xpi", true) || contentType.contains("x-xpinstall", true) || filename.endsWith(".xpi", true))) {
-                    installExtensionFromResponse(response, filename)
-                } else {
-                    downloadResponse(response, filename, contentType)
+                try {
+                    val url = response.uri
+                    val contentType = response.headers.entries.firstOrNull { it.key.equals("content-type", true) }?.value.orEmpty()
+                    val disposition = response.headers.entries.firstOrNull { it.key.equals("content-disposition", true) }?.value.orEmpty()
+                    val rawName = disposition.substringAfter("filename=", "").trim().trim('"').substringBefore(";")
+                    val filename = (if (rawName.isNotBlank()) rawName else Uri.parse(url).lastPathSegment ?: "download")
+                        .substringAfterLast("/").substringBefore("?").ifBlank { "download" }
+                    if (url.contains("addons.mozilla.org", true) &&
+                        (url.substringBefore("?").endsWith(".xpi", true) || contentType.contains("x-xpinstall", true) || filename.endsWith(".xpi", true))) {
+                        installExtensionFromResponse(response, filename)
+                    } else {
+                        downloadResponse(response, filename, contentType)
+                    }
+                } catch (error: Exception) {
+                    try { response.body?.close() } catch (_: Exception) { }
+                    runOnUiThread {
+                        Toast.makeText(this@YouTubeActivity, "Tautan tidak dapat dibuka: ${error.message ?: "format tidak didukung"}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -376,10 +385,28 @@ class YouTubeActivity : Activity() {
 
     private fun createPopupNavigationDelegate(): GeckoSession.NavigationDelegate {
         return object : GeckoSession.NavigationDelegate {
+            override fun onLoadRequest(
+                session: GeckoSession,
+                request: GeckoSession.NavigationDelegate.LoadRequest
+            ): GeckoResult<GeckoSession.NavigationDelegate.AllowOrDeny>? {
+                val uri = request.uri
+                val scheme = Uri.parse(uri).scheme?.lowercase()
+                if (scheme !in setOf("http", "https", "about", "resource", "data", "blob", "file")) {
+                    runOnUiThread { openExternalLink(uri) }
+                    return GeckoResult.fromValue(GeckoSession.NavigationDelegate.AllowOrDeny.DENY)
+                }
+                return null
+            }
+
             override fun onNewSession(
                 sourceSession: GeckoSession,
                 uri: String
             ): GeckoResult<GeckoSession>? {
+                val scheme = Uri.parse(uri).scheme?.lowercase()
+                if (scheme !in setOf("http", "https", "about", "resource", "data", "blob", "file")) {
+                    runOnUiThread { openExternalLink(uri) }
+                    return GeckoResult.fromValue(null)
+                }
                 return try {
                     // Treat window.open()/target=_blank as a normal browser tab, not a
                     // modal dialog. OAuth and extension sign-in flows often need to
@@ -1233,6 +1260,31 @@ class YouTubeActivity : Activity() {
                 Toast.makeText(this, "Cache sementara dibersihkan (" + deleted + " item).", Toast.LENGTH_LONG).show()
             }
             .setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openExternalLink(raw: String) {
+        try {
+            val intent = if (raw.startsWith("intent:", ignoreCase = true)) {
+                Intent.parseUri(raw, Intent.URI_INTENT_SCHEME).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    component = null
+                    selector = null
+                }
+            } else {
+                Intent(Intent.ACTION_VIEW, Uri.parse(raw)).addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else {
+                val fallback = if (raw.startsWith("intent:", ignoreCase = true)) {
+                    runCatching { Intent.parseUri(raw, Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url") }.getOrNull()
+                } else null
+                if (!fallback.isNullOrBlank()) session.loadUri(fallback)
+                else Toast.makeText(this, "Tidak ada aplikasi yang dapat membuka tautan ini.", Toast.LENGTH_LONG).show()
+            }
+        } catch (error: Exception) {
+            Toast.makeText(this, "Tautan tidak dapat dibuka: ${error.message ?: "aplikasi tujuan tidak tersedia"}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun openCurrentPageExternally() {
