@@ -440,26 +440,47 @@ class YouTubeActivity : Activity() {
                 uri: String
             ): GeckoResult<GeckoSession>? {
                 return try {
-                    val popupSession = GeckoSession(
+                    // Treat window.open()/target=_blank as a normal browser tab, not a
+                    // modal dialog. OAuth and extension sign-in flows often need to
+                    // navigate through several redirects and must remain visible.
+                    val newSession = GeckoSession(
                         GeckoSessionSettings.Builder()
                             .allowJavascript(true)
                             .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
                             .build()
                     )
-                    popupSession.settings.setSuspendMediaWhenInactive(false)
-                    popupSession.setNavigationDelegate(createPopupNavigationDelegate())
-                    popupSession.setProgressDelegate(createProgressDelegate())
-                    popupSession.setContentDelegate(createDownloadContentDelegate())
-                    popupSession.open(runtime)
-                    popupSessions.add(popupSession)
-                    showInAppPopup(popupSession, uri)
-                    GeckoResult.fromValue(popupSession)
+                    newSession.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
+                    newSession.setNavigationDelegate(createPopupNavigationDelegate())
+                    newSession.setProgressDelegate(createProgressDelegate())
+                    newSession.setContentDelegate(createDownloadContentDelegate())
+                    newSession.open(runtime)
+
+                    val startUrl = uri.ifBlank { "about:blank" }
+                    val tab = BrowserTab(
+                        nextTabId++,
+                        newSession,
+                        startUrl,
+                        Uri.parse(startUrl).host ?: "Login / Tab baru"
+                    )
+                    browserTabs.add(tab)
+                    runOnUiThread {
+                        switchToTab(tab.id)
+                        updateTabsButton()
+                        Toast.makeText(
+                            this@YouTubeActivity,
+                            "Halaman login dibuka di tab baru. Setelah selesai, kembali ke tab extension.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    GeckoResult.fromValue(newSession)
                 } catch (error: Exception) {
-                    Toast.makeText(
-                        this@YouTubeActivity,
-                        "Tidak bisa membuka jendela baru: " + (error.message ?: "kesalahan"),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@YouTubeActivity,
+                            "Tidak bisa membuka tab login: " + (error.message ?: "kesalahan"),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                     GeckoResult.fromValue(null)
                 }
             }
