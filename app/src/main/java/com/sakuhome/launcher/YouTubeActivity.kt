@@ -321,6 +321,7 @@ class YouTubeActivity : Activity() {
                         downloadResponse(response, filename, contentType)
                     }
                 } catch (error: Exception) {
+                    recordSakuEvent("onExternalResponse", "url=${response.uri}; headers=${response.headers.keys.joinToString(",")}", error)
                     try { response.body?.close() } catch (_: Exception) { }
                     runOnUiThread {
                         Toast.makeText(this@YouTubeActivity, "Tautan tidak dapat dibuka: ${error.message ?: "format tidak didukung"}", Toast.LENGTH_LONG).show()
@@ -451,6 +452,7 @@ class YouTubeActivity : Activity() {
                 val uri = request.uri
                 val scheme = Uri.parse(uri).scheme?.lowercase()
                 if (scheme !in setOf("http", "https", "about", "resource", "moz-extension", "data", "blob", "file")) {
+                    recordSakuEvent("externalNavigation", "scheme=${scheme ?: "null"}; url=${uri.take(500)}")
                     runOnUiThread { openExternalLink(uri) }
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
