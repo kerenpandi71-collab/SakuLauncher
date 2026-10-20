@@ -469,7 +469,7 @@ class MainActivity : Activity() {
             clipChildren = false
             // Vertical placement is configurable; drag-and-drop reorders shortcuts like a normal launcher.
             setPadding(dp(2), dp(homeGridTopPaddingDp()), dp(2), dp(12))
-            setOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+            addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
                 val gridView = view as GridView
                 val desired = dp(homeGridTopPaddingDp())
                 if (gridView.paddingTop != desired) gridView.setPadding(dp(2), desired, dp(2), dp(12))
