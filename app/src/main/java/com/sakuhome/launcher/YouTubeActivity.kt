@@ -391,7 +391,7 @@ class YouTubeActivity : Activity() {
             ): GeckoResult<GeckoSession.NavigationDelegate.AllowOrDeny>? {
                 val uri = request.uri
                 val scheme = Uri.parse(uri).scheme?.lowercase()
-                if (scheme !in setOf("http", "https", "about", "resource", "data", "blob", "file")) {
+                if (scheme !in setOf("http", "https", "about", "resource", "moz-extension", "data", "blob", "file")) {
                     runOnUiThread { openExternalLink(uri) }
                     return GeckoResult.fromValue(GeckoSession.NavigationDelegate.AllowOrDeny.DENY)
                 }
@@ -1273,9 +1273,11 @@ class YouTubeActivity : Activity() {
             } else {
                 Intent(Intent.ACTION_VIEW, Uri.parse(raw)).addCategory(Intent.CATEGORY_BROWSABLE)
             }
-            if (intent.resolveActivity(packageManager) != null) {
+            try {
+                // Do not rely on resolveActivity: Android package-visibility rules can hide
+                // handlers even when the system can launch the implicit intent.
                 startActivity(intent)
-            } else {
+            } catch (_: android.content.ActivityNotFoundException) {
                 val fallback = if (raw.startsWith("intent:", ignoreCase = true)) {
                     runCatching { Intent.parseUri(raw, Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url") }.getOrNull()
                 } else null
