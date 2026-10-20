@@ -147,7 +147,8 @@ class MainActivity : Activity() {
             "－  Kurangi layar utama",
             "↕  Posisi ikon: ${homeIconPositionLabel()}",
             if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
-            "Hapus layar ini"
+            "Hapus layar ini",
+            if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "🔓  Buka kunci tata letak" else "🔒  Kunci tata letak"
         )
         AlertDialog.Builder(this).setTitle("Tata letak layar utama").setItems(options) { _, which ->
             when (which) {
@@ -167,6 +168,11 @@ class MainActivity : Activity() {
                     .setNegativeButton("Batal", null)
                     .setPositiveButton("Hapus") { _, _ -> removeCurrentHomePage(); buildScreen() }
                     .show()
+                5 -> {
+                    val locked = !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)
+                    preferences.edit().putBoolean(KEY_HOME_LAYOUT_LOCKED, locked).apply()
+                    Toast.makeText(this, if (locked) "Tata letak dikunci" else "Tata letak dibuka — tahan ikon untuk memindahkan", Toast.LENGTH_SHORT).show()
+                }
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -485,11 +491,12 @@ class MainActivity : Activity() {
         desktopGrid.setOnLongClickListener { false }
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
                     grid.alpha = 1f
+                    if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val sourcePackage = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
                     val targetPosition = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
                     val order = homePackages()
@@ -747,11 +754,12 @@ class MainActivity : Activity() {
         desktopGrid.adapter = pinnedAdapter
         desktopGrid.setOnDragListener { grid, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.9f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
                     grid.alpha = 1f
+                    if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val source = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
                     val targetPos = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
                     val order = homePackages()
@@ -2877,7 +2885,10 @@ class MainActivity : Activity() {
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
-                if (!isStartMenu && homePackages().contains(app.packageName)) {
+                if (!isStartMenu && homePackages().contains(app.packageName) && preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) {
+                    Toast.makeText(this@MainActivity, "Tata letak terkunci. Buka kunci dari opsi tata letak layar utama.", Toast.LENGTH_SHORT).show()
+                    true
+                } else if (!isStartMenu && homePackages().contains(app.packageName)) {
                     val clip = android.content.ClipData.newPlainText("saku-app", app.packageName)
                     val shadow = View.DragShadowBuilder(cell)
                     if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
@@ -2898,6 +2909,7 @@ class MainActivity : Activity() {
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_HOME_ICON_POSITION = "home_icon_position"
+        private const val KEY_HOME_LAYOUT_LOCKED = "home_layout_locked"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
         private const val KEY_DOCK_POSITION = "dock_navigation_position"
