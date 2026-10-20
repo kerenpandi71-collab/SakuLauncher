@@ -1512,22 +1512,29 @@ class MainActivity : Activity() {
     }
 
     private fun showDiagnosticLog() {
-        val log = android.util.Log.getStackTraceString(Throwable("SakuLauncher diagnostic snapshot"))
+        val display = resources.displayMetrics
+        val memory = android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager)?.getMemoryInfo(memory)
+        val versionInfo = runCatching { packageManager.getPackageInfo(packageName, 0) }.getOrNull()
         val runtime = buildString {
-            appendLine("=== SAKU LAUNCHER DIAGNOSTIC ===")
-            appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
-            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-            appendLine("App version: ${packageManager.getPackageInfo(packageName, 0).versionName}")
+            appendLine("=== SAKU LAUNCHER DIAGNOSTIC v2 ===")
+            appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}, build ${android.os.Build.DISPLAY})")
+            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} / ${android.os.Build.DEVICE}")
+            appendLine("App version: ${versionInfo?.versionName ?: "unknown"} (versionCode=${versionInfo?.longVersionCode ?: -1L})")
+            appendLine("Process: ${android.os.Process.myPid()} | package=$packageName")
+            appendLine("Display: ${display.widthPixels}x${display.heightPixels} px; density=${display.density}; dpi=${display.densityDpi}")
+            appendLine("Memory available: ${memory.availMem / (1024 * 1024)} MB; lowMemory=${memory.lowMemory}")
             appendLine("Default launcher: ${isDefaultLauncher()}")
             appendLine("Floating dock preference: ${preferences.getBoolean(KEY_OVERLAY_ENABLED, false)}")
             appendLine("Accessibility service enabled: ${isSakuAccessibilityEnabled()}")
+            appendLine("SakuTube browser preferences: ${getSharedPreferences("sakutube_browser", MODE_PRIVATE).all.keys.sorted().joinToString(", ").ifBlank { "(none)" }}")
             appendLine()
-            appendLine("=== RECENT APP-RECORDED ERRORS ===")
+            appendLine("=== RECENT ERRORS / SAKUTUBE EVENTS (newest first) ===")
             appendLine(preferences.getString("saku_recent_errors", "No app-recorded errors yet.") ?: "No app-recorded errors yet.")
             appendLine()
-            appendLine("=== NOTE ===")
-            appendLine("Android restricts access to system-wide logcat for ordinary apps. This report contains app-accessible diagnostics only, not a full system log.")
+            appendLine("=== DIAGNOSTIC LIMITS ===")
+            appendLine("This report stores app-side events and uncaught Java/Kotlin crashes. It cannot reliably capture native GeckoView crashes or the full system logcat without Android debugging access.")
         }
         val box = android.widget.ScrollView(this)
         val text = android.widget.TextView(this).apply {
