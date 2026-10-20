@@ -454,8 +454,8 @@ class MainActivity : Activity() {
             contentDescription = "Hapus layar utama ini"
             setOnClickListener { showHomeLayoutOptions() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
-        pageControls.addView(chipButton("⋯", cardSurface, primaryText, 12).apply {
-            contentDescription = "Opsi tata letak layar utama"
+        pageControls.addView(chipButton(if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "🔒" else "⋯", cardSurface, primaryText, 12).apply {
+            contentDescription = if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "Tata letak terkunci; buka opsi untuk membuka kunci" else "Opsi tata letak layar utama"
             setOnClickListener { showHomeLayoutOptions() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
         if (landscapeLayout) pageControls.visibility = View.GONE
