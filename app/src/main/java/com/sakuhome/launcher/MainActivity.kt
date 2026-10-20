@@ -1521,7 +1521,7 @@ class MainActivity : Activity() {
             appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}")
             appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}, build ${android.os.Build.DISPLAY})")
             appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} / ${android.os.Build.DEVICE}")
-            appendLine("App version: ${versionInfo?.versionName ?: "unknown"} (versionCode=${versionInfo?.longVersionCode ?: -1L})")
+            appendLine("App version: ${versionInfo?.versionName ?: "unknown"} (versionCode=${versionInfo?.versionCode?.toLong() ?: -1L})")
             appendLine("Process: ${android.os.Process.myPid()} | package=$packageName")
             appendLine("Display: ${display.widthPixels}x${display.heightPixels} px; density=${display.density}; dpi=${display.densityDpi}")
             appendLine("Memory available: ${memory.availMem / (1024 * 1024)} MB; lowMemory=${memory.lowMemory}")
@@ -1668,10 +1668,26 @@ class MainActivity : Activity() {
             }.setNegativeButton("Tutup", null).show()
     }
 
+    private fun recordSakuLauncherError(stage: String, error: Throwable) {
+        try {
+            val line = buildString {
+                append("[")
+                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                append("] ")
+                append(stage)
+                appendLine(": ${error.javaClass.name}: ${error.message}")
+                append(android.util.Log.getStackTraceString(error))
+            }
+            val previous = preferences.getString("saku_recent_errors", "").orEmpty()
+            preferences.edit().putString("saku_recent_errors", (line + "\\n" + previous).take(18000)).apply()
+        } catch (_: Exception) { }
+    }
+
     private fun openYouTubeWeb() {
         try {
             startActivity(Intent(this, YouTubeActivity::class.java))
         } catch (e: Exception) {
+            recordSakuLauncherError("launchSakuTube", e)
             Toast.makeText(this, "SakuTube gagal dibuka: ${e.message ?: "kesalahan tidak diketahui"}", Toast.LENGTH_LONG).show()
         }
     }
