@@ -249,7 +249,7 @@ class YouTubeActivity : Activity() {
                         appendLine(android.util.Log.getStackTraceString(error))
                     }
                     val previousLog = prefs.getString("saku_recent_errors", "").orEmpty()
-                    prefs.edit().putString("saku_recent_errors", (report + "\\n" + previousLog).take(18000)).commit()
+                    prefs.edit().putString("saku_recent_errors", (report + "\n" + previousLog).take(18000)).commit()
                 } catch (_: Throwable) { }
                 try { previous?.uncaughtException(thread, error) } catch (_: Throwable) { }
             }
@@ -273,7 +273,7 @@ class YouTubeActivity : Activity() {
             }
             val prefs = getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
             val previous = prefs.getString("saku_recent_errors", "").orEmpty()
-            prefs.edit().putString("saku_recent_errors", (line + "\\n" + previous).take(18000)).apply()
+            prefs.edit().putString("saku_recent_errors", (line + "\n" + previous).take(18000)).apply()
         } catch (_: Exception) { }
     }
 
