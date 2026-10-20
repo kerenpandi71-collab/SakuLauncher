@@ -6,6 +6,7 @@
   const seen = new Set();
   const queue = [];
   let lastCaption = "";
+  let pendingCaption = "";
   let debounceTimer = null;
   let processing = false;
   let badge = null;
@@ -113,9 +114,13 @@
   function inspectCaptions() {
     if (!prefs.enabled) return;
     const text = readCaptionText();
-    if (!text || text === lastCaption) return;
+    if (!text || text === lastCaption || text === pendingCaption) return;
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => enqueueCaption(text), 350);
+    pendingCaption = text;
+    debounceTimer = setTimeout(() => {
+      pendingCaption = "";
+      enqueueCaption(text);
+    }, 350);
   }
 
   const observer = new MutationObserver(inspectCaptions);
