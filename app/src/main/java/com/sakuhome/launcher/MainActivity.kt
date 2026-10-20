@@ -1536,6 +1536,15 @@ class MainActivity : Activity() {
             appendLine("=== DIAGNOSTIC LIMITS ===")
             appendLine("This report stores app-side events and uncaught Java/Kotlin crashes. It cannot reliably capture native GeckoView crashes or the full system logcat without Android debugging access.")
         }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.rgb(16, 20, 29))
+        }
+        val clearButton = Button(this).apply {
+            text = "Hapus riwayat log"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(145, 48, 58))
+        }
         val box = android.widget.ScrollView(this)
         val text = android.widget.TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -1546,10 +1555,12 @@ class MainActivity : Activity() {
             text = runtime
             setTextIsSelectable(true)
         }
+        container.addView(clearButton, LinearLayout.LayoutParams(-1, dp(48)))
         box.addView(text)
-        AlertDialog.Builder(this)
+        container.addView(box, LinearLayout.LayoutParams(-1, dp(440)))
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Log error · diagnostik")
-            .setView(box)
+            .setView(container)
             .setPositiveButton("Salin") { _, _ ->
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Saku diagnostic", runtime))
@@ -1562,7 +1573,20 @@ class MainActivity : Activity() {
                 }, "Bagikan log diagnostik"))
             }
             .setNegativeButton("Tutup", null)
-            .show()
+            .create()
+        clearButton.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Hapus riwayat diagnostik?")
+                .setMessage("Riwayat error dan kejadian SakuTube yang tersimpan akan dihapus. Jika crash terjadi lagi, log baru akan dicatat.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Hapus") { _, _ ->
+                    preferences.edit().remove("saku_recent_errors").apply()
+                    dialog.dismiss()
+                    Toast.makeText(this, "Riwayat log dihapus", Toast.LENGTH_SHORT).show()
+                }
+                .show()
+        }
+        dialog.show()
     }
 
     private fun isDefaultLauncher(): Boolean {
