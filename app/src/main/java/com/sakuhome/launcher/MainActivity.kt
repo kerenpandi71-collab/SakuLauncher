@@ -1620,6 +1620,7 @@ class MainActivity : Activity() {
                     20 -> {
                         preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
                         buildScreen()
+                        restoreWidgets()
                         Toast.makeText(this, if (hideLabels) "Label ikon disembunyikan" else "Label ikon ditampilkan", Toast.LENGTH_SHORT).show()
                     }
                     21 -> showWidgetInfo()
@@ -1995,6 +1996,7 @@ class MainActivity : Activity() {
                 preferences.edit().putString(KEY_HOME_ICON_POSITION, values[which]).apply()
                 dialog.dismiss()
                 buildScreen()
+                restoreWidgets()
             }.setNegativeButton("Batal", null).show()
     }
 
