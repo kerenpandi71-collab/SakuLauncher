@@ -15,7 +15,7 @@ Saku Launcher adalah launcher Android bergaya desktop. Launcher ini mempertahank
 
 SakuTube adalah **fitur browser yang ditanamkan di dalam Saku Launcher**, bukan aplikasi Firefox mandiri dan bukan browser Android WebView. Mesin halaman web-nya menggunakan **Mozilla GeckoView**.
 
-Fitur yang tersedia mencakup tab, tab samaran, riwayat, unduhan, mode situs desktop, pemutaran audio latar, Picture-in-Picture, serta pemasangan dan pengelolaan WebExtension melalui Mozilla Add-ons atau file XPI. SakuTube juga menyertakan extension Auto Dub dengan jembatan Android Text-to-Speech.
+Fitur yang tersedia mencakup halaman awal internal, pencarian web, pintasan situs, tab, tab samaran, riwayat, unduhan, mode situs desktop, pemutaran audio latar, Picture-in-Picture, serta pemasangan dan pengelolaan WebExtension melalui Mozilla Add-ons atau file XPI. SakuTube dibuka ke halaman awalnya; YouTube dapat diakses melalui pintasan atau pencarian.
 
 **Batas kompatibilitas:** GeckoView bukan paket Firefox lengkap. Ketersediaan extension di Mozilla Add-ons tidak menjamin semua API, alur login, native messaging, atau fitur yang ditujukan untuk Firefox desktop akan bekerja di SakuTube. Beberapa penyedia login juga dapat membatasi autentikasi di browser tertanam. Extension harus diuji satu per satu; jangan menganggap dukungan penuh seperti Firefox desktop.
 
