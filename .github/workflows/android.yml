@@ -15,7 +15,9 @@ on:
       - feature/saku-desktop-overhaul
 
 concurrency:
-  group: saku-android-${{ github.event.pull_request.number || github.ref }}
+  # Use the same group for push and pull_request events on the same branch.
+  # This prevents two identical builds when a branch has an open PR.
+  group: saku-android-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
