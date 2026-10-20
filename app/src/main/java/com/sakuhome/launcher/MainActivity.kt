@@ -53,7 +53,7 @@ class MainActivity : Activity() {
     private lateinit var startGrid: GridView
     private lateinit var widgetStrip: LinearLayout
     private lateinit var appWidgetHost: AppWidgetHost
-    private lateinit var desktopGrid: GridView
+    private lateinit var desktopGrid: FrameLayout
     private lateinit var startSearchField: EditText
     private lateinit var pinnedTabButton: TextView
     private lateinit var allAppsTabButton: TextView
@@ -95,6 +95,30 @@ class MainActivity : Activity() {
     }
 
     private fun homePageKey(page: Int) = "home_screen_packages_page_$page"
+    private fun homeIconPositionsKey(page: Int) = "home_icon_positions_page_$page"
+
+    /** Each shortcut has an independently persisted normalized position on its home page. */
+    private fun homeIconPositions(page: Int = homePage): MutableMap<String, Pair<Float, Float>> {
+        val result = linkedMapOf<String, Pair<Float, Float>>()
+        preferences.getString(homeIconPositionsKey(page), "").orEmpty().lineSequence().forEach { line ->
+            val parts = line.split('|')
+            if (parts.size == 3) {
+                val x = parts[1].toFloatOrNull()
+                val y = parts[2].toFloatOrNull()
+                if (x != null && y != null && parts[0].isNotBlank()) {
+                    result[parts[0]] = x.coerceIn(0f, 1f) to y.coerceIn(0f, 1f)
+                }
+            }
+        }
+        return result
+    }
+
+    private fun saveHomeIconPositions(positions: Map<String, Pair<Float, Float>>, page: Int = homePage) {
+        val encoded = positions.entries.joinToString("\n") { entry ->
+            entry.key + "|" + entry.value.first.coerceIn(0f, 1f) + "|" + entry.value.second.coerceIn(0f, 1f)
+        }
+        preferences.edit().putString(homeIconPositionsKey(page), encoded).apply()
+    }
 
     private fun homePackages(page: Int = homePage): MutableList<String> {
         if (page == 0 && !preferences.contains(homePageKey(0)) && preferences.contains(KEY_HOME_APPS)) {
@@ -112,6 +136,7 @@ class MainActivity : Activity() {
     private fun showHomePage(page: Int) {
         homePage = page.coerceIn(0, homePageCount() - 1)
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
+        if (::desktopGrid.isInitialized) desktopGrid.post { renderHomeCanvas() }
         homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
     }
 
@@ -203,6 +228,67 @@ class MainActivity : Activity() {
         val byPackage = apps.associateBy { it.packageName }
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
+    }
+
+    private fun renderHomeCanvas() {
+        if (!::desktopGrid.isInitialized || !::pinnedAdapter.isInitialized) return
+        val canvas = desktopGrid
+        if (canvas.width <= 0 || canvas.height <= 0) return
+        val currentApps = homeApps()
+        val positions = homeIconPositions()
+        val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
+        val contentHeight = (canvas.height - canvas.paddingTop - canvas.paddingBottom).coerceAtLeast(dp(1))
+        val cellWidth = dp((iconSizeDp + 24).coerceIn(64, 112))
+        val cellHeight = dp(if (hideLabels) iconSizeDp + 12 else iconSizeDp + 34)
+        val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5).coerceIn(1, 12)
+        val rows = maxOf(1, kotlin.math.ceil(currentApps.size.toDouble() / columns).toInt())
+        val maxLeft = (contentWidth - cellWidth).coerceAtLeast(0)
+        val maxTop = (contentHeight - cellHeight).coerceAtLeast(0)
+        val defaults = mutableMapOf<String, Pair<Float, Float>>()
+        currentApps.forEachIndexed { index, app ->
+            val row = index / columns
+            val col = index % columns
+            val x = if (columns <= 1) 0.5f else col.toFloat() / (columns - 1).coerceAtLeast(1)
+            val y = if (rows <= 1) 0.12f else (row.toFloat() / (rows - 1).coerceAtLeast(1)).coerceIn(0f, 1f)
+            defaults[app.packageName] = x to y
+        }
+        var changed = false
+        currentApps.forEach { app ->
+            if (app.packageName !in positions) {
+                positions[app.packageName] = defaults[app.packageName] ?: (0.5f to 0.5f)
+                changed = true
+            }
+        }
+        if (changed) saveHomeIconPositions(positions)
+        canvas.removeAllViews()
+        currentApps.forEachIndexed { index, app ->
+            val cell = pinnedAdapter.getView(index, null, canvas)
+            val point = positions[app.packageName] ?: defaults[app.packageName] ?: (0.5f to 0.5f)
+            val left = canvas.paddingLeft + (point.first * maxLeft).toInt()
+            val top = canvas.paddingTop + (point.second * maxTop).toInt()
+            canvas.addView(cell, FrameLayout.LayoutParams(cellWidth, cellHeight).apply {
+                leftMargin = left.coerceIn(canvas.paddingLeft, canvas.paddingLeft + maxLeft)
+                topMargin = top.coerceIn(canvas.paddingTop, canvas.paddingTop + maxTop)
+            })
+        }
+    }
+
+    private fun placeHomeIcon(packageName: String, dropX: Float, dropY: Float) {
+        if (!::desktopGrid.isInitialized) return
+        val canvas = desktopGrid
+        val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(1)
+        val contentHeight = (canvas.height - canvas.paddingTop - canvas.paddingBottom).coerceAtLeast(1)
+        val cellWidth = dp((iconSizeDp + 24).coerceIn(64, 112))
+        val cellHeight = dp(if (hideLabels) iconSizeDp + 12 else iconSizeDp + 34)
+        val maxX = (contentWidth - cellWidth).coerceAtLeast(1)
+        val maxY = (contentHeight - cellHeight).coerceAtLeast(1)
+        val x = ((dropX - canvas.paddingLeft - cellWidth / 2f) / maxX).coerceIn(0f, 1f)
+        val y = ((dropY - canvas.paddingTop - cellHeight / 2f) / maxY).coerceIn(0f, 1f)
+        val positions = homeIconPositions()
+        positions[packageName] = x to y
+        saveHomeIconPositions(positions)
+        renderHomeCanvas()
+        Toast.makeText(this, "Posisi ikon disimpan", Toast.LENGTH_SHORT).show()
     }
 
     private fun pinnedApps(): List<LaunchableApp> {
@@ -469,50 +555,31 @@ class MainActivity : Activity() {
             clipChildren = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
-        desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5)
-            verticalSpacing = dp(10)
-            horizontalSpacing = dp(8)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setSelector(ColorDrawable(Color.TRANSPARENT))
-            isVerticalScrollBarEnabled = false
-            clipToPadding = false
+        desktopGrid = FrameLayout(this).apply {
             clipChildren = false
-            // Vertical placement is configurable; drag-and-drop reorders shortcuts like a normal launcher.
+            clipToPadding = false
             setPadding(dp(2), dp(homeGridTopPaddingDp()), dp(2), dp(12))
             addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                val gridView = view as GridView
+                val canvas = view as FrameLayout
                 val desired = dp(homeGridTopPaddingDp())
-                if (gridView.paddingTop != desired) gridView.setPadding(dp(2), desired, dp(2), dp(12))
+                if (canvas.paddingTop != desired) canvas.setPadding(dp(2), desired, dp(2), dp(12))
+                renderHomeCanvas()
             }
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
-        desktopGrid.adapter = pinnedAdapter
-        desktopGrid.setOnLongClickListener { false }
-        desktopGrid.setOnDragListener { grid, event ->
+        desktopGrid.setOnDragListener { canvas, event ->
             when (event.action) {
                 android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
-                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
-                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.92f; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
-                    grid.alpha = 1f
+                    canvas.alpha = 1f
                     if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val sourcePackage = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
-                    val targetPosition = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
-                    val order = homePackages()
-                    val from = order.indexOf(sourcePackage)
-                    val targetPackage = pinnedAdapter.getItemOrNull(targetPosition)?.packageName
-                    val targetIndex = if (targetPackage != null) order.indexOf(targetPackage) else -1
-                    if (from >= 0) {
-                        val moving = order.removeAt(from)
-                        val insertAt = if (targetIndex >= 0) targetIndex.coerceAtMost(order.size) else order.size
-                        order.add(insertAt, moving)
-                        saveHomePackages(order)
-                        pinnedAdapter.notifyDataSetChanged()
-                    }
+                    if (sourcePackage != null && homePackages().contains(sourcePackage)) placeHomeIcon(sourcePackage, event.x, event.y)
                     true
                 }
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { canvas.alpha = 1f; true }
                 else -> true
             }
         }
@@ -739,41 +806,26 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
-        desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, 7).coerceIn(4, 12)
-            verticalSpacing = dp(8)
-            horizontalSpacing = dp(8)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setSelector(ColorDrawable(Color.TRANSPARENT))
-            isVerticalScrollBarEnabled = false
-            clipToPadding = false
+        desktopGrid = FrameLayout(this).apply {
             clipChildren = false
+            clipToPadding = false
             setPadding(dp(12), dp(18), dp(12), dp(14))
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> renderHomeCanvas() }
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
-        desktopGrid.adapter = pinnedAdapter
-        desktopGrid.setOnDragListener { grid, event ->
+        desktopGrid.setOnDragListener { canvas, event ->
             when (event.action) {
                 android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
-                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.9f; true }
-                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.92f; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
-                    grid.alpha = 1f
+                    canvas.alpha = 1f
                     if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val source = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
-                    val targetPos = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
-                    val order = homePackages()
-                    val from = order.indexOf(source)
-                    val target = pinnedAdapter.getItemOrNull(targetPos)?.packageName?.let { order.indexOf(it) } ?: -1
-                    if (from >= 0) {
-                        val moved = order.removeAt(from)
-                        order.add(if (target >= 0) target.coerceAtMost(order.size) else order.size, moved)
-                        saveHomePackages(order)
-                        pinnedAdapter.notifyDataSetChanged()
-                    }
+                    if (source != null && homePackages().contains(source)) placeHomeIcon(source, event.x, event.y)
                     true
                 }
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; true }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { canvas.alpha = 1f; true }
                 else -> true
             }
         }
@@ -2838,6 +2890,7 @@ class MainActivity : Activity() {
         override fun notifyDataSetChanged() {
             refreshItems()
             super.notifyDataSetChanged()
+            if (!isStartMenu && ::desktopGrid.isInitialized) desktopGrid.post { renderHomeCanvas() }
         }
 
         override fun getCount(): Int = items.size
@@ -2893,7 +2946,7 @@ class MainActivity : Activity() {
                     val shadow = View.DragShadowBuilder(cell)
                     if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
                     else cell.startDrag(clip, shadow, app.packageName, 0)
-                    Toast.makeText(this@MainActivity, "Mode bebas: seret ikon ke posisi yang diinginkan", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Seret ikon ke lokasi yang diinginkan untuk menyimpan posisinya", Toast.LENGTH_SHORT).show()
                     true
                 } else { showAppMenu(app); true }
             }
