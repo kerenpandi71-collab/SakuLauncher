@@ -938,11 +938,11 @@ class MainActivity : Activity() {
         val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
 
         strip.addView(TextView(this).apply {
-            text = "☁  18°"
+            text = "☁  Cuaca"
             textSize = 11f
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
-            contentDescription = "Widget cuaca dekoratif"
+            contentDescription = "Ikon cuaca tanpa informasi suhu"
         }, LinearLayout.LayoutParams(0, -1, 1f))
         strip.addView(TextView(this).apply {
             text = "▰  ${percent?.let { "$it%" } ?: "--%"}"
