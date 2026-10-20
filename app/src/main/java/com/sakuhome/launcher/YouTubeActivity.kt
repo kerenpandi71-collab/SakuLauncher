@@ -235,9 +235,10 @@ class YouTubeActivity : Activity() {
         synchronized(YouTubeActivity::class.java) {
             if (crashHandlerInstalled) return
             val previous = Thread.getDefaultUncaughtExceptionHandler()
+            val appContext = applicationContext
             Thread.setDefaultUncaughtExceptionHandler { thread, error ->
                 try {
-                    val prefs = getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
+                    val prefs = appContext.getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
                     val report = buildString {
                         appendLine("=== UNCAUGHT CRASH ===")
                         appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}")
