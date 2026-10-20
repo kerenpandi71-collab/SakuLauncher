@@ -1373,7 +1373,7 @@ class YouTubeActivity : Activity() {
                                         speakResult.complete(JSONObject().put("ok", false).put("error", "Mesin TTS gagal membacakan teks"))
                                     }
                                 } else {
-                                    autoDubPendingText = text
+                                    // Do not play a stale subtitle later after the browser has moved on.
                                     speakResult.complete(JSONObject().put("ok", false).put("error", "TTS Indonesia belum siap"))
                                     Toast.makeText(
                                         this@YouTubeActivity,
