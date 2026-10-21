@@ -70,6 +70,7 @@ class YouTubeActivity : Activity() {
     private val storeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val popupSessions = mutableSetOf<GeckoSession>()
     private val popupDialogs = mutableSetOf<AlertDialog>()
+    private val extensionActions = linkedMapOf<String, WebExtension.Action>()
     private data class BrowserTab(val id: Int, val session: GeckoSession, var url: String, var title: String, val privateMode: Boolean = false)
     private val browserTabs = mutableListOf<BrowserTab>()
     private var nextTabId = 1
@@ -958,6 +959,8 @@ class YouTubeActivity : Activity() {
 
         items += "Pasang extension dari file (.xpi)"
         actions += { confirmLocalExtensionInstall() }
+        items += "Jalankan extension"
+        actions += { showExtensionActionMenu() }
         items += "Daftar extension terpasang"
         actions += { showInstalledExtensions() }
         items += "Toko extension Mozilla"
@@ -1132,6 +1135,13 @@ class YouTubeActivity : Activity() {
         val enabled = extension.metaData?.enabled != false
         val items = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
+        items += "Jalankan extension"
+        actions += {
+            configureExtensionAction(extension)
+            val action = extensionActions[extension.id]
+            if (action != null && action.enabled != false) action.click()
+            else Toast.makeText(this, "Extension ini tidak menyediakan tombol aksi pada halaman saat ini.", Toast.LENGTH_LONG).show()
+        }
         val optionsUrl = extension.metaData?.optionsPageUrl
         if (!optionsUrl.isNullOrBlank()) {
             items += "Buka pengaturan"
@@ -1440,10 +1450,156 @@ class YouTubeActivity : Activity() {
     private fun refreshInstalledExtension() {
         runtime.webExtensionController.list().accept(
             { extensions ->
-                uboExtension = extensions.orEmpty().firstOrNull { it.id == uboId && it.metaData?.name == "uBlock Origin" }
+                val installed = extensions.orEmpty()
+                installed.forEach { configureExtensionAction(it) }
+                uboExtension = installed.firstOrNull { it.id == uboId && it.metaData?.name == "uBlock Origin" }
             },
             { /* The settings menu still offers installation if listing fails. */ }
         )
+    }
+
+    /**
+     * GeckoView does not automatically provide a browser toolbar for WebExtension actions.
+     * Register a delegate so action clicks and extension popup pages are hosted by SakuTube.
+     */
+    private fun configureExtensionAction(extension: WebExtension) {
+        extension.setActionDelegate(object : WebExtension.ActionDelegate {
+            override fun onBrowserAction(
+                extension: WebExtension,
+                session: GeckoSession?,
+                action: WebExtension.Action
+            ) {
+                if (session == null || session === this@YouTubeActivity.session) {
+                    extensionActions[extension.id] = action
+                }
+            }
+
+            override fun onPageAction(
+                extension: WebExtension,
+                session: GeckoSession?,
+                action: WebExtension.Action
+            ) {
+                if (session == null || session === this@YouTubeActivity.session) {
+                    extensionActions[extension.id] = action
+                }
+            }
+
+            override fun onTogglePopup(
+                extension: WebExtension,
+                action: WebExtension.Action
+            ): GeckoResult<GeckoSession>? = showExtensionPopup(extension, action)
+        })
+    }
+
+    private fun showExtensionActionMenu() {
+        runtime.webExtensionController.list().accept(
+            { extensions ->
+                runOnUiThread {
+                    val installed = extensions.orEmpty().filter { it.metaData?.enabled != false }
+                    if (installed.isEmpty()) {
+                        Toast.makeText(this, "Belum ada extension aktif.", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    installed.forEach { configureExtensionAction(it) }
+                    val labels = installed.map { extension ->
+                        val name = extension.metaData?.name ?: extension.id ?: "Extension"
+                        val action = extensionActions[extension.id]
+                        if (action != null && action.enabled != false) "$name · Jalankan" else "$name · tanpa tombol aksi"
+                    }.toTypedArray()
+                    AlertDialog.Builder(this)
+                        .setTitle("Jalankan extension")
+                        .setItems(labels) { _, which ->
+                            val extension = installed[which]
+                            val action = extensionActions[extension.id]
+                            if (action != null && action.enabled != false) {
+                                try {
+                                    action.click()
+                                    recordSakuEvent("extensionAction.click", "extension=${extension.id}; title=${action.title ?: ""}")
+                                } catch (error: Exception) {
+                                    recordSakuEvent("extensionAction.click", "extension=${extension.id}", error)
+                                    Toast.makeText(this, "Aksi extension gagal: " + (error.message ?: "kesalahan"), Toast.LENGTH_LONG).show()
+                                }
+                            } else {
+                                Toast.makeText(this, "Extension ini tidak menyediakan tombol aksi pada halaman saat ini.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                        .setNegativeButton("Tutup", null)
+                        .show()
+                }
+            },
+            { Toast.makeText(this, "Tidak bisa membaca daftar extension.", Toast.LENGTH_LONG).show() }
+        )
+    }
+
+    private fun showExtensionPopup(
+        extension: WebExtension,
+        action: WebExtension.Action
+    ): GeckoResult<GeckoSession>? {
+        if (isFinishing || isDestroyed) return null
+        return try {
+            val popupSession = GeckoSession(
+                GeckoSessionSettings.Builder()
+                    .allowJavascript(true)
+                    .viewportMode(if (desktopSiteEnabled) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+                    .userAgentMode(if (desktopSiteEnabled) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
+                    .build()
+            )
+            popupSession.settings.setSuspendMediaWhenInactive(!backgroundAudioEnabled)
+            popupSession.setNavigationDelegate(createPopupNavigationDelegate())
+            popupSession.setProgressDelegate(createProgressDelegate())
+            popupSession.setContentDelegate(createDownloadContentDelegate())
+            popupSession.open(runtime)
+
+            val popupRoot = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(Color.BLACK)
+            }
+            val popupToolbar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                setBackgroundColor(Color.rgb(24, 24, 24))
+            }
+            val title = TextView(this).apply {
+                text = action.title?.takeIf { it.isNotBlank() } ?: extension.metaData?.name ?: "Extension"
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            popupToolbar.addView(title, LinearLayout.LayoutParams(0, dp(44), 1f))
+            val closeButton = makeButton("Tutup", 13f, 10, 6) { }
+            popupToolbar.addView(closeButton)
+            popupRoot.addView(popupToolbar, LinearLayout.LayoutParams(-1, -2))
+
+            val popupView = GeckoView(this).apply {
+                setBackgroundColor(Color.BLACK)
+                setSession(popupSession)
+            }
+            popupRoot.addView(popupView, LinearLayout.LayoutParams(-1, 0, 1f))
+            val dialog = AlertDialog.Builder(this).setView(popupRoot).create()
+            closeButton.setOnClickListener { dialog.dismiss() }
+            dialog.setOnDismissListener {
+                popupDialogs.remove(dialog)
+                popupSessions.remove(popupSession)
+                try { popupView.releaseSession() } catch (_: Exception) { }
+                try { popupSession.close() } catch (_: Exception) { }
+                if (::session.isInitialized) session.setActive(true)
+            }
+            popupSessions.add(popupSession)
+            popupDialogs.add(dialog)
+            dialog.show()
+            dialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.96f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.82f).toInt()
+            )
+            popupSession.setActive(true)
+            recordSakuEvent("extensionPopup.open", "extension=${extension.id}; title=${action.title ?: ""}")
+            GeckoResult.fromValue(popupSession)
+        } catch (error: Exception) {
+            recordSakuEvent("extensionPopup.open", "extension=${extension.id}", error)
+            Toast.makeText(this, "Popup extension gagal dibuka: " + (error.message ?: "kesalahan"), Toast.LENGTH_LONG).show()
+            null
+        }
     }
 
     private fun openUboSettings() {
