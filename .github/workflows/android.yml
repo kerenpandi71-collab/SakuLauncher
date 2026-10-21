@@ -63,6 +63,12 @@ jobs:
       - name: Build Saku Launcher and SakuTube APKs
         run: ./gradlew --no-daemon :app:assembleDebug :sakutube:assembleDebug --stacktrace
 
+      - name: Verify both APK outputs
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s sakutube/build/outputs/apk/debug/sakutube-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk sakutube/build/outputs/apk/debug/sakutube-debug.apk
+
       - name: Upload Saku Launcher APK
         uses: actions/upload-artifact@v4
         with:
