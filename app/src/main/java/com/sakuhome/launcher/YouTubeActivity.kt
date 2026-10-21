@@ -473,10 +473,12 @@ class YouTubeActivity : Activity() {
                 uri: String
             ): GeckoResult<GeckoSession>? {
                 val scheme = Uri.parse(uri).scheme?.lowercase()
-                if (scheme !in setOf("http", "https", "about", "resource", "data", "blob", "file")) {
+                if (scheme !in setOf("http", "https", "about", "resource", "moz-extension", "data", "blob", "file")) {
+                    recordSakuEvent("popupBlocked", "scheme=${scheme ?: "null"}; url=${uri.take(500)}")
                     runOnUiThread { openExternalLink(uri) }
                     return GeckoResult.fromValue(null)
                 }
+                recordSakuEvent("popupRequested", "scheme=${scheme ?: "null"}; url=${uri.take(500)}")
                 return try {
                     // Treat window.open()/target=_blank as a normal browser tab, not a
                     // modal dialog. OAuth and extension sign-in flows often need to
@@ -508,14 +510,22 @@ class YouTubeActivity : Activity() {
                         inheritPrivateMode
                     )
                     browserTabs.add(tab)
+                    // Return the unopened session first. Switch the visible GeckoView only
+                    // after Gecko has had a chance to accept/open the popup session; switching
+                    // synchronously inside onNewSession can leave OAuth pages without input.
                     runOnUiThread {
-                        switchToTab(tab.id)
-                        updateTabsButton()
-                        Toast.makeText(
-                            this@YouTubeActivity,
-                            "Halaman login dibuka di tab baru. Setelah selesai, kembali ke tab extension.",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        geckoView.post {
+                            if (browserTabs.any { it.id == tab.id }) {
+                                switchToTab(tab.id)
+                                updateTabsButton()
+                                recordSakuEvent("popupActivated", "tabId=${tab.id}; url=${startUrl.take(500)}")
+                                Toast.makeText(
+                                    this@YouTubeActivity,
+                                    "Halaman login dibuka di tab baru. Setelah selesai, kembali ke tab extension.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                     GeckoResult.fromValue(newSession)
                 } catch (error: Exception) {
