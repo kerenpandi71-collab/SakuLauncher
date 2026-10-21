@@ -147,7 +147,7 @@ class YouTubeActivity : Activity() {
         toolbar.addView(makeButton("+ Tab", 12f, 8, 8) { openNewTab() })
         toolbar.addView(makeButton("Tabs 1", 11f, 6, 8) { showTabsOverview() }.apply { contentDescription = "Tabs" })
         toolbar.addView(makeButton("↓", 18f, 8, 8) { showDownloadsMenu() })
-        root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+        // Toolbar is added at the bottom after the web content to keep the top area clearer.
 
         addressRowView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -222,6 +222,7 @@ class YouTubeActivity : Activity() {
         geckoView.setBackgroundColor(Color.BLACK)
         geckoView.setSession(session)
         root.addView(geckoView, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
         updateZoomLabel()
 
