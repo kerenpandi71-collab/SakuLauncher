@@ -60,13 +60,21 @@ jobs:
           test -f gradle/wrapper/gradle-wrapper.properties
           ./gradlew --version
 
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug --stacktrace
+      - name: Build Saku Launcher and SakuTube APKs
+        run: ./gradlew --no-daemon :app:assembleDebug :sakutube:assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Upload Saku Launcher APK
         uses: actions/upload-artifact@v4
         with:
           name: saku-launcher-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload SakuTube APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sakutube-debug
+          path: sakutube/build/outputs/apk/debug/sakutube-debug.apk
           if-no-files-found: error
           retention-days: 14
