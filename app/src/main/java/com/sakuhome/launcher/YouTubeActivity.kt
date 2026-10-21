@@ -963,9 +963,11 @@ class YouTubeActivity : Activity() {
         actions += { showExtensionActionMenu() }
         items += "Daftar extension terpasang"
         actions += { showInstalledExtensions() }
-        items += "Toko extension Mozilla"
-        actions += { showExtensionStore() }
-        items += "Cari & pasang extension (katalog)"
+        items += "Toko extension (Firefox, Chrome, Edge)"
+        actions += { showExtensionStoreHub() }
+        items += "AutoDub: perbaiki klik di YouTube"
+        actions += { enableAutoDubCompatibilityMode() }
+        items += "Cari & pasang extension (katalog Firefox)"
         actions += { promptExtensionSearch() }
         items += "Manajemen cache"
         actions += { showCacheManager() }
@@ -1211,11 +1213,65 @@ class YouTubeActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
-    private fun showExtensionStore() {
-        // Open Mozilla's real Add-ons storefront in the current GeckoView session.
-        val storeUrl = "https://addons.mozilla.org/firefox/"
-        addressField.setText(storeUrl)
-        session.loadUri(storeUrl)
+    private fun showExtensionStoreHub() {
+        val labels = arrayOf(
+            "Firefox Add-ons — cari & pasang extension kompatibel",
+            "AutoDub untuk Firefox — halaman resmi",
+            "Chrome Web Store — katalog saja, CRX tidak bisa dipasang langsung",
+            "Microsoft Edge Add-ons — katalog saja, extension Chromium tidak bisa dipasang langsung"
+        )
+        val urls = arrayOf(
+            "https://addons.mozilla.org/firefox/",
+            "https://addons.mozilla.org/firefox/addon/autodub-youtube-ai-dubbing/",
+            "https://chromewebstore.google.com/",
+            "https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Toko extension")
+            .setItems(labels) { _, which ->
+                val url = urls[which]
+                addressField.setText(url)
+                session.loadUri(url)
+                if (which == 1) {
+                    Toast.makeText(
+                        this,
+                        "Gunakan versi AutoDub untuk Firefox. Setelah memasang, buka ulang tab YouTube.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else if (which >= 2) {
+                    Toast.makeText(
+                        this,
+                        "Toko ini bisa dijelajahi, tetapi paket Chrome/Edge tidak bisa dipasang langsung di GeckoView. Gunakan versi Firefox atau file XPI yang kompatibel.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun enableAutoDubCompatibilityMode() {
+        // AutoDub documents desktop browser/player support. YouTube's mobile layout may
+        // render its injected player control differently, so switch to desktop and reload.
+        if (!desktopSiteEnabled) {
+            desktopSiteEnabled = true
+            browserPrefs.edit().putBoolean("desktop_site_enabled", true).apply()
+            session.settings.setUserAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
+            session.settings.setViewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)
+        }
+        val currentUrl = browserTabs.firstOrNull { it.session === session }?.url
+            ?.takeIf { it.startsWith("https://www.youtube.com/") || it.startsWith("https://m.youtube.com/") }
+        if (currentUrl != null) {
+            addressField.setText(currentUrl)
+            session.loadUri(currentUrl)
+        } else {
+            session.reload()
+        }
+        Toast.makeText(
+            this,
+            "Mode desktop diaktifkan dan YouTube dimuat ulang. Coba tombol AutoDub lagi. Jika Google menolak login di browser tertanam, coba login lewat halaman resmi di browser eksternal.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun searchExtensionStore(query: String) {
