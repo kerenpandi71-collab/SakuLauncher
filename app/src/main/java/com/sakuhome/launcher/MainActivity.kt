@@ -1384,13 +1384,21 @@ class MainActivity : Activity() {
     private fun loadApps(): List<LaunchableApp> {
         val queryIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
-        val installed = matches.filter { it.activityInfo.packageName != packageName }
+        val installed = matches.filter {
+            it.activityInfo.packageName != packageName &&
+                it.activityInfo.packageName != INTERNAL_SAKUTUBE_PACKAGE
+        }
             .distinctBy { it.activityInfo.packageName }
             .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, loadThemedIcon(info)) }
+        val sakuTubeIcon = try {
+            packageManager.getApplicationIcon(INTERNAL_SAKUTUBE_PACKAGE)
+        } catch (_: Exception) {
+            getDrawable(R.drawable.ic_sakutube_shortcut) ?: packageManager.getApplicationIcon(packageName)
+        }
         val sakuTubeShortcut = LaunchableApp(
             "SakuTube",
             INTERNAL_SAKUTUBE_PACKAGE,
-            packageManager.getApplicationIcon(packageName)
+            sakuTubeIcon
         )
         return (installed + sakuTubeShortcut).sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
