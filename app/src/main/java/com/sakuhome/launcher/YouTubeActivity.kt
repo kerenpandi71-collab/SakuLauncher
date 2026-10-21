@@ -1532,13 +1532,9 @@ class YouTubeActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        // Back follows browser history when available; if there is no history,
-        // leave SakuTube instead of trapping the user on its home page.
-        if (::session.isInitialized && session.canGoBack()) {
-            session.goBack()
-        } else {
-            finish()
-        }
+        // The toolbar's browser-back control handles webpage history.
+        // System Back exits SakuTube and returns to the launcher.
+        finish()
     }
 
     override fun onPause() {
