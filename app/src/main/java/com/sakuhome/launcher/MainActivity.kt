@@ -230,6 +230,53 @@ class MainActivity : Activity() {
         return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
     }
 
+    /** Intercepts a deliberate upward swipe anywhere on the desktop, including over app icons. */
+    private inner class HomeCanvas(context: android.content.Context) : FrameLayout(context) {
+        private var downX = 0f
+        private var downY = 0f
+        private var drawerSwipe = false
+
+        init { isClickable = true }
+
+        override fun onInterceptTouchEvent(event: android.view.MotionEvent): Boolean {
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    drawerSwipe = false
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (dy < -dp(48) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.1f) {
+                        drawerSwipe = true
+                        return true
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    if (!drawerSwipe) {
+                        downX = 0f
+                        downY = 0f
+                    }
+                }
+            }
+            return drawerSwipe
+        }
+
+        override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+            if (drawerSwipe) {
+                if (event.actionMasked == android.view.MotionEvent.ACTION_UP) {
+                    drawerSwipe = false
+                    showStartPanel()
+                } else if (event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                    drawerSwipe = false
+                }
+                return true
+            }
+            return super.onTouchEvent(event)
+        }
+    }
+
     private fun renderHomeCanvas() {
         if (!::desktopGrid.isInitialized || !::pinnedAdapter.isInitialized) return
         val canvas = desktopGrid
@@ -595,7 +642,7 @@ class MainActivity : Activity() {
             clipChildren = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
-        desktopGrid = FrameLayout(this).apply {
+        desktopGrid = HomeCanvas(this).apply {
             clipChildren = false
             clipToPadding = false
             setPadding(dp(2), dp(homeGridTopPaddingDp()), dp(2), dp(12))
@@ -846,7 +893,7 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
-        desktopGrid = FrameLayout(this).apply {
+        desktopGrid = HomeCanvas(this).apply {
             clipChildren = false
             clipToPadding = false
             setPadding(dp(12), dp(18), dp(12), dp(14))
