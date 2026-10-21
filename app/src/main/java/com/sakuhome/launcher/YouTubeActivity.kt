@@ -227,7 +227,13 @@ class YouTubeActivity : Activity() {
         updateZoomLabel()
 
         refreshInstalledExtension()
-        val initialUrl = intent.getStringExtra("sakutube_url")?.takeIf { it.isNotBlank() } ?: homeUrl
+        val incomingWebUrl = intent?.data?.toString()?.takeIf {
+            val scheme = android.net.Uri.parse(it).scheme?.lowercase()
+            scheme == "http" || scheme == "https"
+        }
+        val initialUrl = incomingWebUrl
+            ?: intent.getStringExtra("sakutube_url")?.takeIf { it.isNotBlank() }
+            ?: homeUrl
         browserTabs.add(BrowserTab(nextTabId++, session, initialUrl, if (initialUrl == homeUrl) "Beranda SakuTube" else "Tab 1"))
         addressField.setText(if (initialUrl == homeUrl) "SakuTube • Beranda" else initialUrl)
         session.loadUri(initialUrl)
@@ -996,6 +1002,8 @@ class YouTubeActivity : Activity() {
         actions += { togglePip() }
         items += "Kelola semua extension"
         actions += { showInstalledExtensions() }
+        items += "Jadikan SakuTube browser default"
+        actions += { requestDefaultBrowserRole() }
         items += "Buka halaman di browser eksternal"
         actions += { openCurrentPageExternally() }
         items += "Kunci zoom: " + if (zoomLocked) "ON" else "OFF"
@@ -1437,6 +1445,39 @@ class YouTubeActivity : Activity() {
         } catch (error: Exception) {
             recordSakuEvent("openExternalLink", "url=${raw.take(500)}", error)
             Toast.makeText(this, "Tautan tidak dapat dibuka: ${error.message ?: "aplikasi tujuan tidak tersedia"}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun requestDefaultBrowserRole() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val roleManager = getSystemService(android.app.role.RoleManager::class.java)
+                if (roleManager != null && roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
+                    if (roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
+                        Toast.makeText(this, "SakuTube sudah menjadi browser default.", Toast.LENGTH_LONG).show()
+                    } else {
+                        startActivityForResult(
+                            roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER),
+                            7402
+                        )
+                    }
+                } else {
+                    openDefaultAppsSettings()
+                }
+            } else {
+                openDefaultAppsSettings()
+            }
+        } catch (e: Exception) {
+            recordSakuEvent("requestDefaultBrowserRole", "Gagal membuka pemilihan browser default", e)
+            openDefaultAppsSettings()
+        }
+    }
+
+    private fun openDefaultAppsSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Buka Setelan Android > Aplikasi default > Browser.", Toast.LENGTH_LONG).show()
         }
     }
 
