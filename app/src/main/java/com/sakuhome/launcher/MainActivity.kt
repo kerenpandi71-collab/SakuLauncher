@@ -658,16 +658,12 @@ class MainActivity : Activity() {
             clipChildren = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
+        // Full-screen transparent desktop overlay, not a panel constrained by the shell.
         desktopGrid = HomeCanvas(this).apply {
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(2), dp(homeGridTopPaddingDp()), dp(2), dp(12))
-            addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                val canvas = view as FrameLayout
-                val desired = dp(homeGridTopPaddingDp())
-                if (canvas.paddingTop != desired) canvas.setPadding(dp(2), desired, dp(2), dp(12))
-                renderHomeCanvas()
-            }
+            setPadding(0, 0, 0, 0)
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> renderHomeCanvas() }
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.setOnDragListener { canvas, event ->
@@ -720,7 +716,7 @@ class MainActivity : Activity() {
                 else -> false
             }
         }
-        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+        // The full-screen shortcut layer is attached directly to rootFrame below.
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
@@ -738,6 +734,7 @@ class MainActivity : Activity() {
                 })
             }
         }
+        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
@@ -909,10 +906,11 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
+        // Full-screen transparent overlay for freely positioned desktop shortcuts.
         desktopGrid = HomeCanvas(this).apply {
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(12), dp(18), dp(12), dp(14))
+            setPadding(0, 0, 0, 0)
             addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> renderHomeCanvas() }
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
@@ -932,7 +930,7 @@ class MainActivity : Activity() {
                 else -> true
             }
         }
-        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+        // The full-screen shortcut layer is attached directly to rootFrame below.
 
         // Permanent bottom panel replaces the floating dock in landscape mode.
         val bottomPanel = LinearLayout(this).apply {
@@ -1013,6 +1011,7 @@ class MainActivity : Activity() {
             topMargin = dp(8)
         })
 
+        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val drawerWidth = dp(preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460))
