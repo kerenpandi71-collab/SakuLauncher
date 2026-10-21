@@ -280,7 +280,16 @@ class MainActivity : Activity() {
     private fun renderHomeCanvas() {
         if (!::desktopGrid.isInitialized || !::pinnedAdapter.isInitialized) return
         val canvas = desktopGrid
-        if (canvas.width <= 0 || canvas.height <= 0) return
+        if (canvas.width <= 0 || canvas.height <= 0) {
+            canvas.post { renderHomeCanvas() }
+            return
+        }
+        // Recover the desktop surface from interrupted drawer/page animations before rebuilding icons.
+        canvas.animate().cancel()
+        canvas.visibility = View.VISIBLE
+        canvas.alpha = 1f
+        canvas.translationX = 0f
+        canvas.translationY = 0f
         val currentApps = homeApps()
         val positions = homeIconPositions()
         val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
@@ -353,10 +362,17 @@ class MainActivity : Activity() {
             val point = positions[app.packageName] ?: defaults[app.packageName] ?: (0.5f to 0.5f)
             val left = canvas.paddingLeft + (point.first * maxLeft).toInt()
             val top = canvas.paddingTop + (point.second * maxTop).toInt()
-            canvas.addView(cell, FrameLayout.LayoutParams(cellWidth, cellHeight).apply {
+            // AppGridAdapter normally creates AbsListView.LayoutParams for GridView.
+            // This canvas is a FrameLayout, so replace them explicitly and force a fresh measure.
+            cell.layoutParams = FrameLayout.LayoutParams(cellWidth, cellHeight).apply {
                 leftMargin = left.coerceIn(canvas.paddingLeft, canvas.paddingLeft + maxLeft)
                 topMargin = top.coerceIn(canvas.paddingTop, canvas.paddingTop + maxTop)
-            })
+            }
+            cell.visibility = View.VISIBLE
+            cell.alpha = 1f
+            cell.isEnabled = true
+            cell.requestLayout()
+            canvas.addView(cell)
         }
     }
 
