@@ -263,6 +263,46 @@ class MainActivity : Activity() {
         canvas.removeAllViews()
         currentApps.forEachIndexed { index, app ->
             val cell = pinnedAdapter.getView(index, null, canvas)
+            // Shortcut children consume touch events themselves, so give each one the
+            // same swipe gestures as the empty desktop area without blocking taps/long-press.
+            var gestureDownX = 0f
+            var gestureDownY = 0f
+            cell.setOnTouchListener { _, event ->
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        gestureDownX = event.x
+                        gestureDownY = event.y
+                        false
+                    }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        val dx = event.x - gestureDownX
+                        val dy = event.y - gestureDownY
+                        if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                            showStartPanel()
+                            true
+                        } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && ::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) {
+                            hideStartPanel()
+                            true
+                        } else if (kotlin.math.abs(dx) > dp(72)) {
+                            val direction = if (dx < 0) -1f else 1f
+                            canvas.animate().cancel()
+                            canvas.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
+                                .setDuration(115L)
+                                .setInterpolator(android.view.animation.AccelerateInterpolator())
+                                .withEndAction {
+                                    showHomePage(homePage + if (dx < 0) 1 else -1)
+                                    canvas.translationX = direction * dp(30).toFloat()
+                                    canvas.animate().alpha(1f).translationX(0f)
+                                        .setDuration(235L)
+                                        .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                        .start()
+                                }.start()
+                            true
+                        } else false
+                    }
+                    else -> false
+                }
+            }
             val point = positions[app.packageName] ?: defaults[app.packageName] ?: (0.5f to 0.5f)
             val left = canvas.paddingLeft + (point.first * maxLeft).toInt()
             val top = canvas.paddingTop + (point.second * maxTop).toInt()
