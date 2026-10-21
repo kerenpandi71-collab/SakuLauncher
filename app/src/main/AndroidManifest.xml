@@ -25,6 +25,7 @@
     <application
         android:allowBackup="true"
         android:label="Saku Launcher"
+        android:icon="@drawable/ic_saku_launcher"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
