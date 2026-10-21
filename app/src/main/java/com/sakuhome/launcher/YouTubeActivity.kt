@@ -1330,7 +1330,7 @@ class YouTubeActivity : Activity() {
                     if (found.isEmpty()) {
                         AlertDialog.Builder(this).setTitle("Tidak ada hasil")
                             .setMessage("Katalog kosong atau koneksi gagal. Coba kata kunci lain.")
-                            .setPositiveButton("Cari lagi") { _, _ -> showExtensionStore() }
+                            .setPositiveButton("Cari lagi") { _, _ -> showExtensionStoreHub() }
                             .setNegativeButton("Tutup", null).show()
                     } else showExtensionStoreResults(found)
                 }
@@ -1338,7 +1338,7 @@ class YouTubeActivity : Activity() {
                 runOnUiThread {
                     AlertDialog.Builder(this).setTitle("Toko tidak tersedia")
                         .setMessage("Tidak bisa memuat katalog Mozilla: " + (e.message ?: "kesalahan jaringan"))
-                        .setPositiveButton("Coba lagi") { _, _ -> showExtensionStore() }
+                        .setPositiveButton("Coba lagi") { _, _ -> showExtensionStoreHub() }
                         .setNegativeButton("Tutup", null).show()
                 }
             } finally {
