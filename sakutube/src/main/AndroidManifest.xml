@@ -7,7 +7,7 @@
     <application
         android:allowBackup="true"
         android:label="SakuTube"
-        android:icon="@android:drawable/ic_menu_view"
+        android:icon="@drawable/ic_sakutube"
         android:supportsRtl="true"
         android:theme="@style/SakuTubeTheme">
         <activity
