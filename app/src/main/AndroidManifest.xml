@@ -68,7 +68,19 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <activity android:name=".YouTubeActivity" android:exported="false" android:supportsPictureInPicture="true" android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity
+            android:name=".YouTubeActivity"
+            android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:configChanges="keyboardHidden|orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
         <service android:name=".SakuTubePlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <service
             android:name=".FloatingDockService"
