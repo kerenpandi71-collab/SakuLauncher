@@ -136,6 +136,12 @@ class YouTubeActivity : Activity() {
         toolbar.addView(makeButton("‹", 24f, 10, 8) { session.goBack() })
         toolbar.addView(makeButton("Mini", 13f, 10, 8) { enterMiniPlayer() })
         toolbar.addView(makeButton("⟳", 20f, 10, 8) { session.reload() })
+        // Explicit Home control: leave SakuTube and return to the launcher desktop.
+        // Browser history is handled by the back arrow; Home must not navigate the webpage.
+        toolbar.addView(makeButton("⌂", 21f, 10, 8) {
+            recordSakuEvent("SakuTube.homeButton", "Returning to launcher")
+            finish()
+        }.apply { contentDescription = "Kembali ke layar utama Saku Launcher" })
         toolbar.addView(makeButton("✕", 19f, 10, 8) { finish() })
         toolbar.addView(makeButton("+ Tab", 12f, 8, 8) { openNewTab() })
         toolbar.addView(makeButton("Tabs 1", 11f, 6, 8) { showTabsOverview() }.apply { contentDescription = "Tabs" })
@@ -1526,7 +1532,13 @@ class YouTubeActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        session.goBack()
+        // Back follows browser history when available; if there is no history,
+        // leave SakuTube instead of trapping the user on its home page.
+        if (::session.isInitialized && session.canGoBack()) {
+            session.goBack()
+        } else {
+            finish()
+        }
     }
 
     override fun onPause() {
