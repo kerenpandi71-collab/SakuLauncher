@@ -211,6 +211,12 @@ class MainActivity : Activity() {
         applyDisplayAwareOrientation()
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
+        if (!preferences.getBoolean(KEY_VDM_HOME_SHORTCUT_MIGRATED, false)) {
+            val home = homePackages(0)
+            if (!home.contains(VIRTUAL_DISPLAY_MANAGER_ID)) home.add(0, VIRTUAL_DISPLAY_MANAGER_ID)
+            saveHomePackages(home, 0)
+            preferences.edit().putBoolean(KEY_VDM_HOME_SHORTCUT_MIGRATED, true).apply()
+        }
         buildScreen()
         restoreWidgets()
         if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
@@ -1212,10 +1218,15 @@ class MainActivity : Activity() {
     private fun loadApps(): List<LaunchableApp> {
         val queryIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
-        return matches.filter { it.activityInfo.packageName != packageName }
+        val installed = matches.filter { it.activityInfo.packageName != packageName }
             .distinctBy { it.activityInfo.packageName }
             .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, loadThemedIcon(info)) }
-            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+        val virtualDisplay = LaunchableApp(
+            "Virtual Display Manager",
+            VIRTUAL_DISPLAY_MANAGER_ID,
+            getDrawable(android.R.drawable.ic_menu_manage)!!
+        )
+        return (installed + virtualDisplay).sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
     private fun componentMatches(component: String, targetPackage: String, targetActivity: String): Boolean {
@@ -1318,6 +1329,10 @@ class MainActivity : Activity() {
     }
 
     private fun launch(app: LaunchableApp) {
+        if (app.packageName == VIRTUAL_DISPLAY_MANAGER_ID) {
+            openVirtualDisplayManager()
+            return
+        }
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
@@ -1333,6 +1348,20 @@ class MainActivity : Activity() {
     }
 
     private fun showAppMenu(app: LaunchableApp) {
+        if (app.packageName == VIRTUAL_DISPLAY_MANAGER_ID) {
+            val isHomeShortcut = homePackages().contains(VIRTUAL_DISPLAY_MANAGER_ID)
+            val choices = arrayOf("Buka Virtual Display Manager", if (isHomeShortcut) "Hapus dari layar utama" else "Tambahkan ke layar utama")
+            AlertDialog.Builder(this).setTitle(app.label).setItems(choices) { _, which ->
+                if (which == 0) openVirtualDisplayManager() else {
+                    val current = homePackages()
+                    if (isHomeShortcut) current.remove(VIRTUAL_DISPLAY_MANAGER_ID) else current.add(VIRTUAL_DISPLAY_MANAGER_ID)
+                    saveHomePackages(current)
+                    if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
+                    Toast.makeText(this, if (isHomeShortcut) "Pintasan dihapus dari layar utama" else "Pintasan ditambahkan ke layar utama", Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("Batal", null).show()
+            return
+        }
         val isHome = homePackages().contains(app.packageName)
         val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
         val isPinned = pinnedPackages().contains(app.packageName)
@@ -1556,7 +1585,8 @@ class MainActivity : Activity() {
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
             "SakuTube · YouTube di dalam aplikasi",
-            "Baca log error untuk analisis"
+            "Baca log error untuk analisis",
+            "Virtual Display Manager"
         )
         AlertDialog.Builder(this).setTitle("Saku Launcher")
             .setItems(options) { _, which ->
@@ -1610,8 +1640,17 @@ class MainActivity : Activity() {
                     17 -> showPermissionInfo()
                     18 -> openYouTubeWeb()
                     19 -> showDiagnosticLog()
+                    20 -> openVirtualDisplayManager()
                 }
             }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun openVirtualDisplayManager() {
+        try {
+            startActivity(Intent(this, VirtualDisplayManagerActivity::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Virtual Display Manager gagal dibuka: ${e.message ?: "kesalahan"}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun openYouTubeWeb() {
@@ -2783,6 +2822,8 @@ class MainActivity : Activity() {
         private const val EXTRA_SECONDARY_DISPLAY_LAUNCH = "com.sakuhome.launcher.EXTRA_SECONDARY_DISPLAY_LAUNCH"
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
+        private const val VIRTUAL_DISPLAY_MANAGER_ID = "__saku_virtual_display_manager__"
+        private const val KEY_VDM_HOME_SHORTCUT_MIGRATED = "vdm_home_shortcut_migrated"
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_HOME_ICON_POSITION = "home_icon_position"
