@@ -39,6 +39,7 @@ public final class GamePadOverlayService extends Service {
     private float leftWidth=0.24f, leftHeight=0.72f, rightWidth=0.25f, rightHeight=0.78f;
     private int alpha=185;
     private boolean editing;
+    private boolean panelsVisible=true;
     private volatile Process bridgeProcess;
     private volatile BufferedWriter bridgeWriter;
     private volatile boolean bridgeReady;
@@ -92,14 +93,17 @@ public final class GamePadOverlayService extends Service {
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&intent.hasExtra("display_id")){targetDisplayId=intent.getIntExtra("display_id",0);getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply();}
+        if(intent!=null&&"TOGGLE_VISIBILITY".equals(intent.getAction())) panelsVisible=!panelsVisible;
+        if(intent!=null&&"SHOW".equals(intent.getAction())) panelsVisible=true;
+        if(intent!=null&&"HIDE".equals(intent.getAction())) panelsVisible=false;
         android.util.DisplayMetrics currentMetrics=new android.util.DisplayMetrics();wm.getDefaultDisplay().getRealMetrics(currentMetrics);screenWidth=currentMetrics.widthPixels;screenHeight=currentMetrics.heightPixels;
         updatePanels(); return START_STICKY;
     }
     @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);android.util.DisplayMetrics dm=new android.util.DisplayMetrics();wm.getDefaultDisplay().getRealMetrics(dm);screenWidth=dm.widthPixels;screenHeight=dm.heightPixels;updatePanels();}
     private void updatePanels(){
         if(wm==null||leftPanel==null||rightPanel==null)return;
-        boolean landscape=getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
-        if(!landscape){removePanels();return;}
+        boolean landscape=screenWidth>screenHeight;
+        if(!landscape||!panelsVisible){removePanels();return;}
         int type=Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE;
         int lw=Math.max(dp(92),Math.min((int)(screenWidth*.36f),(int)(screenWidth*leftWidth)));
         int lh=Math.max(dp(150),Math.min((int)(screenHeight*.95f),(int)(screenHeight*leftHeight)));
