@@ -70,6 +70,8 @@ class MainActivity : Activity() {
     private var homePage = 0
     private var homePageLabel: TextView? = null
 
+    private val englishUi: Boolean get() = preferences.getBoolean("settings_language_english", false)
+    private fun ui(id: String, en: String, idText: String): String = if (englishUi) en else idText
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
     private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
     private val backgroundBottom: Int get() = if (isDarkTheme) Color.rgb(24, 35, 56) else Color.rgb(211, 224, 242)
@@ -129,6 +131,7 @@ class MainActivity : Activity() {
 
     private fun saveHomePackages(packages: List<String>, page: Int = homePage) {
         preferences.edit().putString(homePageKey(page), packages.distinct().joinToString("\n")).remove(KEY_HOME_APPS).apply()
+        if (::desktopGrid.isInitialized) desktopGrid.post { renderHomeCanvas() }
     }
 
     private fun homePageCount(): Int = maxOf(1, preferences.getInt(KEY_HOME_PAGE_COUNT, 1))
@@ -616,7 +619,7 @@ class MainActivity : Activity() {
             visibility = if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) View.GONE else View.VISIBLE
         }
         pageControls.addView(TextView(this).apply {
-            text = "DESKTOP"
+            text = if (englishUi) "DESKTOP" else "LAYAR UTAMA"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
@@ -718,24 +721,14 @@ class MainActivity : Activity() {
         }
         // The full-screen shortcut layer is attached directly to rootFrame below.
 
-        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
-            val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
-            val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, availableWidthDp)
-            val dockGravity = if (landscape) currentDockGravity() else Gravity.CENTER_HORIZONTAL
-            shell.addView(buildDock(), LinearLayout.LayoutParams(dp(dockWidth), dp(if (landscape) dockHeightDp.coerceAtLeast(64) else dockHeightDp)).apply {
-                gravity = dockGravity
-                topMargin = dp(10)
-            })
-            if (landscape) {
-                shell.addView(buildDesktopNavigationBar(), LinearLayout.LayoutParams(-1, dp(46)).apply {
-                    topMargin = dp(8)
-                    bottomMargin = dp(1)
-                })
-            }
-        }
-        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
+        // The portrait dock is anchored to the bottom of the root, not inserted
+        // into the vertical header column (which previously pushed it up the screen).
+        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1).apply {
+            topMargin = dp(126)
+            bottomMargin = dp(dockHeightDp + 38)
+        })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        attachHomeDock()
         startPanel = buildStartPanel()
         val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
         val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
@@ -941,7 +934,7 @@ class MainActivity : Activity() {
             elevation = dp(10).toFloat()
         }
         val startButton = TextView(this).apply {
-            text = "▦  Menu"
+            text = if (englishUi) "▦  Menu" else "▦  Menu"
             textSize = 13f
             setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
             gravity = Gravity.CENTER
@@ -1105,7 +1098,7 @@ class MainActivity : Activity() {
         val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
 
         strip.addView(TextView(this).apply {
-            text = "☁  Cuaca"
+            text = if (englishUi) "☁  Weather" else "☁  Cuaca"
             textSize = 11f
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
@@ -1231,7 +1224,7 @@ class MainActivity : Activity() {
         }
         val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heading.addView(TextView(this).apply {
-            text = "Aplikasi"
+            text = ui("apps", "Apps", "Aplikasi")
             textSize = 20f
             setTextColor(primaryText)
             setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD))
@@ -1487,19 +1480,25 @@ class MainActivity : Activity() {
         } catch (_: Exception) { fallback }
     }
 
+    private fun attachHomeDock() {
+        if (!::rootFrame.isInitialized) return
+        for (i in rootFrame.childCount - 1 downTo 0) {
+            if (rootFrame.getChildAt(i).tag == "saku_home_dock") rootFrame.removeViewAt(i)
+        }
+        if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
+        val dock = buildDock().apply { tag = "saku_home_dock" }
+        rootFrame.addView(dock, FrameLayout.LayoutParams(
+            dp(currentDockWidth()), dp(dockHeightDp), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        ).apply { bottomMargin = dp(18) })
+    }
+
     private fun rebuildPinnedViews() {
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
-        // When the bottom taskbar is hidden, there is no dock view to rebuild.
-        if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
-        // Rebuild only the dock; keep the open Start panel and its scroll position intact.
-        val shell = rootFrame.getChildAt(0) as? LinearLayout ?: return
-        val dockIndex = shell.childCount - 1
-        shell.removeViewAt(dockIndex)
-        shell.addView(buildDock(), LinearLayout.LayoutParams(dp(currentDockWidth()), dp(dockHeightDp)).apply {
-            gravity = currentDockGravity()
-            topMargin = dp(10)
-        })
+        if (::desktopGrid.isInitialized) renderHomeCanvas()
+        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            attachHomeDock()
+        }
     }
 
     private fun launch(app: LaunchableApp) {
@@ -1772,94 +1771,238 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val themeState = if (isDarkTheme) "Gelap" else "Cerah"
-        val options = arrayOf(
-            "Mode tampilan · $themeState",
-            "Jumlah layar utama · ${homePageCount()}",
+        val english = englishUi
+        val options = if (english) arrayOf(
+            "Appearance · ${if (isDarkTheme) "Dark" else "Light"}",
+            "Home screens · ${homePageCount()}",
             "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
+            "Transparency · ${transparencyPercent}%",
+            "Icons & icon pack",
+            "Dock size · ${dockWidthDp} × ${dockHeightDp} dp",
+            "Landscape layout",
+            "Orientation · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Portrait"; else -> "Follow sensor" }}",
+            "Landscape app drawer · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Right" else "Left"}",
+            "Choose wallpaper",
+            "Reset wallpaper",
+            "Set as default launcher",
+            if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Disable floating dock & navigation" else "Enable floating dock & navigation",
+            "Saku bubble size · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
+            "Floating navigation position · ${dockPositionLabel()}",
+            "Start automatically after reboot · ${if (preferences.getBoolean(KEY_START_ON_BOOT, true)) "On" else "Off"}",
+            "Allow background activity",
+            "About & permissions",
+            "SakuTube browser",
+            "View error log",
+            "App icon labels · ${if (hideLabels) "Hidden" else "Shown"}",
+            "Add a home-screen widget",
+            "Home icon placement · ${homeIconPositionLabel()}",
+            "Language · English"
+        ) else arrayOf(
+            "Tampilan · ${if (isDarkTheme) "Gelap" else "Cerah"}",
+            "Jumlah layar utama · ${homePageCount()}",
+            "Blur latar · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
             "Transparansi · ${transparencyPercent}%",
-            "Kustomisasi ikon & icon pack",
+            "Ikon & paket ikon",
             "Ukuran dock · ${dockWidthDp} × ${dockHeightDp} dp",
-            "Kustomisasi landscape",
-            "Orientasi launcher · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Potret"; else -> "Ikuti sensor" }}",
+            "Tata letak landscape",
+            "Orientasi · ${when (preferences.getInt("launcher_orientation", android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)) { android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> "Landscape"; android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> "Potret"; else -> "Ikuti sensor" }}",
             "Posisi drawer landscape · ${if ((preferences.getString(KEY_DRAWER_POSITION, "left") ?: "left") == "right") "Kanan" else "Kiri"}",
             "Pilih wallpaper",
             "Reset wallpaper",
             "Jadikan launcher default",
-            (if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Nonaktifkan dock dan navigasi mengambang" else "Aktifkan dock dan navigasi mengambang"),
+            if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) "Matikan dock & navigasi mengambang" else "Aktifkan dock & navigasi mengambang",
             "Ukuran bola Saku · ${preferences.getInt(KEY_BUBBLE_SIZE, 54)} dp",
             "Posisi navigasi mengambang · ${dockPositionLabel()}",
-            "Mulai otomatis setelah restart",
+            "Mulai otomatis setelah restart · ${if (preferences.getBoolean(KEY_START_ON_BOOT, true)) "Aktif" else "Nonaktif"}",
             "Izinkan berjalan di latar belakang",
             "Tentang & izin",
-            "SakuTube · YouTube di dalam aplikasi",
-            "Baca log error untuk analisis",
-            "Label nama ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
+            "Browser SakuTube",
+            "Lihat log error",
+            "Label ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
             "Tambahkan widget ke layar utama",
-            "Posisi ikon layar utama · ${homeIconPositionLabel()}"
+            "Posisi ikon layar utama · ${homeIconPositionLabel()}",
+            "Bahasa · English"
         )
-        AlertDialog.Builder(this).setTitle("Saku Launcher")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> toggleTheme()
-                    1 -> chooseHomePageCount()
-                    2 -> chooseBackgroundBlur()
-                    3 -> chooseTransparency()
-                    4 -> chooseIconCustomization()
-                    5 -> chooseDockSize()
-                    6 -> showLandscapeCustomization()
-                    7 -> chooseLauncherOrientation()
-                    8 -> chooseDrawerPosition()
-                    9 -> chooseWallpaper()
-                    10 -> resetWallpaper()
-                    11 -> openHomeSettings()
-                    12 -> {
-                        val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
-                        if (enabled) {
-                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
-                            try {
-                                startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_STOP))
-                            } catch (_: Exception) {
-                                stopService(Intent(this, FloatingDockService::class.java))
-                            }
-                            Toast.makeText(this, "Dock dan navigasi mengambang dinonaktifkan", Toast.LENGTH_SHORT).show()
-                        } else if (android.provider.Settings.canDrawOverlays(this)) {
-                            preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, true).apply()
-                            try {
-                                val serviceIntent = Intent(this, FloatingDockService::class.java)
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
-                                else startService(serviceIntent)
-                                Toast.makeText(this, "Dock dan navigasi mengambang diaktifkan", Toast.LENGTH_SHORT).show()
-                            } catch (_: Exception) {
-                                preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
-                                openOverlaySettings()
-                            }
-                        } else {
-                            preferences.edit().putBoolean(KEY_OVERLAY_PENDING, true).apply()
-                            openOverlaySettings()
-                        }
-                    }
-                    13 -> chooseBubbleSize()
-                    14 -> chooseDockNavigationPosition()
-                    15 -> {
-                        val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
-                        preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
-                        Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
-                    }
-                    16 -> requestBackgroundRunPermission()
-                    17 -> showPermissionInfo()
-                    18 -> openYouTubeWeb()
-                    19 -> showDiagnosticLog()
-                    20 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
+
+        val dialog = AlertDialog.Builder(this).create()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(12))
+            background = rounded(if (isDarkTheme) Color.rgb(15, 21, 34) else Color.rgb(242, 246, 253), 28)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(14))
+        }
+        header.addView(TextView(this).apply {
+            text = "SAKU  /  ${if (english) "SETTINGS" else "PENGATURAN"}"
+            textSize = 11f
+            letterSpacing = 0.16f
+            setTextColor(accent)
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+        })
+        header.addView(TextView(this).apply {
+            text = if (english) "Make it yours" else "Atur sesuai gayamu"
+            textSize = 25f
+            setTextColor(primaryText)
+            setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD))
+            setPadding(0, dp(5), 0, dp(3))
+        })
+        header.addView(TextView(this).apply {
+            text = if (english) "Personalize your home screen, dock and navigation." else "Personalisasi layar utama, dock, dan navigasi."
+            textSize = 12f
+            setTextColor(secondaryText)
+        })
+        content.addView(header)
+        val scroll = android.widget.ScrollView(this).apply {
+            isFillViewport = false
+            clipToPadding = false
+        }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val sectionNames = if (english)
+            mapOf(0 to "LOOK & FEEL", 4 to "LAYOUT", 9 to "HOME SCREEN", 11 to "SYSTEM & ACCESS", 18 to "SAKU APPS", 20 to "PERSONALIZATION")
+        else
+            mapOf(0 to "TAMPILAN", 4 to "TATA LETAK", 9 to "LAYAR UTAMA", 11 to "SISTEM & AKSES", 18 to "APLIKASI SAKU", 20 to "PERSONALISASI")
+        options.forEachIndexed { index, label ->
+            sectionNames[index]?.let { section ->
+                list.addView(TextView(this).apply {
+                    text = section
+                    textSize = 10f
+                    letterSpacing = 0.13f
+                    setTextColor(secondaryText)
+                    setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+                    setPadding(dp(5), dp(13), dp(5), dp(7))
+                })
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(13), dp(11), dp(12), dp(11))
+                background = rounded(if (isDarkTheme) Color.rgb(28, 37, 55) else Color.WHITE, 16)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    if (index == 23) {
+                        preferences.edit().putBoolean("settings_language_english", !englishUi).apply()
                         buildScreen()
                         restoreWidgets()
-                        Toast.makeText(this, if (hideLabels) "Label ikon disembunyikan" else "Label ikon ditampilkan", Toast.LENGTH_SHORT).show()
-                    }
-                    21 -> showWidgetInfo()
-                    22 -> chooseHomeIconPosition()
+                        showSettings()
+                    } else runSettingAction(index)
                 }
-            }.setNegativeButton("Tutup", null).show()
+            }
+            val glyph = when (index) {
+                0 -> "◐"; 1 -> "▦"; 2 -> "◌"; 3 -> "◍"; 4 -> "✳"; 5 -> "▱"; 6 -> "▤"; 7 -> "↻"; 8 -> "☷"
+                9 -> "▧"; 10 -> "↺"; 11 -> "⌂"; 12 -> "◉"; 13 -> "●"; 14 -> "↔"; 15 -> "⏻"; 16 -> "⌁"
+                17 -> "ⓘ"; 18 -> "▶"; 19 -> "≋"; 20 -> "Aa"; 21 -> "▦"; 22 -> "⌖"; else -> "文"
+            }
+            row.addView(TextView(this).apply {
+                text = glyph
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(accent)
+                background = rounded(if (isDarkTheme) Color.rgb(40, 53, 76) else Color.rgb(229, 237, 251), 12)
+            }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            row.addView(TextView(this).apply {
+                text = label
+                textSize = 13f
+                setTextColor(primaryText)
+                setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+                maxLines = 2
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(6), 0)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(this).apply {
+                text = "›"
+                textSize = 25f
+                setTextColor(secondaryText)
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(dp(20), dp(36)))
+            list.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+            })
+        }
+        scroll.addView(list, android.view.ViewGroup.LayoutParams(-1, -2))
+        content.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        dialog.setView(content)
+        dialog.setButton(AlertDialog.BUTTON_NEGATIVE, if (english) "Close" else "Tutup") { _, _ -> dialog.dismiss() }
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            dialog.window?.setLayout((resources.displayMetrics.widthPixels - dp(28)).coerceAtLeast(dp(280)), (resources.displayMetrics.heightPixels - dp(72)).coerceAtMost(dp(720)))
+        }
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(accent)
+    }
+
+    private fun runSettingAction(which: Int) {
+        when (which) {
+            0 -> toggleTheme()
+            1 -> chooseHomePageCount()
+            2 -> chooseBackgroundBlur()
+            3 -> chooseTransparency()
+            4 -> chooseIconCustomization()
+            5 -> chooseDockSize()
+            6 -> showLandscapeCustomization()
+            7 -> chooseLauncherOrientation()
+            8 -> chooseDrawerPosition()
+            9 -> chooseWallpaper()
+            10 -> resetWallpaper()
+            11 -> openHomeSettings()
+            12 -> {
+                val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
+                if (enabled) {
+                    preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                    try {
+                        startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_STOP))
+                    } catch (_: Exception) {
+                        stopService(Intent(this, FloatingDockService::class.java))
+                    }
+                    Toast.makeText(this, if (englishUi) "Floating dock and navigation disabled" else "Dock dan navigasi mengambang dinonaktifkan", Toast.LENGTH_SHORT).show()
+                } else if (android.provider.Settings.canDrawOverlays(this)) {
+                    preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, true).apply()
+                    try {
+                        val serviceIntent = Intent(this, FloatingDockService::class.java)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+                        else startService(serviceIntent)
+                        Toast.makeText(this, if (englishUi) "Floating dock and navigation enabled" else "Dock dan navigasi mengambang diaktifkan", Toast.LENGTH_SHORT).show()
+                    } catch (_: Exception) {
+                        preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
+                        openOverlaySettings()
+                    }
+                } else {
+                    preferences.edit().putBoolean(KEY_OVERLAY_PENDING, true).apply()
+                    openOverlaySettings()
+                }
+            }
+            13 -> chooseBubbleSize()
+            14 -> chooseDockNavigationPosition()
+            15 -> {
+                val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
+                preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
+                Toast.makeText(this, if (englishUi) {
+                    if (!enabled) "Auto-start enabled" else "Auto-start disabled"
+                } else {
+                    if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan"
+                }, Toast.LENGTH_SHORT).show()
+                buildScreen()
+            }
+            16 -> requestBackgroundRunPermission()
+            17 -> showPermissionInfo()
+            18 -> openYouTubeWeb()
+            19 -> showDiagnosticLog()
+            20 -> {
+                preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
+                buildScreen()
+                restoreWidgets()
+                Toast.makeText(this, if (hideLabels) {
+                    if (englishUi) "Icon labels hidden" else "Label ikon disembunyikan"
+                } else {
+                    if (englishUi) "Icon labels shown" else "Label ikon ditampilkan"
+                }, Toast.LENGTH_SHORT).show()
+            }
+            21 -> showWidgetInfo()
+            22 -> chooseHomeIconPosition()
+        }
     }
 
     private fun recordSakuLauncherError(stage: String, error: Throwable) {
