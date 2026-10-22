@@ -126,11 +126,18 @@ public class TrackpadActivity extends Activity {
         root.addView(coordinateStatus);
 
         LinearLayout actions = new LinearLayout(this);
-        actions.addView(button("Klik Kiri", v -> injectTap(false)), new LinearLayout.LayoutParams(0, dp(48), 1));
-        actions.addView(button("Klik Kanan", v -> injectTap(true)), new LinearLayout.LayoutParams(0, dp(48), 1));
-        actions.addView(button("Pusatkan Kursor", v -> resetCursor()), new LinearLayout.LayoutParams(0, dp(48), 1));
+        actions.addView(button("Klik Kiri", v -> injectTap(false)), new LinearLayout.LayoutParams(0, dp(44), 1));
+        actions.addView(button("Klik Kanan", v -> injectTap(true)), new LinearLayout.LayoutParams(0, dp(44), 1));
+        actions.addView(button("Tahan / Lepas", v -> toggleDrag()), new LinearLayout.LayoutParams(0, dp(44), 1));
+        actions.addView(button("Pusatkan", v -> resetCursor()), new LinearLayout.LayoutParams(0, dp(44), 1));
         root.addView(actions);
-        TextView help = text("1 jari: gerakkan kursor  •  ketuk: klik  •  kanan: klik kanan", 11, 0xFFB7C7D9);
+        LinearLayout nav = new LinearLayout(this);
+        nav.addView(button("⌂ HOME", v -> sendNavigationKey("HOME")), new LinearLayout.LayoutParams(0, dp(42), 1));
+        nav.addView(button("‹ BACK", v -> sendNavigationKey("BACK")), new LinearLayout.LayoutParams(0, dp(42), 1));
+        LinearLayout.LayoutParams navp = new LinearLayout.LayoutParams(-1, -2);
+        navp.topMargin = dp(4);
+        root.addView(nav, navp);
+        TextView help = text("1 jari: kursor • ketuk: klik • tahan/seret: drag • 2 jari: scroll", 11, 0xFFB7C7D9);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
         root.addView(help, hp);
@@ -646,6 +653,32 @@ public class TrackpadActivity extends Activity {
         }
     }
 
+    private volatile boolean dragLocked;
+    private void toggleDrag() {
+        if (targetDisplayId < 0 || !bridgeReady) { Toast.makeText(this, "Sambungkan display dahulu.", Toast.LENGTH_SHORT).show(); return; }
+        dragLocked = !dragLocked;
+        int x = Math.max(0, Math.min(targetWidth - 1, Math.round(cursorX)));
+        int y = Math.max(0, Math.min(targetHeight - 1, Math.round(cursorY)));
+        inputQueue.execute(() -> sendBridgeCommand("BUTTON " + targetDisplayId + " " + x + " " + y + " " + (dragLocked ? "DOWN" : "UP")));
+        Toast.makeText(this, dragLocked ? "Drag aktif — gerakkan kursor, lalu tekan lagi untuk melepas." : "Drag dilepas.", Toast.LENGTH_SHORT).show();
+    }
+    private void sendNavigationKey(String key) {
+        if (targetDisplayId < 0) { Toast.makeText(this, "Sambungkan display dahulu.", Toast.LENGTH_SHORT).show(); return; }
+        inputQueue.execute(() -> {
+            boolean sent = sendBridgeCommand("KEY " + targetDisplayId + " " + key);
+            if (!sent) runOnUiThread(() -> Toast.makeText(this, "Bridge belum siap.", Toast.LENGTH_SHORT).show());
+        });
+    }
+    private void queueDragMove() {
+        int id = targetDisplayId, x = Math.max(0, Math.min(targetWidth - 1, Math.round(cursorX))), y = Math.max(0, Math.min(targetHeight - 1, Math.round(cursorY)));
+        if (id >= 0) inputQueue.execute(() -> sendBridgeCommand("MOVE " + id + " " + x + " " + y));
+    }
+    private void queueScroll(float horizontal, float vertical) {
+        int id = targetDisplayId, x = Math.max(0, Math.min(targetWidth - 1, Math.round(cursorX))), y = Math.max(0, Math.min(targetHeight - 1, Math.round(cursorY)));
+        if (id >= 0 && (horizontal != 0f || vertical != 0f))
+            inputQueue.execute(() -> sendBridgeCommand("SCROLL " + id + " " + x + " " + y + " " + horizontal + " " + vertical));
+    }
+
     private String runRoot(String command) {
         Process p = null;
         addLog("INFO", "Menjalankan perintah root: " + command);
@@ -767,35 +800,50 @@ public class TrackpadActivity extends Activity {
             paint.setColor(0xFF55D6FF); paint.setTextSize(dp(12)); paint.setTextAlign(Paint.Align.CENTER);
             canvas.drawText("AREA TRACKPAD", getWidth()/2f, getHeight()/2f, paint);
         }
+        private boolean multiTouchGesture;
+        private float twoFingerX, twoFingerY, scrollRemainderX, scrollRemainderY;
+        private float centroidX(MotionEvent e) { float sum=0; for(int i=0;i<e.getPointerCount();i++) sum+=e.getX(i); return sum/e.getPointerCount(); }
+        private float centroidY(MotionEvent e) { float sum=0; for(int i=0;i<e.getPointerCount();i++) sum+=e.getY(i); return sum/e.getPointerCount(); }
         @Override public boolean onTouchEvent(MotionEvent event) {
             float x = event.getX(), y = event.getY();
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    lastX = startX = x; lastY = startY = y; lastMoveEventTime = event.getEventTime(); gestureMoved = false; return true;
-                case MotionEvent.ACTION_MOVE:
-                    float dx = x-lastX, dy = y-lastY;
-                    if (Math.abs(x-startX)+Math.abs(y-startY) > dp(8)) gestureMoved = true;
-                    long eventTime = event.getEventTime();
-                    long previousTime = lastMoveEventTime;
-                    float dt = previousTime > 0 ? Math.max(1f, Math.min(40f, eventTime - previousTime)) : 16f;
-                    lastMoveEventTime = eventTime;
-                    float scaleX = targetWidth / (float)Math.max(1, getWidth());
-                    float scaleY = targetHeight / (float)Math.max(1, getHeight());
-                    // Relative touchpad motion with velocity-based acceleration: slow
-                    // movement stays precise, fast swipes cross the desktop quicker.
-                    float speed = (float)Math.sqrt(dx * dx + dy * dy) / dt;
-                    float acceleration = 1.0f + Math.min(0.85f, speed / 3.5f);
-                    cursorX = Math.max(0, Math.min(targetWidth-1, cursorX + dx*scaleX*acceleration));
-                    cursorY = Math.max(0, Math.min(targetHeight-1, cursorY + dy*scaleY*acceleration));
-                    lastX=x; lastY=y; updateCoordinates(); queueMouseMove(); return true;
-                case MotionEvent.ACTION_UP:
-                    if (!gestureMoved) {
-                        long now = android.os.SystemClock.uptimeMillis();
-                        if (now-lastTapTime < 320) { injectTap(false); lastTapTime=0; }
-                        else { injectTap(false); lastTapTime=now; }
+                    lastX=startX=x; lastY=startY=y; lastMoveEventTime=event.getEventTime(); gestureMoved=false;
+                    multiTouchGesture=false; scrollRemainderX=scrollRemainderY=0f; return true;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    if (event.getPointerCount() >= 2) {
+                        multiTouchGesture=true; gestureMoved=true; twoFingerX=centroidX(event); twoFingerY=centroidY(event);
+                        scrollRemainderX=scrollRemainderY=0f;
                     }
-                    performClick(); return true;
-                case MotionEvent.ACTION_CANCEL: return true;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (event.getPointerCount() >= 2) {
+                        multiTouchGesture=true;
+                        float cx=centroidX(event), cy=centroidY(event), dx=cx-twoFingerX, dy=cy-twoFingerY;
+                        twoFingerX=cx; twoFingerY=cy; scrollRemainderX+=dx; scrollRemainderY+=dy;
+                        float threshold=dp(18), horizontal=0f, vertical=0f;
+                        if (Math.abs(scrollRemainderX)>=threshold) { horizontal=-scrollRemainderX/threshold; scrollRemainderX=0f; }
+                        if (Math.abs(scrollRemainderY)>=threshold) { vertical=-scrollRemainderY/threshold; scrollRemainderY=0f; }
+                        if (horizontal!=0f || vertical!=0f) queueScroll(horizontal,vertical);
+                        return true;
+                    }
+                    if (multiTouchGesture) return true;
+                    float dx=x-lastX, dy=y-lastY;
+                    if (Math.abs(x-startX)+Math.abs(y-startY)>dp(8)) gestureMoved=true;
+                    long now=event.getEventTime(), prev=lastMoveEventTime;
+                    float dt=prev>0?Math.max(1f,Math.min(40f,now-prev)):16f; lastMoveEventTime=now;
+                    float sx=targetWidth/(float)Math.max(1,getWidth()), sy=targetHeight/(float)Math.max(1,getHeight());
+                    float speed=(float)Math.sqrt(dx*dx+dy*dy)/dt, accel=1.0f+Math.min(0.85f,speed/3.5f);
+                    cursorX=Math.max(0,Math.min(targetWidth-1,cursorX+dx*sx*accel));
+                    cursorY=Math.max(0,Math.min(targetHeight-1,cursorY+dy*sy*accel));
+                    lastX=x; lastY=y; updateCoordinates(); queueMouseMove(); if(dragLocked) queueDragMove(); return true;
+                case MotionEvent.ACTION_POINTER_UP:
+                    multiTouchGesture=true; return true;
+                case MotionEvent.ACTION_UP:
+                    if(!multiTouchGesture && !gestureMoved) { injectTap(false); lastTapTime=android.os.SystemClock.uptimeMillis(); }
+                    multiTouchGesture=false; performClick(); return true;
+                case MotionEvent.ACTION_CANCEL:
+                    multiTouchGesture=false; return true;
             }
             return true;
         }
