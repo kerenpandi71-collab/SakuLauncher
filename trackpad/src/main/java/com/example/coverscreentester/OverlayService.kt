@@ -1767,6 +1767,11 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             Log.e(TAG, ">>> SERVICE STARTED | INTENT IS NULL <<<")
         }
 
+        if (intent?.getBooleanExtra("show_trackpad", false) == true) {
+            isTrackpadVisible = true
+            Log.i(TAG, "Fullscreen trackpad requested by Saku Launcher")
+        }
+
         try {
             checkAndBindShizuku()
 
