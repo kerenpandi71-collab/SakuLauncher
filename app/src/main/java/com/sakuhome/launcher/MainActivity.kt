@@ -359,7 +359,7 @@ class MainActivity : Activity() {
                     android.view.MotionEvent.ACTION_UP -> {
                         val dx = event.x - gestureDownX
                         val dy = event.y - gestureDownY
-                        if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                        if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                             showStartPanel()
                             true
                         } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && ::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) {
@@ -710,7 +710,7 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                    if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                         showStartPanel()
                         true
                     } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && startPanel.visibility == View.VISIBLE) {
@@ -1490,6 +1490,7 @@ class MainActivity : Activity() {
         for (i in rootFrame.childCount - 1 downTo 0) {
             if (rootFrame.getChildAt(i).tag == "saku_home_dock") rootFrame.removeViewAt(i)
         }
+        if (!preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) return
         val dock = buildDock().apply { tag = "saku_home_dock" }
         val dockParams = FrameLayout.LayoutParams(
             dp(currentDockWidth()), dp(dockHeightDp), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -1805,6 +1806,7 @@ class MainActivity : Activity() {
             "App icon labels · ${if (hideLabels) "Hidden" else "Shown"}",
             "Add a home-screen widget",
             "App drawer · ${if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "On" else "Off"}",
+            "Home dock · ${if (preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) "Shown" else "Hidden"}",
             "Language · English"
         ) else arrayOf(
             "Tampilan · ${if (isDarkTheme) "Gelap" else "Cerah"}",
@@ -1830,6 +1832,7 @@ class MainActivity : Activity() {
             "Label ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
             "Tambahkan widget ke layar utama",
             "App drawer · ${if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "Aktif" else "Nonaktif"}",
+            "Dock layar utama · ${if (preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) "Ditampilkan" else "Disembunyikan"}",
             "Bahasa · Indonesia"
         )
 
@@ -1892,7 +1895,7 @@ class MainActivity : Activity() {
                 isFocusable = true
                 setOnClickListener {
                     dialog.dismiss()
-                    if (index == 23) {
+                    if (index == 24) {
                         preferences.edit().putBoolean("settings_language_english", !englishUi).apply()
                         buildScreen()
                         restoreWidgets()
@@ -1903,7 +1906,7 @@ class MainActivity : Activity() {
             val glyph = when (index) {
                 0 -> "◐"; 1 -> "▦"; 2 -> "◌"; 3 -> "◍"; 4 -> "✳"; 5 -> "▱"; 6 -> "▤"; 7 -> "↻"; 8 -> "☷"
                 9 -> "▧"; 10 -> "↺"; 11 -> "⌂"; 12 -> "◉"; 13 -> "●"; 14 -> "↔"; 15 -> "⏻"; 16 -> "⌁"
-                17 -> "ⓘ"; 18 -> "▶"; 19 -> "≋"; 20 -> "Aa"; 21 -> "▦"; 22 -> "⌖"; else -> "文"
+                17 -> "ⓘ"; 18 -> "▶"; 19 -> "≋"; 20 -> "Aa"; 21 -> "▦"; 22 -> "⌖"; 23 -> "▰"; else -> "文"
             }
             row.addView(TextView(this).apply {
                 text = glyph
@@ -2019,6 +2022,12 @@ class MainActivity : Activity() {
                 } else {
                     if (enabled) "App drawer dimatikan; semua aplikasi tampil di layar utama" else "App drawer diaktifkan"
                 }, Toast.LENGTH_SHORT).show()
+            }
+            23 -> {
+                val visible = preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)
+                preferences.edit().putBoolean(KEY_HOME_DOCK_VISIBLE, !visible).apply()
+                buildScreen()
+                Toast.makeText(this, if (englishUi) { if (visible) "Home dock hidden" else "Home dock shown" } else { if (visible) "Dock layar utama disembunyikan" else "Dock layar utama ditampilkan" }, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -3265,6 +3274,7 @@ class MainActivity : Activity() {
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_APP_DRAWER_ENABLED = "app_drawer_enabled"
+        private const val KEY_HOME_DOCK_VISIBLE = "home_dock_visible"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
         private const val KEY_TRANSPARENCY = "dock_transparency"
