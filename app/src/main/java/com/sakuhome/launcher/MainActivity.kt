@@ -1495,7 +1495,6 @@ class MainActivity : Activity() {
         for (i in rootFrame.childCount - 1 downTo 0) {
             if (rootFrame.getChildAt(i).tag == "saku_home_dock") rootFrame.removeViewAt(i)
         }
-        if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         val dock = buildDock().apply { tag = "saku_home_dock" }
         val dockParams = FrameLayout.LayoutParams(
             dp(currentDockWidth()), dp(dockHeightDp), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
