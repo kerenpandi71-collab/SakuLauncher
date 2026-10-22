@@ -21,6 +21,9 @@ cp -R "$EXTEND_SOURCE/hidden-api-stub/." hidden-api-stub/
 python3 - <<'PY'
 import os, xml.etree.ElementTree as ET
 from pathlib import Path
+# Preserve Android XML namespace prefixes when ElementTree rewrites the manifest.
+ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+ET.register_namespace("tools", "http://schemas.android.com/tools")
 src=Path(os.environ["EXTEND_SOURCE"])
 target=Path("app/src/main/res/values/strings.xml")
 incoming=src/"app/src/main/res/values/strings.xml"
