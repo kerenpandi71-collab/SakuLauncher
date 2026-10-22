@@ -230,7 +230,26 @@ class MainActivity : Activity() {
     private fun homeApps(): List<LaunchableApp> {
         val byPackage = apps.associateBy { it.packageName }
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
-        return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
+        return homePackages().distinct().filterNot { hidden.contains(it) }.mapNotNull { packageName ->
+            // Don't silently lose a saved home shortcut just because the launchable-app
+            // query temporarily omitted it. Re-resolve installed packages as a fallback.
+            byPackage[packageName] ?: try {
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent == null) {
+                    null
+                } else {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    LaunchableApp(
+                        packageManager.getApplicationLabel(appInfo).toString(),
+                        packageName,
+                        packageManager.getApplicationIcon(packageName)
+                    )
+                }
+            } catch (_: Exception) {
+                // The package was removed or is no longer launchable; omit the stale shortcut.
+                null
+            }
+        }
     }
 
     /** Intercepts a deliberate upward swipe anywhere on the desktop, including over app icons. */
