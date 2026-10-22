@@ -26,6 +26,129 @@ for p in root.rglob("*.java"):
         s=re.sub(r"(package [^;]+;)", r"\1\n\nimport com.sakuhome.launcher.R;", s, count=1)
     p.write_text(s)
 PY
+
+# Reapply integration-specific runtime fixes after copying the upstream source.
+python3 - <<'PY'
+from pathlib import Path
+root=Path("app/src/main/java/io/github/jqssun/displayextend")
+p=root/"shizuku/ShizukuUtils.java"
+s=p.read_text()
+s=s.replace('''  public static boolean hasPermission() {
+    try {
+      return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  public static boolean hasShizukuStarted() {
+    try {
+      Shizuku.checkSelfPermission();
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  public static int getServerUid() {
+    try {
+      return Shizuku.getUid();
+    } catch (Exception e) {
+      return -1;
+    }
+  }''','''  public static boolean hasShizukuStarted() {
+    try { return Shizuku.pingBinder(); }
+    catch (Throwable e) { android.util.Log.w("DisplayExtendShizuku", "binder unavailable", e); return false; }
+  }
+
+  public static boolean hasPermission() {
+    if (!hasShizukuStarted()) return false;
+    try { return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED; }
+    catch (Throwable e) { android.util.Log.w("DisplayExtendShizuku", "permission check failed", e); return false; }
+  }
+
+  public static int getServerUid() {
+    if (!hasShizukuStarted()) return -1;
+    try { return Shizuku.getUid(); }
+    catch (Throwable e) { android.util.Log.w("DisplayExtendShizuku", "UID lookup failed", e); return -1; }
+  }''')
+p.write_text(s)
+
+p=root/"TouchpadAccessibilityService.java"
+s=p.read_text()
+s=s.replace('''      String newService = "io.github.jqssun.displayextend/.TouchpadAccessibilityService";
+      String finalServices;
+
+      if (existingServices != null && !existingServices.isEmpty()) {
+        finalServices = existingServices + ":" + newService;
+      } else {
+        finalServices = newService;
+      }''','''      // Keep one canonical service entry under the installed app ID.
+      String newService = new ComponentName(context, TouchpadAccessibilityService.class).flattenToString();
+      java.util.LinkedHashSet<String> enabled = new java.util.LinkedHashSet<>();
+      if (existingServices != null && !existingServices.isEmpty()) {
+        for (String item : existingServices.split(":")) {
+          if (item != null && !item.trim().isEmpty()) enabled.add(item.trim());
+        }
+      }
+      enabled.add(newService);
+      String finalServices = android.text.TextUtils.join(":", enabled);''')
+s=s.replace('''      Settings.Secure.putString(
+          context.getContentResolver(),
+          Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+          finalServices);
+      Settings.Secure.putString(
+          context.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+      _startLocalService(context);''','''      boolean saved = Settings.Secure.putString(
+          context.getContentResolver(),
+          Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+          finalServices);
+      Settings.Secure.putString(
+          context.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
+      State.log("accessibility service list updated=" + saved + " component=" + newService);
+      _startLocalService(context);''')
+p.write_text(s)
+
+p=root/"MainActivity.java"
+s=p.read_text()
+anchor='''  private final Shizuku.OnRequestPermissionResultListener requestPermissionResultListener =
+      this::_onPermissionResult;
+'''
+addition=anchor+'''
+  private final Shizuku.OnBinderReceivedListener binderReceivedListener = () -> {
+    State.log("Shizuku binder connected");
+    if (ShizukuUtils.hasPermission() && State.userService == null) {
+      try {
+        Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
+        Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
+      } catch (Throwable e) { State.log("failed to bind Shizuku user service: " + e); }
+    }
+    State.resumeJob();
+  };
+
+  private final Shizuku.OnBinderDeadListener binderDeadListener = () -> {
+    State.log("Shizuku binder disconnected; waiting for service restart");
+    State.unbindUserService();
+  };
+'''
+if 'binderReceivedListener' not in s:
+    s=s.replace(anchor,addition)
+s=s.replace('''    Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
+    if (ShizukuUtils.hasPermission() && State.userService == null) {
+      Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
+      Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
+    }''','''    Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
+    Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
+    Shizuku.addBinderDeadListener(binderDeadListener);
+    // Binder listener handles both an already-running and a newly-started server.''')
+s=s.replace('''    Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener);
+    State.currentActivity''','''    Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener);
+    Shizuku.removeBinderReceivedListener(binderReceivedListener);
+    Shizuku.removeBinderDeadListener(binderDeadListener);
+    State.currentActivity''')
+p.write_text(s)
+PY
+
 [ ! -d "$EXTEND_SOURCE/app/src/main/aidl" ] || cp -R "$EXTEND_SOURCE/app/src/main/aidl/." app/src/main/aidl/
 cp -Rn "$EXTEND_SOURCE/app/src/main/res/." app/src/main/res/
 # Remove a stale resource file from an earlier integration attempt; the source project has no values/styles.xml, and it duplicates Saku\x27s AppTheme in values/themes.xml.
