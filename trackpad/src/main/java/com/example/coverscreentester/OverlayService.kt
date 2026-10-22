@@ -1705,7 +1705,7 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             android.provider.Settings.Global.getInt(contentResolver, "droidos_target_display", -1)
         } catch (e: Exception) { -1 }
 
-        val finalTarget = if (globalTarget != -1) globalTarget else currentDisplayId
+        val finalTarget = if (pendingDisplayId >= 0) pendingDisplayId else if (globalTarget != -1) globalTarget else currentDisplayId
         
         
         // =================================================================================
@@ -1737,7 +1737,9 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
         // =================================================================================
         
         // Build UI
-        setupUI(finalTarget)
+        // Keep the touch surface on physical display 0 while input targets the requested virtual display.
+        val uiDisplay = if (isTrackpadVisible && finalTarget != 0) 0 else finalTarget
+        setupUI(finalTarget, uiDisplay)
         
         // [FIX] Ensure bubble icon status is updated
         updateBubbleStatus()
@@ -1781,8 +1783,9 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
                 
                 if (dId != -1) {
                     if (isAccessibilityReady) {
-                        // Safe to launch immediately
-                        setupUI(dId)
+                        // Keep trackpad UI on the phone; route the existing input engine to the virtual display.
+                        val uiDisplay = if (intent.getBooleanExtra("show_trackpad", false) && dId != 0) 0 else dId
+                        setupUI(dId, uiDisplay)
                     } else {
                         // Too early! Queue it for onServiceConnected
                         pendingDisplayId = dId
@@ -1986,19 +1989,20 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
         cursorView = null
     }
 
-    private fun setupUI(displayId: Int) {
+    private fun setupUI(displayId: Int, uiDisplayId: Int = displayId) {
 
-        // 1. Force complete removal of all views using the current WindowManager
+        // displayId is the input destination; uiDisplayId is where the touch UI lives.
+        // Keeping these separate prevents the trackpad UI from being created on the virtual display.
         removeOldViews()
 
-        val display = displayManager?.getDisplay(displayId)
+        val display = displayManager?.getDisplay(uiDisplayId)
         if (display == null) {
             showToast("Error: Display $displayId not found")
             return
         }
 
         try {
-            // 2. Create a new context strictly for the target physical display
+            // 2. Create the UI context on the selected UI display (physical display 0 for Saku).
             val displayContext = createDisplayContext(display)
             val accessContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                  displayContext.createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
@@ -2008,10 +2012,12 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             windowManager = accessContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             appWindowManager = windowManager
 
-            currentDisplayId = displayId
+            currentDisplayId = uiDisplayId
             inputTargetDisplayId = displayId
 
             updateUiMetrics()
+            updateTargetMetrics(displayId)
+            updateWakeLockState()
 
             // 4. Rebuild the UI components
             setupTrackpad(accessContext)
@@ -2019,10 +2025,17 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             menuManager = TrackpadMenuManager(displayContext, windowManager!!, this)
             // Floating bubble is intentionally disabled in fullscreen trackpad mode.
             setupCursor(accessContext)
-
+            if (displayId != uiDisplayId) {
+                createRemoteCursor(displayId)
+                cursorLayout?.visibility = View.GONE
+            } else {
+                removeRemoteCursor()
+            }
 
             enforceZOrder()
-            showToast("Trackpad active on Display $displayId")
+            showToast(if (displayId != uiDisplayId)
+                "Trackpad fullscreen di HP; input menuju display $displayId"
+                else "Trackpad active on Display $displayId")
 
             // =================================================================================
             // KEYBOARD BLOCKING/RESTORATION LOGIC FOR DISPLAY SWITCH
