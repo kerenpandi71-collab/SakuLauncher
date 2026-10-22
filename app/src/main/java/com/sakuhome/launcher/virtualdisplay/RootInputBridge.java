@@ -4,6 +4,7 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -19,6 +20,7 @@ public final class RootInputBridge {
     private static Method injectInputEvent;
     private static Method setDisplayId;
     private static Method setButtonState;
+    private static long dragDownTime;
 
     private RootInputBridge() { }
 
@@ -97,7 +99,21 @@ public final class RootInputBridge {
         }
 
         if ("MOVE".equals(action)) {
-            injectMouse(displayId, x, y, MotionEvent.ACTION_HOVER_MOVE, 0, 0L);
+            if (dragDownTime > 0L) injectMouse(displayId, x, y, MotionEvent.ACTION_MOVE, MotionEvent.BUTTON_PRIMARY, dragDownTime);
+            else injectMouse(displayId, x, y, MotionEvent.ACTION_HOVER_MOVE, 0, 0L);
+        } else if ("BUTTON".equals(action)) {
+            if (parts.length < 5) throw new IllegalArgumentException("format BUTTON display x y DOWN|UP");
+            if ("DOWN".equalsIgnoreCase(parts[4])) {
+                if (dragDownTime == 0L) dragDownTime = SystemClock.uptimeMillis();
+                injectMouse(displayId, x, y, MotionEvent.ACTION_DOWN, MotionEvent.BUTTON_PRIMARY, dragDownTime);
+            } else {
+                long down = dragDownTime > 0L ? dragDownTime : SystemClock.uptimeMillis();
+                injectMouse(displayId, x, y, MotionEvent.ACTION_UP, 0, down);
+                dragDownTime = 0L;
+            }
+        } else if ("KEY".equals(action)) {
+            if (parts.length < 3) throw new IllegalArgumentException("format KEY display HOME|BACK");
+            injectKey(displayId, "HOME".equalsIgnoreCase(parts[2]) ? KeyEvent.KEYCODE_HOME : KeyEvent.KEYCODE_BACK);
         } else if ("SCROLL".equals(action)) {
             if (parts.length < 6) throw new IllegalArgumentException("format SCROLL display x y h v");
             float horizontal = Float.parseFloat(parts[4]);
@@ -113,6 +129,25 @@ public final class RootInputBridge {
             injectMouse(displayId, x, y, MotionEvent.ACTION_UP, 0, downTime);
         } else {
             throw new IllegalArgumentException("aksi tidak dikenal: " + action);
+        }
+    }
+
+    private static void injectKey(int displayId, int keyCode) throws Exception {
+        long now = SystemClock.uptimeMillis();
+        Method keyDisplaySetter = InputEvent.class.getDeclaredMethod("setDisplayId", int.class);
+        keyDisplaySetter.setAccessible(true);
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0);
+        KeyEvent up = new KeyEvent(now, now + 12L, KeyEvent.ACTION_UP, keyCode, 0);
+        try {
+            keyDisplaySetter.invoke(down, displayId);
+            keyDisplaySetter.invoke(up, displayId);
+            Object downResult = injectInputEvent.invoke(inputManager, down, INJECT_ASYNC);
+            Object upResult = injectInputEvent.invoke(inputManager, up, INJECT_ASYNC);
+            if (!Boolean.TRUE.equals(downResult) || !Boolean.TRUE.equals(upResult))
+                throw new IllegalStateException("IInputManager menolak tombol " + keyCode + " pada display " + displayId);
+        } finally {
+            down.recycle();
+            up.recycle();
         }
     }
 
