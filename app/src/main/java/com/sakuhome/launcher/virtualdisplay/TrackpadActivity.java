@@ -183,20 +183,20 @@ public class TrackpadActivity extends Activity {
 
     private int findOverlayDisplayId(String dump) {
         if (dump == null) return -1;
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("DisplayViewport\\\\{([^}]*)\\\\}").matcher(dump);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("DisplayViewport\\{([^}]*)\\}").matcher(dump);
         while (m.find()) {
             String block = m.group(1);
             if (!block.contains("uniqueId='overlay:") && !block.contains("type=VIRTUAL")) continue;
-            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\\\bdisplayId=(\\\\d+)").matcher(block);
+            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\bdisplayId=(\\d+)").matcher(block);
             if (id.find()) {
                 try { return Integer.parseInt(id.group(1)); } catch (NumberFormatException ignored) { }
             }
         }
-        java.util.regex.Matcher info = java.util.regex.Pattern.compile("(?s)DisplayInfo\\\\{([^}]*)\\\\}").matcher(dump);
+        java.util.regex.Matcher info = java.util.regex.Pattern.compile("(?s)DisplayInfo\\{([^}]*)\\}").matcher(dump);
         while (info.find()) {
             String block = info.group(1);
             if (!block.contains("uniqueId='overlay:") && !block.contains("uniqueId=\\"overlay:")) continue;
-            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\\\bdisplayId=(\\\\d+)").matcher(block);
+            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\bdisplayId=(\\d+)").matcher(block);
             if (id.find()) {
                 try { return Integer.parseInt(id.group(1)); } catch (NumberFormatException ignored) { }
             }
