@@ -92,6 +92,7 @@ public final class GamePadOverlayService extends Service {
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&intent.hasExtra("display_id")){targetDisplayId=intent.getIntExtra("display_id",0);getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply();}
+        android.util.DisplayMetrics currentMetrics=new android.util.DisplayMetrics();wm.getDefaultDisplay().getRealMetrics(currentMetrics);screenWidth=currentMetrics.widthPixels;screenHeight=currentMetrics.heightPixels;
         updatePanels(); return START_STICKY;
     }
     @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);android.util.DisplayMetrics dm=new android.util.DisplayMetrics();wm.getDefaultDisplay().getRealMetrics(dm);screenWidth=dm.widthPixels;screenHeight=dm.heightPixels;updatePanels();}
