@@ -25,6 +25,7 @@ public final class DiagnosticLogger {
 
     public static void install(Context context) {
         appContext = context.getApplicationContext();
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
             try {
                 write("CRASH", "Fatal exception on thread " + thread.getName(), error, thread);
@@ -32,10 +33,11 @@ public final class DiagnosticLogger {
                 Log.e(TAG, "Unable to save crash report", loggingError);
             } finally {
                 // Keep Android's normal crash handling and crash dialog.
-                Thread.UncaughtExceptionHandler previous = null;
-                // The original handler is captured below by the wrapper.
                 if (previous != null) previous.uncaughtException(thread, error);
-                else Process.killProcess(Process.myPid());
+                else {
+                    android.os.Process.killProcess(android.os.Process.myPid());
+                    System.exit(10);
+                }
             }
         });
         startAnrWatchdog();
@@ -112,7 +114,9 @@ public final class DiagnosticLogger {
                 values.put(MediaStore.Downloads.RELATIVE_PATH, "Download/SakuLauncher-Logs");
                 values.put(MediaStore.Downloads.IS_PENDING, 1);
             }
-            Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    ? MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                    : MediaStore.Files.getContentUri("external");
             Uri uri = context.getContentResolver().insert(collection, values);
             if (uri == null) throw new IllegalStateException("MediaStore returned no Downloads URI");
             try (OutputStream stream = context.getContentResolver().openOutputStream(uri)) {
