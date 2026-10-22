@@ -1538,6 +1538,8 @@ class MainActivity : Activity() {
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
             "Mode tampilan · $themeState",
+            "Drawer aplikasi · " + if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "Aktif" else "Nonaktif",
+            "Dock layar utama · " + if (preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) "Tampil" else "Sembunyi",
             "Jumlah layar utama · ${homePageCount()}",
             "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
             "Transparansi · ${transparencyPercent}%",
@@ -1562,9 +1564,11 @@ class MainActivity : Activity() {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> toggleTheme()
-                    1 -> chooseHomePageCount()
-                    2 -> chooseBackgroundBlur()
-                    3 -> chooseTransparency()
+                    1 -> { val v = preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false); preferences.edit().putBoolean(KEY_APP_DRAWER_ENABLED, !v).apply(); buildScreen() }
+                    2 -> { val v = preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true); preferences.edit().putBoolean(KEY_HOME_DOCK_VISIBLE, !v).apply(); buildScreen() }
+                    3 -> chooseHomePageCount()
+                    4 -> chooseBackgroundBlur()
+                    5 -> chooseTransparency()
                     4 -> chooseIconCustomization()
                     5 -> chooseDockSize()
                     6 -> showLandscapeCustomization()
