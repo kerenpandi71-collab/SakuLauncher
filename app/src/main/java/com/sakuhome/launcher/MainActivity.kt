@@ -244,6 +244,15 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun homeDesktopApps(): List<LaunchableApp> {
+        val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+        return if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) {
+            homeApps()
+        } else {
+            apps.filterNot { hidden.contains(it.packageName) }
+        }
+    }
+
     /** Intercepts a deliberate upward swipe anywhere on the desktop, including over app icons. */
     private inner class HomeCanvas(context: android.content.Context) : FrameLayout(context) {
         private var downX = 0f
@@ -262,7 +271,7 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_MOVE -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (dy < -dp(48) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.1f) {
+                    if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(48) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.1f) {
                         drawerSwipe = true
                         return true
                     }
@@ -307,13 +316,13 @@ class MainActivity : Activity() {
         // Refresh the shortcut adapter from the exact page being rendered.
         // Do not rely on a possibly stale adapter snapshot after preferences change.
         pinnedAdapter.refreshHomeItems()
-        val currentApps = homeApps()
+        val currentApps = homeDesktopApps()
         val positions = homeIconPositions()
         val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
         val contentHeight = (canvas.height - canvas.paddingTop - canvas.paddingBottom).coerceAtLeast(dp(1))
         val cellWidth = dp((iconSizeDp + 24).coerceIn(64, 112))
         val cellHeight = dp(if (hideLabels) iconSizeDp + 12 else iconSizeDp + 34)
-        val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5).coerceIn(1, 12)
+        val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4).coerceIn(1, 12)
         val rows = maxOf(1, kotlin.math.ceil(currentApps.size.toDouble() / columns).toInt())
         val maxLeft = (contentWidth - cellWidth).coerceAtLeast(0)
         val maxTop = (contentHeight - cellHeight).coerceAtLeast(0)
@@ -1795,7 +1804,7 @@ class MainActivity : Activity() {
             "View error log",
             "App icon labels · ${if (hideLabels) "Hidden" else "Shown"}",
             "Add a home-screen widget",
-            "Home icon placement · ${homeIconPositionLabel()}",
+            "App drawer · ${if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "On" else "Off"}",
             "Language · English"
         ) else arrayOf(
             "Tampilan · ${if (isDarkTheme) "Gelap" else "Cerah"}",
@@ -1820,7 +1829,7 @@ class MainActivity : Activity() {
             "Lihat log error",
             "Label ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
             "Tambahkan widget ke layar utama",
-            "Posisi ikon layar utama · ${homeIconPositionLabel()}",
+            "App drawer · ${if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "Aktif" else "Nonaktif"}",
             "Bahasa · Indonesia"
         )
 
@@ -2001,7 +2010,16 @@ class MainActivity : Activity() {
                 }, Toast.LENGTH_SHORT).show()
             }
             21 -> showWidgetInfo()
-            22 -> { /* Home icon placement options removed. */ }
+            22 -> {
+                val enabled = preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)
+                preferences.edit().putBoolean(KEY_APP_DRAWER_ENABLED, !enabled).apply()
+                buildScreen()
+                Toast.makeText(this, if (englishUi) {
+                    if (enabled) "App drawer disabled; all apps are on the home screen" else "App drawer enabled"
+                } else {
+                    if (enabled) "App drawer dimatikan; semua aplikasi tampil di layar utama" else "App drawer diaktifkan"
+                }, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -3143,11 +3161,11 @@ class MainActivity : Activity() {
         }
 
         private fun refreshItems() {
-            items = if (isStartMenu) visibleApps(true) else homeApps()
+            items = if (isStartMenu) visibleApps(true) else homeDesktopApps()
         }
 
         fun refreshHomeItems() {
-            if (!isStartMenu) items = homeApps()
+            if (!isStartMenu) items = homeDesktopApps()
         }
 
         override fun notifyDataSetChanged() {
