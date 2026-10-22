@@ -89,9 +89,15 @@ public final class RootInputBridge {
 
     private static void handle(String line) throws Exception {
         String[] parts = line.split("\\s+");
-        if (parts.length < 4) throw new IllegalArgumentException("format perintah tidak lengkap");
+        if (parts.length < 2) throw new IllegalArgumentException("format perintah tidak lengkap");
         String action = parts[0];
         int displayId = Integer.parseInt(parts[1]);
+        if ("KEY".equals(action)) {
+            if (parts.length < 3) throw new IllegalArgumentException("format KEY display HOME|BACK");
+            injectKey(displayId, "HOME".equalsIgnoreCase(parts[2]) ? KeyEvent.KEYCODE_HOME : KeyEvent.KEYCODE_BACK);
+            return;
+        }
+        if (parts.length < 4) throw new IllegalArgumentException("format perintah tidak lengkap");
         float x = Float.parseFloat(parts[2]);
         float y = Float.parseFloat(parts[3]);
         if (displayId < 0 || !Float.isFinite(x) || !Float.isFinite(y)) {
@@ -111,9 +117,6 @@ public final class RootInputBridge {
                 injectMouse(displayId, x, y, MotionEvent.ACTION_UP, 0, down);
                 dragDownTime = 0L;
             }
-        } else if ("KEY".equals(action)) {
-            if (parts.length < 3) throw new IllegalArgumentException("format KEY display HOME|BACK");
-            injectKey(displayId, "HOME".equalsIgnoreCase(parts[2]) ? KeyEvent.KEYCODE_HOME : KeyEvent.KEYCODE_BACK);
         } else if ("SCROLL".equals(action)) {
             if (parts.length < 6) throw new IllegalArgumentException("format SCROLL display x y h v");
             float horizontal = Float.parseFloat(parts[4]);
