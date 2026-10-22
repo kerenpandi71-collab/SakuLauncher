@@ -77,7 +77,6 @@ public class VirtualDisplayActivity extends Activity {
         root.addView(button("TERAPKAN KONFIGURASI", v -> applyDisplay()));
         root.addView(button("BACA STATUS KONFIGURASI", v -> refreshStatus()));
         root.addView(button("BUKA SAKU DESKTOP LAUNCHER", v -> openDesktopOnOverlay()));
-        root.addView(button("BUKA TRACKPAD UNTUK DISPLAY VIRTUAL", v -> openTrackpad()));
         root.addView(button("PULIHKAN KONFIGURASI SEBELUMNYA", v -> restorePrevious()));
         root.addView(button("HAPUS OVERLAY DISPLAY VIRTUAL", v -> removeOverlayDisplay()));
         status = new TextView(this);
@@ -200,30 +199,6 @@ public class VirtualDisplayActivity extends Activity {
     }
 
 
-
-    private void openTrackpad() {
-        status.setText("Mencari overlay display untuk trackpad…");
-        new Thread(() -> {
-            String dump = runRoot("dumpsys display");
-            int displayId = findOverlayDisplayId(dump);
-            runOnUiThread(() -> {
-                Intent intent = new Intent(this, TrackpadActivity.class);
-                if (displayId >= 0) {
-                    intent.putExtra("display_id", displayId);
-                } else {
-                    intent.putExtra("display_id", -1);
-                }
-                startActivity(intent);
-                if (displayId >= 0) {
-                    Toast.makeText(this, "Trackpad diarahkan ke overlay display " + displayId,
-                        Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(this, "Trackpad dibuka. Masukkan Display ID overlay secara manual.",
-                        Toast.LENGTH_LONG).show();
-                }
-            });
-        }, "open-trackpad").start();
-    }
 
     private void openDesktopOnOverlay() {
         status.setText("Mencari overlay display aktif…");
