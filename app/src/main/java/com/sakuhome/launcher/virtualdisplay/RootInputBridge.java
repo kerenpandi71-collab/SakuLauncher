@@ -18,6 +18,7 @@ public final class RootInputBridge {
     private static Object inputManager;
     private static Method injectInputEvent;
     private static Method setDisplayId;
+    private static Method setButtonState;
 
     private RootInputBridge() { }
 
@@ -31,6 +32,8 @@ public final class RootInputBridge {
             injectInputEvent.setAccessible(true);
             setDisplayId = MotionEvent.class.getDeclaredMethod("setDisplayId", int.class);
             setDisplayId.setAccessible(true);
+            setButtonState = MotionEvent.class.getDeclaredMethod("setButtonState", int.class);
+            setButtonState.setAccessible(true);
             System.out.println("READY");
             System.out.flush();
 
@@ -87,7 +90,7 @@ public final class RootInputBridge {
         MotionEvent event = MotionEvent.obtain(eventDown, now, action, x, y, 0);
         try {
             event.setSource(InputDevice.SOURCE_MOUSE);
-            event.setButtonState(buttonState);
+            setButtonState.invoke(event, buttonState);
             setDisplayId.invoke(event, displayId);
             Object result = injectInputEvent.invoke(inputManager, event, INJECT_ASYNC);
             if (!(result instanceof Boolean) || !((Boolean) result)) {
