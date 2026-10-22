@@ -27,5 +27,6 @@ android {
 }
 
 dependencies {
+    implementation(project(":trackpad"))
     implementation("dev.rikka.shizuku:api:13.1.5")
 }
