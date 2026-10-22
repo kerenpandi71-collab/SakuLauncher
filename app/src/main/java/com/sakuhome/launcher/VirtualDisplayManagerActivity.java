@@ -37,7 +37,8 @@ public class VirtualDisplayManagerActivity extends Activity {
         root.addView(squarePresets);
         root.addView(button("Terapkan overlay",v->applyOverlay()));
         root.addView(button("Baca status display",v->runAsync("settings get global overlay_display_devices; dumpsys display")));
-        root.addView(button("Buka Trackpad Virtual Display",v->openTrackpad()));
+        root.addView(button("Aktifkan Aksesibilitas Trackpad",v->openAccessibilitySettings()));
+        root.addView(button("Buka Trackpad Fullscreen",v->openTrackpad()));
         root.addView(button("Pulihkan konfigurasi sebelumnya",v->restoreOverlay()));
         root.addView(button("Hapus overlay display",v->confirmRemove()));
         status=new TextView(this); status.setTextColor(0xffe4ebf5); status.setTextIsSelectable(true); status.setPadding(0,dp(12),0,0); root.addView(status,new LinearLayout.LayoutParams(-1,-2));
@@ -58,6 +59,10 @@ public class VirtualDisplayManagerActivity extends Activity {
             Result result=exec("settings put global overlay_display_devices "+quote(w+"x"+h+"/"+d)+" && settings get global overlay_display_devices");
             showStatus(result.code==0?"Setting overlay diterapkan: "+result.out:"Gagal menerapkan (kode "+result.code+"): "+result.out);
           },"apply-overlay").start()).show();
+    }
+    private void openAccessibilitySettings(){
+        try { startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)); }
+        catch(Exception e){ error("Pengaturan aksesibilitas tidak dapat dibuka: "+e.getMessage()); }
     }
     private void openTrackpad(){
         try {
