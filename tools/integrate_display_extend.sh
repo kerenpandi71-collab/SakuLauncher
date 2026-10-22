@@ -71,7 +71,7 @@ p.write_text(s)
 p=Path("build.gradle.kts")
 s=p.read_text()
 # Remove the exact standalone plugin block created by earlier integration attempts.
-s=s.replace('\\nplugins { id("dev.rikka.tools.refine") version "4.1.0" apply false }\\n', '\\n')
+s=s.replace('\nplugins { id("dev.rikka.tools.refine") version "4.1.0" apply false }\n', '\n')
 # Ensure the refine plugin is declared in the existing root plugins block.
 start=s.find("plugins {")
 end=s.find("}", start)
@@ -79,7 +79,7 @@ if start < 0 or end < 0:
     raise SystemExit("Could not find root plugins block in build.gradle.kts")
 declaration='id("dev.rikka.tools.refine") version "4.1.0" apply false'
 if declaration not in s[start:end]:
-    s=s[:end] + '    ' + declaration + "\\n" + s[end:]
+    s=s[:end] + '    ' + declaration + "\n" + s[end:]
 p.write_text(s)
 p=Path("app/build.gradle.kts")
 s=p.read_text()
