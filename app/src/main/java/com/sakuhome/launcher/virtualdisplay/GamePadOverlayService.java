@@ -117,7 +117,7 @@ public final class GamePadOverlayService extends Service {
         e.apply();
     }
     private void reset() { for(int i=0;i<labels.length;i++){xs[i]=defaults[i][0];ys[i]=defaults[i][1];}scale=1f;alpha=185;saveLayout();pad.invalidate(); }
-    @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
+    @Override public int onStartCommand(Intent intent,int flags,int startId){ if(intent!=null && intent.hasExtra("display_id")) { targetDisplayId=intent.getIntExtra("display_id",0); getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply(); } if(pad!=null){toolbar=true;pad.invalidate();} return START_STICKY; }
     @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);loadLayout();if(pad!=null)pad.invalidate();}
     @Override public void onDestroy(){bridgeReady=false;if(bridgeProcess!=null)bridgeProcess.destroy();if(wm!=null&&pad!=null)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
@@ -135,7 +135,13 @@ public final class GamePadOverlayService extends Service {
                 p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(labels[i].length()>7?8:10));p.setColor(Color.WHITE);c.drawText(labels[i],cx,cy+dp(4),p);
                 if(editing&&i==selected){p.setStyle(Paint.Style.STROKE);p.setColor(Color.YELLOW);c.drawCircle(cx,cy,r+dp(5),p);}
             }
-            if(toolbar) drawToolbar(c);
+            if(toolbar) drawToolbar(c); else drawShortcutBubble(c);
+        }
+        private void drawShortcutBubble(Canvas c){
+            p.setStyle(Paint.Style.FILL);p.setColor(0xE6223044);
+            c.drawRoundRect(new RectF(dp(8),dp(8),dp(64),dp(48)),dp(18),dp(18),p);
+            p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(23));
+            c.drawText("PAD",dp(36),dp(34),p);
         }
         private void drawToolbar(Canvas c){
             p.setStyle(Paint.Style.FILL);p.setColor(0xD91A2230);c.drawRoundRect(new RectF(dp(5),dp(5),getWidth()-dp(5),dp(43)),dp(8),dp(8),p);
@@ -148,6 +154,7 @@ public final class GamePadOverlayService extends Service {
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX(),y=e.getY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
+                if(!toolbar && x<dp(72) && y<dp(58)){toolbar=true;invalidate();return true;}
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
                 selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
