@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Standalone UI for Android's root-controlled overlay display setting. */
 public class VirtualDisplayManagerActivity extends Activity {
-    private EditText width, height, dpi;
+    private EditText width, height, dpi, displayId;
     private TextView status;
     private SharedPreferences prefs;
     private static final String PREFS="saku_virtual_display_manager", ORIGINAL="original_overlay", SAVED="has_original";
@@ -26,7 +26,8 @@ public class VirtualDisplayManagerActivity extends Activity {
         TextView title=new TextView(this); title.setText("Virtual Display Manager"); title.setTextColor(-1); title.setTextSize(24); title.setTypeface(null,1); root.addView(title);
         TextView sub=new TextView(this); sub.setText("Kelola overlay display Android. Memerlukan Magisk/root."); sub.setTextColor(0xffc8d3e3); sub.setPadding(0,dp(6),0,dp(10)); root.addView(sub);
         width=field("Lebar (px)","900"); height=field("Tinggi (px)","900"); dpi=field("DPI","240");
-        root.addView(width); root.addView(height); root.addView(dpi);
+        displayId=field("ID display virtual (lihat status display)","2");
+        root.addView(width); root.addView(height); root.addView(dpi); root.addView(displayId);
         LinearLayout presets=new LinearLayout(this); presets.setOrientation(0);
         presets.addView(button("1280×720",v->setPreset(1280,720,240)),new LinearLayout.LayoutParams(0,-2,1));
         presets.addView(button("1600×900",v->setPreset(1600,900,240)),new LinearLayout.LayoutParams(0,-2,1));
@@ -38,7 +39,8 @@ public class VirtualDisplayManagerActivity extends Activity {
         root.addView(button("Terapkan overlay",v->applyOverlay()));
         root.addView(button("Baca status display",v->runAsync("settings get global overlay_display_devices; dumpsys display")));
         root.addView(button("Aktifkan Aksesibilitas Trackpad",v->openAccessibilitySettings()));
-        root.addView(button("Buka Trackpad Fullscreen",v->openTrackpad()));
+        root.addView(button("Buka Saku Launcher di Display Virtual",v->openLauncherOnVirtualDisplay()));
+        root.addView(button("Buka Trackpad Fullscreen di Display Virtual",v->openTrackpad()));
         root.addView(button("Pulihkan konfigurasi sebelumnya",v->restoreOverlay()));
         root.addView(button("Hapus overlay display",v->confirmRemove()));
         status=new TextView(this); status.setTextColor(0xffe4ebf5); status.setTextIsSelectable(true); status.setPadding(0,dp(12),0,0); root.addView(status,new LinearLayout.LayoutParams(-1,-2));
@@ -64,16 +66,27 @@ public class VirtualDisplayManagerActivity extends Activity {
         try { startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)); }
         catch(Exception e){ error("Pengaturan aksesibilitas tidak dapat dibuka: "+e.getMessage()); }
     }
+    private int selectedDisplayId() {
+        try { int id=Integer.parseInt(displayId.getText().toString().trim()); if(id<1||id>99) throw new Exception(); return id; }
+        catch(Exception e){ throw new IllegalArgumentException("Masukkan ID display virtual yang valid (1–99)."); }
+    }
+    private void openLauncherOnVirtualDisplay() {
+        final int id;
+        try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
+        new Thread(() -> {
+            Result result=exec("am start --display "+id+" -n com.sakuhome.launcher/.MainActivity --ez saku_virtual_display_mode true");
+            showStatus(result.code==0 ? "Permintaan membuka Saku Launcher di display "+id+": "+result.out :
+                "Gagal membuka launcher di display "+id+". Pastikan ID display benar. "+result.out);
+        },"launch-saku-on-display").start();
+    }
     private void openTrackpad(){
-        try {
-            Intent intent = new Intent();
-            intent.setClassName(getPackageName(), "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity");
-            intent.putExtra("displayId", 0);
-            intent.putExtra("show_trackpad", true);
-            startActivity(intent);
-        } catch (Exception e) {
-            error("Trackpad belum dapat dibuka: "+e.getMessage());
-        }
+        final int id;
+        try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
+        new Thread(() -> {
+            Result result=exec("am start --display "+id+" -n com.katsuyamaki.DroidOSFOSSKeyboardTrackpad/.MainActivity --ei displayId "+id+" --ez show_trackpad true");
+            showStatus(result.code==0 ? "Permintaan membuka trackpad fullscreen pada display "+id+": "+result.out :
+                "Trackpad gagal dibuka pada display "+id+". Pastikan layanan aksesibilitas aktif dan ID display benar. "+result.out);
+        },"launch-trackpad-on-display").start();
     }
     private void restoreOverlay(){
         if(!prefs.getBoolean(SAVED,false)){error("Belum ada konfigurasi sebelumnya yang dicadangkan.");return;}
