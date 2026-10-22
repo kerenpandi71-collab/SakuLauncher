@@ -618,13 +618,8 @@ class MainActivity : Activity() {
             setPadding(dp(5), dp(if (landscapeLayout) 5 else 13), dp(5), dp(if (landscapeLayout) 5 else 10))
             visibility = if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) View.GONE else View.VISIBLE
         }
-        pageControls.addView(TextView(this).apply {
-            text = if (englishUi) "DESKTOP" else "LAYAR UTAMA"
-            textSize = 10f
-            letterSpacing = 0.12f
-            setTextColor(secondaryText)
-            visibility = if (landscapeLayout) View.GONE else View.VISIBLE
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        // The "LAYAR UTAMA" heading was removed; this spacer keeps page controls aligned to the right.
+        pageControls.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         pageControls.addView(chipButton("‹", cardSurface, primaryText, 12).apply {
             setOnClickListener { showHomePage(homePage - 1) }
         }, LinearLayout.LayoutParams(dp(34), dp(30)))
@@ -1122,28 +1117,7 @@ class MainActivity : Activity() {
             contentDescription = "Persentase baterai"
             setPadding(dp(8), 0, dp(10), 0)
         }, LinearLayout.LayoutParams(-2, -1))
-        strip.addView(View(this).apply {
-            background = rounded(if (isDarkTheme) 0x55FFFFFF else 0x22000000, 1)
-        }, LinearLayout.LayoutParams(dp(1), dp(18)))
-        if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
-            strip.addView(TextView(this).apply {
-                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
-                textSize = 12f
-                setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
-                setTextColor(primaryText)
-                gravity = Gravity.CENTER
-                contentDescription = "Waktu"
-                setPadding(dp(10), 0, dp(5), 0)
-            }, LinearLayout.LayoutParams(-2, -1))
-            strip.addView(TextView(this).apply {
-                text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
-                textSize = 10f
-                setTextColor(secondaryText)
-                gravity = Gravity.CENTER
-                contentDescription = "Tanggal"
-                setPadding(dp(5), 0, 0, 0)
-            }, LinearLayout.LayoutParams(-2, -1))
-        }
+        // The clock/date already appear in the top bar; keep this strip limited to weather and battery.
         return strip
     }
 
