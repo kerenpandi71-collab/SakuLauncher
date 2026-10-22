@@ -1,11 +1,24 @@
-name: Android CI
+name: SakuLauncher Android CI
 
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "feature/saku-desktop-overhaul", "feature/saku-trackpad-integration", "feature/saku-droidos-minimal-desktop"]
+    branches:
+      - main
+      - feature/saku-desktop-overhaul
+      - feature/saku-trackpad-integration
+      - feature/saku-droidos-minimal-desktop
+      - feature/sakutube-audio-miniplayer
   pull_request:
-    branches: ["main", "feature/saku-desktop-overhaul"]
+    branches:
+      - main
+      - feature/saku-desktop-overhaul
+
+concurrency:
+  # Use the same group for push and pull_request events on the same branch.
+  # This prevents two identical builds when a branch has an open PR.
+  group: saku-android-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,15 +26,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - name: Install Android SDK platform
         shell: bash
         run: |
@@ -32,12 +50,37 @@ jobs:
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
-      - uses: actions/upload-artifact@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate Gradle wrapper
+        run: |
+          test -f gradle/wrapper/gradle-wrapper.jar
+          test -f gradle/wrapper/gradle-wrapper.properties
+          ./gradlew --version
+
+      - name: Build Saku Launcher and SakuTube APKs
+        run: ./gradlew --no-daemon :app:assembleDebug :sakutube:assembleDebug --stacktrace
+
+      - name: Verify both APK outputs
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s sakutube/build/outputs/apk/debug/sakutube-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk sakutube/build/outputs/apk/debug/sakutube-debug.apk
+
+      - name: Upload Saku Launcher APK
+        uses: actions/upload-artifact@v4
         with:
           name: saku-launcher-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload SakuTube APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sakutube-debug
+          path: sakutube/build/outputs/apk/debug/sakutube-debug.apk
           if-no-files-found: error
           retention-days: 14

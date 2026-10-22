@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.widget.SeekBar
+import android.widget.ScrollView
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
@@ -80,9 +81,10 @@ class MainActivity : Activity() {
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
-    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
-    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
-    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
+    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(24, 2048)
+    private val dockIconSizeDp: Int get() = preferences.getInt(KEY_DOCK_ICON_SIZE, 48).coerceIn(24, 2048)
+    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 4096)
+    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 2048)
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
@@ -196,7 +198,9 @@ class MainActivity : Activity() {
     private fun homeApps(): List<LaunchableApp> {
         val byPackage = apps.associateBy { it.packageName }
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
-        return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
+        // Drawer-off mode behaves like iOS: every installed launchable app is on the desktop.
+        val packages = if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) homePackages() else apps.map { it.packageName }
+        return packages.distinct().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
     }
 
     private fun pinnedApps(): List<LaunchableApp> {
@@ -459,7 +463,7 @@ class MainActivity : Activity() {
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5)
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
             verticalSpacing = dp(10)
             horizontalSpacing = dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -467,8 +471,22 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             clipToPadding = false
             clipChildren = false
-            // Fixed compact layout: no configurable vertical icon-position mode.
-            setPadding(dp(2), dp(40), dp(2), dp(12))
+            // iOS-like icon placement: top, middle, or bottom; bottom aligns short pages
+            // toward the dock while keeping long app lists scrollable.
+            val columns = numColumns.coerceAtLeast(1)
+            val itemCount = homeApps().size
+            val rows = (itemCount + columns - 1) / columns
+            val rowHeightDp = maxOf(iconSizeDp + if (hideLabels) 12 else 28, 92) + 10
+            val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
+            val fixedChromeDp = if (landscapeLayout) 150 else 255
+            val availableGridDp = (screenHeightDp - fixedChromeDp - dockHeightDp).coerceAtLeast(0)
+            val bottomAlignPadding = maxOf(84, (availableGridDp - rows * rowHeightDp).coerceIn(8, 320))
+            val topPadding = when (preferences.getString(KEY_HOME_ICON_POSITION, "bottom")) {
+                "top" -> 8
+                "middle" -> 84
+                else -> bottomAlignPadding
+            }
+            setPadding(dp(2), dp(topPadding), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -507,26 +525,15 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                    if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                         showStartPanel()
                         true
                     } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && startPanel.visibility == View.VISIBLE) {
                         hideStartPanel()
                         true
                     } else if (kotlin.math.abs(dx) > dp(72)) {
-                        val direction = if (dx < 0) -1f else 1f
-                        desktopGrid.animate().cancel()
-                        desktopGrid.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
-                            .setDuration(115L)
-                            .setInterpolator(android.view.animation.AccelerateInterpolator())
-                            .withEndAction {
-                                showHomePage(homePage + if (dx < 0) 1 else -1)
-                                desktopGrid.translationX = direction * dp(30).toFloat()
-                                desktopGrid.animate().alpha(1f).translationX(0f)
-                                    .setDuration(235L)
-                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                    .start()
-                            }.start()
+                        // Pindah halaman langsung tanpa animasi geser/fade.
+                        showHomePage(homePage + if (dx < 0) 1 else -1)
                         true
                     } else false
                 }
@@ -535,7 +542,7 @@ class MainActivity : Activity() {
         }
         shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
+        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false) && preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) {
             val availableWidthDp = ((resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 28).coerceAtLeast(160)
             val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val dockWidth = (if (landscape) preferences.getInt(KEY_LANDSCAPE_DOCK_WIDTH, 300) else dockWidthDp).coerceIn(160, availableWidthDp)
@@ -1019,7 +1026,7 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index).apply {
                 background = ColorDrawable(Color.TRANSPARENT)
                 setPadding(dp(3), dp(4), dp(3), dp(4))
-            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(effectiveHeight - 14).coerceAtLeast(24) + 2), -1).apply {
+            }, LinearLayout.LayoutParams(dp(dockIconSizeDp + 2), -1).apply {
                 marginStart = dp(2)
                 marginEnd = dp(2)
             })
@@ -1538,6 +1545,8 @@ class MainActivity : Activity() {
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val options = arrayOf(
             "Mode tampilan · $themeState",
+            "Drawer aplikasi · " + if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) "Aktif" else "Nonaktif",
+            "Dock layar utama · " + if (preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true)) "Tampil" else "Sembunyi",
             "Jumlah layar utama · ${homePageCount()}",
             "Background blur · ${preferences.getInt(KEY_BLUR_RADIUS, 0)}",
             "Transparansi · ${transparencyPercent}%",
@@ -1558,22 +1567,65 @@ class MainActivity : Activity() {
             "SakuTube · YouTube di dalam aplikasi",
             "Baca log error untuk analisis"
         )
-        AlertDialog.Builder(this).setTitle("Saku Launcher")
-            .setItems(options) { _, which ->
-                when (which) {
+        val dialogView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            background = rounded(backgroundTop, 24)
+        }
+        dialogView.addView(TextView(this).apply {
+            text = "Personalisasi launcher"; textSize = 21f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText); setPadding(dp(4), dp(4), dp(4), dp(2))
+        })
+        dialogView.addView(TextView(this).apply {
+            text = "Tampilan iOS · Dock · Ikon · Wallpaper"; textSize = 12f
+            setTextColor(secondaryText); setPadding(dp(4), 0, dp(4), dp(12))
+        })
+        val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val glyphs = listOf("◐","▦","▱","▤","◌","◍","✦","▣","▰","↻","⇥","▧","⌫","⌂","◉","●","↕","⏻","◉","ⓘ","▶","≡")
+        options.forEachIndexed { index, label ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(10), dp(10), dp(10)); background = rounded(cardSurface, 17)
+                isClickable = true; isFocusable = true
+                setOnClickListener { performSettingsAction(index) }
+            }
+            row.addView(TextView(this).apply {
+                text = glyphs[index]; textSize = 19f; gravity = Gravity.CENTER; setTextColor(accent)
+                background = rounded(dockSurface, 12)
+            }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            row.addView(TextView(this).apply {
+                text = label; textSize = 13.5f; setTextColor(primaryText); gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(4), 0); maxLines = 2
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(this).apply { text = "›"; textSize = 23f; setTextColor(secondaryText) })
+            rows.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        }
+        scroll.addView(rows)
+        dialogView.addView(scroll, LinearLayout.LayoutParams(-1, dp(440)))
+        val settingsDialog = AlertDialog.Builder(this).setView(dialogView).setNegativeButton("Tutup", null).create()
+        settingsDialog.show()
+        settingsDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+    }
+
+    private fun performSettingsAction(which: Int) {
+        when (which) {
                     0 -> toggleTheme()
-                    1 -> chooseHomePageCount()
-                    2 -> chooseBackgroundBlur()
-                    3 -> chooseTransparency()
-                    4 -> chooseIconCustomization()
-                    5 -> chooseDockSize()
-                    6 -> showLandscapeCustomization()
-                    7 -> chooseLauncherOrientation()
-                    8 -> chooseDrawerPosition()
-                    9 -> chooseWallpaper()
-                    10 -> resetWallpaper()
-                    11 -> openHomeSettings()
-                    12 -> {
+                    1 -> { val v = preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false); preferences.edit().putBoolean(KEY_APP_DRAWER_ENABLED, !v).apply(); buildScreen() }
+                    2 -> { val v = preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true); preferences.edit().putBoolean(KEY_HOME_DOCK_VISIBLE, !v).apply(); buildScreen() }
+                    3 -> chooseHomePageCount()
+                    4 -> chooseBackgroundBlur()
+                    5 -> chooseTransparency()
+                    6 -> chooseIconCustomization()
+                    7 -> chooseDockSize()
+                    8 -> showLandscapeCustomization()
+                    9 -> chooseLauncherOrientation()
+                    10 -> chooseDrawerPosition()
+                    11 -> chooseWallpaper()
+                    12 -> resetWallpaper()
+                    13 -> openHomeSettings()
+                    14 -> {
                         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
                         if (enabled) {
                             preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
@@ -1599,24 +1651,31 @@ class MainActivity : Activity() {
                             openOverlaySettings()
                         }
                     }
-                    13 -> chooseBubbleSize()
-                    14 -> chooseDockNavigationPosition()
-                    15 -> {
+                    15 -> chooseBubbleSize()
+                    16 -> chooseDockNavigationPosition()
+                    17 -> {
                         val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
                         preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
                         Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
                     }
-                    16 -> requestBackgroundRunPermission()
-                    17 -> showPermissionInfo()
-                    18 -> openYouTubeWeb()
-                    19 -> showDiagnosticLog()
-                }
-            }.setNegativeButton("Tutup", null).show()
+                    18 -> requestBackgroundRunPermission()
+                    19 -> showPermissionInfo()
+                    20 -> openYouTubeWeb()
+                    21 -> showDiagnosticLog()
+        }
     }
 
     private fun openYouTubeWeb() {
         try {
-            startActivity(Intent(this, YouTubeActivity::class.java))
+            // SakuTube is shipped as a separate application; do not reference the
+            // removed in-process YouTubeActivity from the pre-integration launcher.
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.sakuhome.sakutube")
+            if (launchIntent == null) {
+                Toast.makeText(this, "SakuTube belum terpasang. Pasang APK SakuTube terlebih dahulu.", Toast.LENGTH_LONG).show()
+                return
+            }
+            launchIntent.putExtra("sakutube_url", "resource://android/assets/sakutube-home.html")
+            startActivity(launchIntent)
         } catch (e: Exception) {
             Toast.makeText(this, "SakuTube gagal dibuka: ${e.message ?: "kesalahan tidak diketahui"}", Toast.LENGTH_LONG).show()
         }
@@ -1904,7 +1963,7 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
-    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "middle")) {
+    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "bottom")) {
         "top" -> "Atas"
         "bottom" -> "Bawah"
         else -> "Tengah"
@@ -1958,7 +2017,7 @@ class MainActivity : Activity() {
     private fun chooseHomeIconPosition() {
         val labels = arrayOf("Atas", "Tengah", "Bawah")
         val values = arrayOf("top", "middle", "bottom")
-        val current = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+        val current = preferences.getString(KEY_HOME_ICON_POSITION, "bottom")
         AlertDialog.Builder(this).setTitle("Posisi ikon layar utama")
             .setMessage("Pilih area penempatan ikon aplikasi. Pengaturan ini mengubah ruang kosong di atas grid.")
             .setSingleChoiceItems(labels, values.indexOf(current).coerceAtLeast(0)) { dialog, which ->
@@ -2266,21 +2325,46 @@ class MainActivity : Activity() {
     }
 
     private fun chooseIconCustomization() {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
-        val sizeLabel = TextView(this).apply { text = "Ukuran ikon: ${iconSizeDp} dp"; setTextColor(primaryText); textSize = 14f }
-        val sizes = intArrayOf(32, 36, 42, 48, 54, 60, 68)
-        val sizeSlider = SeekBar(this).apply {
-            max = sizes.lastIndex; progress = sizes.indexOf(iconSizeDp).takeIf { it >= 0 } ?: 3
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { sizeLabel.text = "Ukuran ikon: ${sizes[progress]} dp" }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
         }
-        layout.addView(sizeLabel); layout.addView(sizeSlider)
-        AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
+        fun numericInput(label: String, value: Int): EditText {
+            layout.addView(TextView(this).apply {
+                text = "$label: $value dp"
+                setTextColor(primaryText)
+                textSize = 14f
+                setPadding(0, dp(10), 0, dp(5))
+            })
+            return EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                setText(value.toString())
+                hint = "Ukuran dalam dp (24–2048)"
+                setTextColor(primaryText)
+                setHintTextColor(secondaryText)
+                background = rounded(cardSurface, 12)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setSingleLine(true)
+            }.also { layout.addView(it, LinearLayout.LayoutParams(-1, dp(48))) }
+        }
+        val homeSizeInput = numericInput("Ukuran ikon layar utama", iconSizeDp)
+        val dockSizeInput = numericInput("Ukuran ikon dock", dockIconSizeDp)
+        layout.addView(TextView(this).apply {
+            text = "Ukuran sangat besar dapat melewati area layar. Dock dibatasi lebar fisik layar dan dapat digulir."
+            textSize = 12f
+            setTextColor(secondaryText)
+            setPadding(0, dp(10), 0, dp(2))
+        })
+        AlertDialog.Builder(this).setTitle("Ukuran ikon & icon pack").setView(layout)
             .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
-            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen(); refreshFloatingDock() }
+            .setPositiveButton("Terapkan ukuran") { _, _ ->
+                val homeSize = homeSizeInput.text.toString().toIntOrNull()?.coerceIn(24, 2048) ?: iconSizeDp
+                val dockSize = dockSizeInput.text.toString().toIntOrNull()?.coerceIn(24, 2048) ?: dockIconSizeDp
+                preferences.edit().putInt(KEY_ICON_SIZE, homeSize).putInt(KEY_DOCK_ICON_SIZE, dockSize).apply()
+                apps = loadApps()
+                buildScreen()
+                refreshFloatingDock()
+            }
             .setNegativeButton("Tutup", null).show()
     }
 
@@ -2329,8 +2413,8 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val widthSlider = SeekBar(this).apply {
-            max = 200
-            progress = dockWidthDp - 160
+            max = 3936
+            progress = (dockWidthDp - 160).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { widthLabel.text = "Lebar dock: ${progress + 160} dp" }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
@@ -2343,8 +2427,8 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val heightSlider = SeekBar(this).apply {
-            max = 52
-            progress = dockHeightDp - 48
+            max = 2000
+            progress = (dockHeightDp - 48).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { heightLabel.text = "Tinggi dock: ${progress + 48} dp" }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
@@ -2737,7 +2821,7 @@ class MainActivity : Activity() {
                 background = ColorDrawable(Color.TRANSPARENT)
                 elevation = 0f
                 stateListAnimator = null
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else 92))
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else maxOf(iconSizeDp + if (hideLabels) 12 else 28, 92)))
                 val startIconSize = if (landscapeDrawer) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
@@ -2800,6 +2884,7 @@ class MainActivity : Activity() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
+        private const val KEY_DOCK_ICON_SIZE = "dock_icon_size_dp"
         private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
         private const val KEY_LANDSCAPE_DRAWER_WIDTH = "landscape_drawer_width_dp"
         private const val KEY_LANDSCAPE_DRAWER_COLUMNS = "landscape_drawer_columns"
@@ -2810,6 +2895,8 @@ class MainActivity : Activity() {
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
+        private const val KEY_APP_DRAWER_ENABLED = "app_drawer_enabled"
+        private const val KEY_HOME_DOCK_VISIBLE = "home_dock_visible"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
         private const val KEY_TRANSPARENCY = "dock_transparency"

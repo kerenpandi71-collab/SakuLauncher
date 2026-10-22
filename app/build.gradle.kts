@@ -7,7 +7,6 @@ android {
     namespace = "com.sakuhome.launcher"
     compileSdk = 35
 
-
     defaultConfig {
         applicationId = "com.sakuhome.launcher"
         minSdk = 30

@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -18,11 +19,13 @@
         <intent><action android:name="com.anddoes.launcher.THEME" /></intent>
         <intent><action android:name="com.teslacoilsw.launcher.THEME" /></intent>
         <package android:name="com.italiano.simplyminimal" />
+        <package android:name="com.sakuhome.sakutube" />
     </queries>
 
     <application
         android:allowBackup="true"
         android:label="Saku Launcher"
+        android:icon="@drawable/ic_saku_launcher"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
@@ -67,7 +70,6 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <activity android:name=".YouTubeActivity" android:exported="false" android:supportsPictureInPicture="true" android:configChanges="keyboardHidden|orientation|screenSize" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"

@@ -496,11 +496,17 @@ class FloatingDockService : Service() {
                 setOnClickListener { run(); hideQuickMenu() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(6) })
         }
-        action("▶  YouTube Saku", "Buka YouTube di dalam Saku Launcher") {
+        action("▶  SakuTube", "Buka aplikasi browser SakuTube") {
             try {
-                startActivity(Intent(this@FloatingDockService, YouTubeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val launchIntent = packageManager.getLaunchIntentForPackage("com.sakuhome.sakutube")
+                if (launchIntent == null) {
+                    Toast.makeText(this@FloatingDockService, "SakuTube belum terpasang", Toast.LENGTH_SHORT).show()
+                } else {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launchIntent)
+                }
             } catch (_: Exception) {
-                Toast.makeText(this@FloatingDockService, "YouTube Saku tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@FloatingDockService, "SakuTube tidak dapat dibuka", Toast.LENGTH_SHORT).show()
             }
         }
         action("⌨  Keyboard bergaya iOS", "Pilih keyboard Saku bergaya iOS") {
