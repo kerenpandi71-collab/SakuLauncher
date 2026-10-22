@@ -63,7 +63,8 @@ public class VirtualDisplayManagerActivity extends Activity {
         try {
             Intent intent = new Intent();
             intent.setClassName(getPackageName(), "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity");
-            intent.putExtra("displayId", -999);
+            intent.putExtra("displayId", 0);
+            intent.putExtra("show_trackpad", true);
             startActivity(intent);
         } catch (Exception e) {
             error("Trackpad belum dapat dibuka: "+e.getMessage());
