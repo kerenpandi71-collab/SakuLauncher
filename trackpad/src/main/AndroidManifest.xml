@@ -31,7 +31,7 @@
         
         <activity
             android:name=".MainActivity"
-            android:exported="false"
+            android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|density|smallestScreenSize"
             android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.CoverScreenTester">
             
