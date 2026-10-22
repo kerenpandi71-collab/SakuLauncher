@@ -864,7 +864,6 @@ class MainActivity : Activity() {
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
-            "▣  Virtual Display & Saku Desktop"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -900,19 +899,9 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
                         buildScreen()
                     }
-                    18 -> openVirtualDisplayManager()
                 }
             }.setNegativeButton("Selesai", null).show()
     }
-
-    private fun openVirtualDisplayManager() {
-        try {
-            startActivity(Intent(this, com.sakuhome.launcher.virtualdisplay.VirtualDisplayActivity::class.java))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Virtual Display gagal dibuka: ${e.localizedMessage ?: "aktivitas tidak tersedia"}", Toast.LENGTH_LONG).show()
-        }
-    }
-
 
     private fun toggleOverlay() {
         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
