@@ -135,9 +135,9 @@ public class DesktopActivity extends Activity {
     private void openMiniDesktopSettings() {
         // Settings must open on the phone display, not inherit the virtual desktop display.
         final String command = "am start --display 0 --windowingMode 1 -n " + getPackageName()
-                + "/.activity.VirtualDisplayActivity";
+                + "/com.sakuhome.launcher.virtualdisplay.VirtualDisplayActivity";
         new Thread(() -> {
-            String result = runRoot(command);
+            String result = runAsShell(command);
             runOnUiThread(() -> {
                 if (result == null || result.contains("Error:") || result.contains("Exception")) {
                     Toast.makeText(this, "Gagal membuka Pengaturan Mini Desktop: " + result,
@@ -151,7 +151,7 @@ public class DesktopActivity extends Activity {
         // DesktopActivity runs on the virtual display. A normal startActivity() inherits
         // that display and can put the trackpad UI on the desktop instead of the phone.
         final String command = "am start --display 0 --windowingMode 1 -n " + getPackageName()
-                + "/.activity.TrackpadActivity --ei display_id " + displayId;
+                + "/com.sakuhome.launcher.virtualdisplay.TrackpadActivity --ei display_id " + displayId;
         new Thread(() -> {
             String result = runRoot(command);
             runOnUiThread(() -> {
@@ -226,7 +226,7 @@ public class DesktopActivity extends Activity {
             return;
         }
         new Thread(() -> {
-            String result = runRoot("am start --display " + displayId + " --windowingMode 1 -n " + component);
+            String result = runAsShell("am start --display " + displayId + " --windowingMode 1 -n " + component);
             runOnUiThread(() -> {
                 if (result == null || result.contains("Error:") || result.contains("Exception")) {
                     Toast.makeText(this, "Android gagal membuka aplikasi di display ini.",
@@ -243,6 +243,30 @@ public class DesktopActivity extends Activity {
         java.util.Date now = new java.util.Date();
         clock.setText(new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
         date.setText(new java.text.SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now));
+    }
+
+    private String runAsShell(String command) {
+        Process p = null;
+        try {
+            // ActivityTaskManager authorizes --display against shell UID (2000), not root UID.
+            p = new ProcessBuilder("su", "2000", "-c", command).redirectErrorStream(true).start();
+            StringBuilder out = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null && out.length() < 6000) {
+                    out.append(line).append('\n');
+                }
+            }
+            if (!p.waitFor(10, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return "Perintah shell timeout";
+            }
+            return out.toString().trim();
+        } catch (Exception e) {
+            return e.getClass().getSimpleName() + ": " + e.getMessage();
+        } finally {
+            if (p != null) p.destroy();
+        }
     }
 
     private String runRoot(String command) {
