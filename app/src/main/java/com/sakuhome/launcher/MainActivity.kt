@@ -1569,15 +1569,15 @@ class MainActivity : Activity() {
                     3 -> chooseHomePageCount()
                     4 -> chooseBackgroundBlur()
                     5 -> chooseTransparency()
-                    4 -> chooseIconCustomization()
-                    5 -> chooseDockSize()
-                    6 -> showLandscapeCustomization()
-                    7 -> chooseLauncherOrientation()
-                    8 -> chooseDrawerPosition()
-                    9 -> chooseWallpaper()
-                    10 -> resetWallpaper()
-                    11 -> openHomeSettings()
-                    12 -> {
+                    6 -> chooseIconCustomization()
+                    7 -> chooseDockSize()
+                    8 -> showLandscapeCustomization()
+                    9 -> chooseLauncherOrientation()
+                    10 -> chooseDrawerPosition()
+                    11 -> chooseWallpaper()
+                    12 -> resetWallpaper()
+                    13 -> openHomeSettings()
+                    14 -> {
                         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
                         if (enabled) {
                             preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
@@ -1603,17 +1603,17 @@ class MainActivity : Activity() {
                             openOverlaySettings()
                         }
                     }
-                    13 -> chooseBubbleSize()
-                    14 -> chooseDockNavigationPosition()
-                    15 -> {
+                    15 -> chooseBubbleSize()
+                    16 -> chooseDockNavigationPosition()
+                    17 -> {
                         val enabled = preferences.getBoolean(KEY_START_ON_BOOT, true)
                         preferences.edit().putBoolean(KEY_START_ON_BOOT, !enabled).apply()
                         Toast.makeText(this, if (!enabled) "Mulai otomatis diaktifkan" else "Mulai otomatis dinonaktifkan", Toast.LENGTH_SHORT).show()
                     }
-                    16 -> requestBackgroundRunPermission()
-                    17 -> showPermissionInfo()
-                    18 -> openYouTubeWeb()
-                    19 -> showDiagnosticLog()
+                    18 -> requestBackgroundRunPermission()
+                    19 -> showPermissionInfo()
+                    20 -> openYouTubeWeb()
+                    21 -> showDiagnosticLog()
                 }
             }.setNegativeButton("Tutup", null).show()
     }
