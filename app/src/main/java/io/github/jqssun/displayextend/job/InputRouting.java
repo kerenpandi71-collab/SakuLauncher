@@ -7,7 +7,7 @@ import android.view.DisplayInfo;
 import android.view.InputDevice;
 import android.widget.Toast;
 import io.github.jqssun.displayextend.PlatformCompat;
-import io.github.jqssun.displayextend.R;
+import com.sakuhome.launcher.R;
 import io.github.jqssun.displayextend.State;
 import io.github.jqssun.displayextend.shizuku.ServiceUtils;
 import io.github.jqssun.displayextend.shizuku.ShizukuUtils;

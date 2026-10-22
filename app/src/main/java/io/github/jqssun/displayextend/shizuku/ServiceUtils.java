@@ -24,7 +24,7 @@ import android.widget.Toast;
 import dev.rikka.tools.refine.Refine;
 import io.github.jqssun.displayextend.FloatingButtonService;
 import io.github.jqssun.displayextend.Pref;
-import io.github.jqssun.displayextend.R;
+import com.sakuhome.launcher.R;
 import io.github.jqssun.displayextend.State;
 import io.github.jqssun.displayextend.job.BindAllExternalInputToDisplay;
 import java.util.List;

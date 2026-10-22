@@ -8,7 +8,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import io.github.jqssun.displayextend.TvFocus;
-import io.github.jqssun.displayextend.R;
+import com.sakuhome.launcher.R;
 import io.github.jqssun.displayextend.State;
 import io.github.jqssun.displayextend.job.ChangeRotation;
 

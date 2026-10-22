@@ -8,7 +8,7 @@ import android.util.DisplayMetrics;
 import android.view.Display;
 import io.github.jqssun.displayextend.Pref;
 import io.github.jqssun.displayextend.PureBlackActivity;
-import io.github.jqssun.displayextend.R;
+import com.sakuhome.launcher.R;
 import io.github.jqssun.displayextend.State;
 import io.github.jqssun.displayextend.shizuku.ServiceUtils;
 import io.github.jqssun.displayextend.shizuku.ShizukuUtils;

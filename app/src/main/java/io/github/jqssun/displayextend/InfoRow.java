@@ -1,5 +1,7 @@
 package io.github.jqssun.displayextend;
 
+import com.sakuhome.launcher.R;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;

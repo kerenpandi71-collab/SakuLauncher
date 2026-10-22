@@ -7,7 +7,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.widget.Toast;
 import androidx.core.content.FileProvider;
-import io.github.jqssun.displayextend.R;
+import com.sakuhome.launcher.R;
 import io.github.jqssun.displayextend.State;
 import java.io.File;
 import java.io.IOException;

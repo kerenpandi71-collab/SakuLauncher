@@ -1,5 +1,7 @@
 package io.github.jqssun.displayextend;
 
+import com.sakuhome.launcher.R;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;

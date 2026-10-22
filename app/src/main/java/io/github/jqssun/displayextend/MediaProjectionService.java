@@ -1,5 +1,7 @@
 package io.github.jqssun.displayextend;
 
+import com.sakuhome.launcher.R;
+
 import static android.app.Activity.RESULT_OK;
 
 import android.app.Notification;

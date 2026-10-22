@@ -1,5 +1,7 @@
 package io.github.jqssun.displayextend;
 
+import com.sakuhome.launcher.R;
+
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;

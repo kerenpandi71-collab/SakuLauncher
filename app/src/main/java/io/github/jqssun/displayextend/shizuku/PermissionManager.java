@@ -6,7 +6,7 @@ import android.os.UserHandle;
 import android.os.UserHandleHidden;
 import android.permission.IPermissionManager;
 import dev.rikka.tools.refine.Refine;
-import io.github.jqssun.displayextend.BuildConfig;
+import com.sakuhome.launcher.BuildConfig;
 import io.github.jqssun.displayextend.State;
 
 public class PermissionManager {
