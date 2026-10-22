@@ -36,14 +36,16 @@ public final class GamePadOverlayService extends Service {
     private boolean toolbar = true;
     private int alpha = 185, selected = -1;
     private float scale = 1f;
-    private final String[] labels = {"MOVE","ATTACK","SKILL 1","SKILL 2","SKILL 3","ULT","SPELL","RECALL","REGEN","SHOP","TARGET","EXTRA"};
-    private final float[][] defaults = {{.14f,.72f},{.88f,.78f},{.76f,.55f},{.83f,.43f},{.90f,.34f},{.94f,.23f},{.69f,.78f},{.58f,.90f},{.68f,.90f},{.08f,.20f},{.94f,.62f},{.50f,.50f}};
-    private float[] xs = new float[12], ys = new float[12];
+    private final String[] labels = {"ANALOG","SERANG","SKILL 1","SKILL 2","SKILL 3","FLICKER","REGEN","RECALL"};
+    // Analog di kiri; tombol aksi di kanan. Koordinat relatif agar menyesuaikan resolusi landscape.
+    private final float[][] defaults = {{.13f,.72f},{.91f,.76f},{.76f,.55f},{.86f,.43f},{.94f,.32f},{.74f,.84f},{.84f,.88f},{.94f,.88f}};
+    private float[] xs = new float[8], ys = new float[8];
     private volatile Process bridgeProcess;
     private volatile BufferedWriter bridgeWriter;
     private volatile boolean bridgeReady;
     private int targetDisplayId = 0;
     private int screenWidth = 1, screenHeight = 1;
+    private boolean overlayAttached;
     private String profile() { return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait"; }
     private String key(String suffix) { return profile()+"."+suffix; }
     private int dp(float n) { return (int)(n*getResources().getDisplayMetrics().density+.5f); }
@@ -73,7 +75,7 @@ public final class GamePadOverlayService extends Service {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;
-        try { wm.addView(pad,params); } catch(Throwable e) { stopSelf(); }
+        updateOrientationVisibility();
     }
     private int getIntentDisplayId() {
         // The launch activity is normally on the display containing the game.
@@ -118,8 +120,14 @@ public final class GamePadOverlayService extends Service {
     }
     private void reset() { for(int i=0;i<labels.length;i++){xs[i]=defaults[i][0];ys[i]=defaults[i][1];}scale=1f;alpha=185;saveLayout();pad.invalidate(); }
     @Override public int onStartCommand(Intent intent,int flags,int startId){ if(intent!=null && intent.hasExtra("display_id")) { targetDisplayId=intent.getIntExtra("display_id",0); getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply(); } if(pad!=null){toolbar=true;pad.invalidate();} return START_STICKY; }
-    @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);loadLayout();if(pad!=null)pad.invalidate();}
-    @Override public void onDestroy(){bridgeReady=false;if(bridgeProcess!=null)bridgeProcess.destroy();if(wm!=null&&pad!=null)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
+    @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);loadLayout();updateOrientationVisibility();if(pad!=null)pad.invalidate();}
+    private void updateOrientationVisibility(){
+        if(wm==null||pad==null||params==null)return;
+        boolean landscape=getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
+        if(landscape&&!overlayAttached){try{wm.addView(pad,params);overlayAttached=true;}catch(Throwable e){android.util.Log.e("SakuGamePad","add overlay",e);}}
+        else if(!landscape&&overlayAttached){try{wm.removeView(pad);}catch(Throwable ignored){}overlayAttached=false;}
+    }
+    @Override public void onDestroy(){bridgeReady=false;if(bridgeProcess!=null)bridgeProcess.destroy();if(wm!=null&&pad!=null&&overlayAttached)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 
     private final class PadView extends View {
@@ -128,8 +136,9 @@ public final class GamePadOverlayService extends Service {
         PadView(Context c){super(c);setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
         @Override protected void onDraw(Canvas c) {
             super.onDraw(c); float w=getWidth(),h=getHeight();
+            if(getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)return;
             for(int i=0;i<labels.length;i++){
-                float r=dp((i==0?44:29)*scale),cx=xs[i]*w,cy=ys[i]*h;
+                float r=dp((i==0?48:30)*scale),cx=xs[i]*w,cy=ys[i]*h;
                 p.setStyle(Paint.Style.FILL);p.setColor((alpha<<24)|0x00A6DFFF);c.drawCircle(cx,cy,r,p);
                 p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(2));p.setColor(editing&&i==selected?Color.YELLOW:0xDDEAF5FF);c.drawCircle(cx,cy,r,p);
                 p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(labels[i].length()>7?8:10));p.setColor(Color.WHITE);c.drawText(labels[i],cx,cy+dp(4),p);
@@ -153,20 +162,22 @@ public final class GamePadOverlayService extends Service {
         }
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX(),y=e.getY();
+            if(getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)return false;
             if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
                 if(!toolbar && x<dp(72) && y<dp(58)){toolbar=true;invalidate();return true;}
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
-                selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
+                selected=hitControl(x,y);if(selected<0)return false;
+                moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected,"DOWN",xs[selected],ys[selected]);}return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(44)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
-            if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0){if(selected==0)sendTouch(0,"UP",xs[0],ys[0]);else sendTouch(selected+1,"UP",xs[selected],ys[selected]);}return true;}return true;
+            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(48)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
+            if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0){if(selected==0)sendTouch(0,"UP",xs[0],ys[0]);else sendTouch(selected,"UP",xs[selected],ys[selected]);}selected=-1;return true;}return true;
         }
         private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
         private void performToolbar(int a){
             switch(a){case 0:editing=!editing;break;case 1:scale=Math.max(.55f,scale-.1f);break;case 2:scale=Math.min(2.8f,scale+.1f);break;case 3:alpha=alpha>=230?80:alpha+30;break;case 4:saveLayout();Toast.makeText(GamePadOverlayService.this,"Layout "+profile()+" disimpan",Toast.LENGTH_SHORT).show();break;case 5:reset();return;case 6:toolbar=false;break;case 7:stopSelf();return;}
             saveLayout();invalidate();
         }
-        private int nearest(float x,float y){int best=0;float dist=Float.MAX_VALUE;for(int i=0;i<labels.length;i++){float dx=x-xs[i]*getWidth(),dy=y-ys[i]*getHeight(),d=dx*dx+dy*dy;if(d<dist){dist=d;best=i;}}return best;}
+        private int hitControl(float x,float y){float best=Float.MAX_VALUE;int index=-1;for(int i=0;i<labels.length;i++){float dx=x-xs[i]*getWidth(),dy=y-ys[i]*getHeight();float r=dp((i==0?52:36)*scale);float d=dx*dx+dy*dy;if(d<=r*r&&d<best){best=d;index=i;}}return index;}
         private float clamp(float v){return Math.max(.03f,Math.min(.97f,v));}
     }
 }
