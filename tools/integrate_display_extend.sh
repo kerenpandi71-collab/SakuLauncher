@@ -7,7 +7,7 @@ trap 'rm -rf "$TMP"' EXIT
 git clone --depth 1 --branch "$EXTEND_REF" "$EXTEND_REPO" "$TMP/extend"
 export EXTEND_SOURCE="$TMP/extend"
 
-# Copy implementation while preserving the source package and AIDL layout.
+# Copy implementation while preserving the source package and AIDL layout.\n# Diagnostics, corrected Shizuku binding, and unified accessibility live in this target branch.
 mkdir -p app/src/main/java/io/github/jqssun/displayextend app/src/main/aidl app/src/main/res
 cp -R "$EXTEND_SOURCE/app/src/main/java/io/github/jqssun/displayextend/." app/src/main/java/io/github/jqssun/displayextend/
 # The embedded classes keep their original package, but Android generates R/BuildConfig
