@@ -24,6 +24,10 @@ jobs:
           java-version: "17"
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+      - name: Install required Android SDK packages
+        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0"
       - name: Run integration script
         run: bash tools/integrate_display_extend.sh
       - name: Commit integrated source
