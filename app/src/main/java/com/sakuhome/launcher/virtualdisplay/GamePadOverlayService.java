@@ -11,7 +11,6 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PixelFormat;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.IBinder;
@@ -20,174 +19,167 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
-import java.util.Locale;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 
-/** Persistent configurable gamepad overlay. Mapping is saved per orientation. */
+/**
+ * Gamepad uses two small, bounded overlay windows. The empty middle of the
+ * screen is never covered by a full-screen touchable window.
+ */
 public final class GamePadOverlayService extends Service {
     private WindowManager wm;
-    private PadView pad;
-    private WindowManager.LayoutParams params;
     private SharedPreferences prefs;
+    private PanelView leftPanel, rightPanel;
+    private WindowManager.LayoutParams leftParams, rightParams;
+    private boolean leftAttached, rightAttached;
+    private int targetDisplayId;
+    private int screenWidth=1, screenHeight=1;
+    private float leftWidth=0.24f, leftHeight=0.72f, rightWidth=0.25f, rightHeight=0.78f;
+    private int alpha=185;
     private boolean editing;
-    private boolean toolbar = true;
-    private int alpha = 185, selected = -1;
-    private float scale = 1f;
-    private float leftWidth=1f,leftHeight=1f,rightWidth=1f,rightHeight=1f;
-    private final String[] labels = {"ANALOG","SERANG","SKILL 1","SKILL 2","SKILL 3","FLICKER","REGEN","RECALL"};
-    // Analog di kiri; tombol aksi di kanan. Koordinat relatif agar menyesuaikan resolusi landscape.
-    private final float[][] defaults = {{.13f,.72f},{.91f,.76f},{.76f,.55f},{.86f,.43f},{.94f,.32f},{.74f,.84f},{.84f,.88f},{.94f,.88f}};
-    private float[] xs = new float[8], ys = new float[8];
     private volatile Process bridgeProcess;
     private volatile BufferedWriter bridgeWriter;
     private volatile boolean bridgeReady;
-    private int targetDisplayId = 0;
-    private int screenWidth = 1, screenHeight = 1;
-    private boolean overlayAttached;
-    private String profile() { return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait"; }
-    private String key(String suffix) { return profile()+"."+suffix; }
-    private int dp(float n) { return (int)(n*getResources().getDisplayMetrics().density+.5f); }
+    private final String[] actions={"SERANG","SKILL 1","SKILL 2","SKILL 3","FLICKER","REGEN","RECALL"};
+    private final float[][] rightPoints={{.50f,.25f},{.50f,.37f},{.50f,.49f},{.50f,.61f},{.28f,.78f},{.50f,.82f},{.72f,.78f}};
+    private float analogX=.5f, analogY=.62f;
+    private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
 
-    @Override public void onCreate() {
+    @Override public void onCreate(){
         super.onCreate();
         prefs=getSharedPreferences("gamepad_layouts",MODE_PRIVATE);
-        alpha=prefs.getInt("alpha",185); scale=prefs.getFloat("scale",1f);
-        leftWidth=prefs.getFloat("left_width",1f); leftHeight=prefs.getFloat("left_height",1f);
-        rightWidth=prefs.getFloat("right_width",1f); rightHeight=prefs.getFloat("right_height",1f);
-        loadLayout();
-        if(Build.VERSION.SDK_INT>=26) {
+        leftWidth=prefs.getFloat("left_width",.24f); leftHeight=prefs.getFloat("left_height",.72f);
+        rightWidth=prefs.getFloat("right_width",.25f); rightHeight=prefs.getFloat("right_height",.78f);
+        alpha=prefs.getInt("alpha",185); analogX=prefs.getFloat("analog_x",.5f); analogY=prefs.getFloat("analog_y",.62f);
+        for(int i=0;i<actions.length;i++){rightPoints[i][0]=prefs.getFloat("button_x"+i,rightPoints[i][0]);rightPoints[i][1]=prefs.getFloat("button_y"+i,rightPoints[i][1]);}
+        if(Build.VERSION.SDK_INT>=26){
             NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
             nm.createNotificationChannel(new NotificationChannel("saku_gamepad","Saku Game Pad",NotificationManager.IMPORTANCE_LOW));
             Notification n=new Notification.Builder(this,"saku_gamepad").setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("Saku Game Pad aktif").setContentText("Overlay mapping sedang berjalan")
-                .setOngoing(true).build();
+                .setContentTitle("Saku Game Pad aktif").setContentText("Panel kiri dan kanan • area tengah bebas").setOngoing(true).build();
             startForeground(731,n);
         }
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
-        targetDisplayId = getIntentDisplayId();
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        wm.getDefaultDisplay().getRealMetrics(metrics);
-        screenWidth = metrics.widthPixels; screenHeight = metrics.heightPixels;
+        android.util.DisplayMetrics dm=new android.util.DisplayMetrics(); wm.getDefaultDisplay().getRealMetrics(dm);
+        screenWidth=dm.widthPixels; screenHeight=dm.heightPixels;
+        targetDisplayId=getSharedPreferences("gamepad_runtime",MODE_PRIVATE).getInt("display_id",0);
         startRootBridge();
-        pad=new PadView(this);
-        int type=Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE;
-        params=new WindowManager.LayoutParams(-1,-1,type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
-        params.gravity=Gravity.TOP|Gravity.START;
-        updateOrientationVisibility();
+        leftPanel=new PanelView(this,true); rightPanel=new PanelView(this,false);
+        updatePanels();
     }
-    private int getIntentDisplayId() {
-        // The launch activity is normally on the display containing the game.
-        return getSharedPreferences("gamepad_runtime", MODE_PRIVATE).getInt("display_id", 0);
-    }
-    private void startRootBridge() {
-        try {
-            String shell = "APK=$(pm path " + getPackageName() + " | head -n 1 | cut -d: -f2); "
-                + "if [ -z \"$APK\" ]; then echo NO_APK_PATH; exit 20; fi; "
-                + "CLASSPATH=\"$APK\" app_process /system/bin com.sakuhome.launcher.virtualdisplay.RootInputBridge";
-            Process process = new ProcessBuilder("su","-c",shell).redirectErrorStream(true).start();
-            bridgeProcess=process;
+    private void startRootBridge(){
+        try{
+            String shell="APK=$(pm path "+getPackageName()+" | head -n 1 | cut -d: -f2); if [ -z \"$APK\" ]; then echo NO_APK_PATH; exit 20; fi; CLASSPATH=\"$APK\" app_process /system/bin com.sakuhome.launcher.virtualdisplay.RootInputBridge";
+            Process process=new ProcessBuilder("su","-c",shell).redirectErrorStream(true).start(); bridgeProcess=process;
             bridgeWriter=new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            Thread reader=new Thread(() -> {
-                try(BufferedReader br=new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line; while((line=br.readLine())!=null) {
-                        if("READY".equals(line)) bridgeReady=true;
-                        else if(line.startsWith("BRIDGE_ERROR")) bridgeReady=false;
-                        android.util.Log.d("SakuGamePadBridge",line);
-                    }
-                } catch(Exception e) { android.util.Log.e("SakuGamePadBridge","reader",e); }
-                finally { bridgeReady=false; }
-            },"saku-gamepad-bridge-reader");
-            reader.setDaemon(true); reader.start();
-        } catch(Throwable e) { android.util.Log.e("SakuGamePadBridge","Cannot start root bridge",e); }
+            Thread reader=new Thread(()->{try(BufferedReader br=new BufferedReader(new InputStreamReader(process.getInputStream()))){String line;while((line=br.readLine())!=null){if("READY".equals(line))bridgeReady=true;else if(line.startsWith("BRIDGE_ERROR"))bridgeReady=false;android.util.Log.d("SakuGamePadBridge",line);}}catch(Exception e){android.util.Log.e("SakuGamePadBridge","reader",e);}finally{bridgeReady=false;}},"saku-gamepad-bridge-reader");
+            reader.setDaemon(true);reader.start();
+        }catch(Throwable e){android.util.Log.e("SakuGamePadBridge","Cannot start root bridge",e);}
     }
-    private boolean sendTouch(int pointerId,String phase,float nx,float ny) {
-        BufferedWriter writer=bridgeWriter;
-        if(!bridgeReady || writer==null) return false;
-        float x=Math.max(0,Math.min(screenWidth-1,nx*screenWidth));
-        float y=Math.max(0,Math.min(screenHeight-1,ny*screenHeight));
-        try { synchronized(writer) { writer.write("TOUCH "+targetDisplayId+" "+pointerId+" "+phase+" "+x+" "+y);writer.newLine();writer.flush(); } return true; }
-        catch(Exception e) { android.util.Log.e("SakuGamePadBridge","send touch",e);return false; }
+    private void sendTouch(int id,String phase,float nx,float ny){
+        BufferedWriter w=bridgeWriter;if(!bridgeReady||w==null){android.util.Log.w("SakuGamePad","Input bridge not ready; no touch sent");return;}
+        float x=Math.max(0,Math.min(screenWidth-1,nx*screenWidth)),y=Math.max(0,Math.min(screenHeight-1,ny*screenHeight));
+        try{synchronized(w){w.write("TOUCH "+targetDisplayId+" "+id+" "+phase+" "+x+" "+y);w.newLine();w.flush();}}catch(Exception e){android.util.Log.e("SakuGamePad","touch",e);}
     }
-    private void loadLayout() {
-        for(int i=0;i<labels.length;i++){xs[i]=prefs.getFloat(key("x"+i),defaults[i][0]);ys[i]=prefs.getFloat(key("y"+i),defaults[i][1]);}
-    }
-    private void saveLayout() {
-        SharedPreferences.Editor e=prefs.edit().putInt("alpha",alpha).putFloat("scale",scale)
-            .putFloat("left_width",leftWidth).putFloat("left_height",leftHeight)
-            .putFloat("right_width",rightWidth).putFloat("right_height",rightHeight);
-        for(int i=0;i<labels.length;i++)e.putFloat(key("x"+i),xs[i]).putFloat(key("y"+i),ys[i]);
+    private void save(){
+        SharedPreferences.Editor e=prefs.edit().putFloat("left_width",leftWidth).putFloat("left_height",leftHeight)
+            .putFloat("right_width",rightWidth).putFloat("right_height",rightHeight).putInt("alpha",alpha)
+            .putFloat("analog_x",analogX).putFloat("analog_y",analogY);
+        for(int i=0;i<actions.length;i++)e.putFloat("button_x"+i,rightPoints[i][0]).putFloat("button_y"+i,rightPoints[i][1]);
         e.apply();
     }
-    private void reset() { for(int i=0;i<labels.length;i++){xs[i]=defaults[i][0];ys[i]=defaults[i][1];}scale=1f;alpha=185;saveLayout();pad.invalidate(); }
-    @Override public int onStartCommand(Intent intent,int flags,int startId){ if(intent!=null && intent.hasExtra("display_id")) { targetDisplayId=intent.getIntExtra("display_id",0); getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply(); } if(pad!=null){toolbar=true;pad.invalidate();} return START_STICKY; }
-    @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);loadLayout();updateOrientationVisibility();if(pad!=null)pad.invalidate();}
-    private void updateOrientationVisibility(){
-        if(wm==null||pad==null||params==null)return;
-        boolean landscape=getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
-        if(landscape&&!overlayAttached){try{wm.addView(pad,params);overlayAttached=true;}catch(Throwable e){android.util.Log.e("SakuGamePad","add overlay",e);}}
-        else if(!landscape&&overlayAttached){try{wm.removeView(pad);}catch(Throwable ignored){}overlayAttached=false;}
+    @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(intent!=null&&intent.hasExtra("display_id")){targetDisplayId=intent.getIntExtra("display_id",0);getSharedPreferences("gamepad_runtime",MODE_PRIVATE).edit().putInt("display_id",targetDisplayId).apply();}
+        updatePanels(); return START_STICKY;
     }
-    @Override public void onDestroy(){bridgeReady=false;if(bridgeProcess!=null)bridgeProcess.destroy();if(wm!=null&&pad!=null&&overlayAttached)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
+    @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);android.util.DisplayMetrics dm=new android.util.DisplayMetrics();wm.getDefaultDisplay().getRealMetrics(dm);screenWidth=dm.widthPixels;screenHeight=dm.heightPixels;updatePanels();}
+    private void updatePanels(){
+        if(wm==null||leftPanel==null||rightPanel==null)return;
+        boolean landscape=getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
+        if(!landscape){removePanels();return;}
+        int type=Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE;
+        int lw=Math.max(dp(92),Math.min((int)(screenWidth*.36f),(int)(screenWidth*leftWidth)));
+        int lh=Math.max(dp(150),Math.min((int)(screenHeight*.95f),(int)(screenHeight*leftHeight)));
+        int rw=Math.max(dp(100),Math.min((int)(screenWidth*.38f),(int)(screenWidth*rightWidth)));
+        int rh=Math.max(dp(180),Math.min((int)(screenHeight*.95f),(int)(screenHeight*rightHeight)));
+        int flags=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        leftParams=new WindowManager.LayoutParams(lw,lh,type,flags,android.graphics.PixelFormat.TRANSLUCENT);
+        leftParams.gravity=Gravity.TOP|Gravity.LEFT;leftParams.y=Math.max(0,(screenHeight-lh)/2);leftParams.x=0;leftParams.setTitle("Saku GamePad left panel");
+        rightParams=new WindowManager.LayoutParams(rw,rh,type,flags,android.graphics.PixelFormat.TRANSLUCENT);
+        rightParams.gravity=Gravity.TOP|Gravity.RIGHT;rightParams.y=Math.max(0,(screenHeight-rh)/2);rightParams.x=0;rightParams.setTitle("Saku GamePad right panel");
+        try{
+            if(!leftAttached){wm.addView(leftPanel,leftParams);leftAttached=true;}else wm.updateViewLayout(leftPanel,leftParams);
+            if(!rightAttached){wm.addView(rightPanel,rightParams);rightAttached=true;}else wm.updateViewLayout(rightPanel,rightParams);
+        }catch(Throwable e){android.util.Log.e("SakuGamePad","Panel attach/update failed",e);Toast.makeText(this,"Game Pad gagal ditampilkan: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        leftPanel.invalidate();rightPanel.invalidate();
+    }
+    private void removePanels(){
+        if(wm==null)return;
+        if(leftAttached){try{wm.removeView(leftPanel);}catch(Throwable ignored){}leftAttached=false;}
+        if(rightAttached){try{wm.removeView(rightPanel);}catch(Throwable ignored){}rightAttached=false;}
+    }
+    @Override public void onDestroy(){bridgeReady=false;removePanels();if(bridgeProcess!=null)bridgeProcess.destroy();try{if(bridgeWriter!=null)bridgeWriter.close();}catch(Exception ignored){}super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 
-    private final class PadView extends View {
+    private final class PanelView extends View{
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float downX,downY; private boolean moving; private long lastTap;
-        PadView(Context c){super(c);setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
-        @Override protected void onDraw(Canvas c) {
-            super.onDraw(c); float w=getWidth(),h=getHeight();
-            if(getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)return;
-            for(int i=0;i<labels.length;i++){
-                float sx=i==0?leftWidth:rightWidth, sy=i==0?leftHeight:rightHeight;
-                float cx=groupX(i,xs[i],w,sx),cy=groupY(i,ys[i],h,sy);
-                float r=dp((i==0?48:30)*scale)*Math.min(sx,sy);
-                p.setStyle(Paint.Style.FILL);p.setColor((alpha<<24)|0x00A6DFFF);c.drawCircle(cx,cy,r,p);
-                p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(2));p.setColor(editing&&i==selected?Color.YELLOW:0xDDEAF5FF);c.drawCircle(cx,cy,r,p);
-                p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(labels[i].length()>7?8:10));p.setColor(Color.WHITE);c.drawText(labels[i],cx,cy+dp(4),p);
-                if(editing&&i==selected){p.setStyle(Paint.Style.STROKE);p.setColor(Color.YELLOW);c.drawCircle(cx,cy,r+dp(5),p);}
+        private final boolean left;
+        private float downX,downY;private int selected=-1;private boolean drag;
+        PanelView(Context c,boolean isLeft){super(c);left=isLeft;setLayerType(View.LAYER_TYPE_SOFTWARE,null);setBackgroundColor(Color.TRANSPARENT);}
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c);float w=getWidth(),h=getHeight();
+            p.setStyle(Paint.Style.FILL);p.setColor(0x55202E40);c.drawRoundRect(new RectF(dp(3),dp(3),w-dp(3),h-dp(3)),dp(14),dp(14),p);
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(1.5f));p.setColor(editing?Color.YELLOW:0xBBDAE9F8);c.drawRoundRect(new RectF(dp(3),dp(3),w-dp(3),h-dp(3)),dp(14),dp(14),p);
+            p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(9));p.setColor(Color.WHITE);
+            c.drawText(left?"ANALOG":"GAME PAD",w/2,dp(17),p);
+            float top=dp(26), cell=Math.max(dp(25),(w-dp(12))/4f);
+            drawChip(c,dp(6),top,cell-dp(2),dp(22),"W-");
+            drawChip(c,dp(6)+cell,top,cell-dp(2),dp(22),"W+");
+            drawChip(c,dp(6)+2*cell,top,cell-dp(2),dp(22),"H-");
+            drawChip(c,dp(6)+3*cell,top,Math.max(dp(22),w-dp(6)-(dp(6)+3*cell)),dp(22),"H+");
+            if(left){
+                float cx=analogX*w,cy=analogY*h,r=Math.min(w*.30f,h*.20f);
+                p.setColor(0x8845B9D5);c.drawCircle(cx,cy,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(2));p.setColor(0xFFECF7FF);c.drawCircle(cx,cy,r,p);
+                p.setStyle(Paint.Style.FILL);p.setColor(0xCC142536);c.drawCircle(cx,cy,r*.36f,p);p.setColor(Color.WHITE);p.setTextSize(dp(9));c.drawText("ANALOG",cx,cy+r+dp(13),p);
+            }else{
+                float r=Math.max(dp(13),Math.min(w*.20f,h*.065f));
+                for(int i=0;i<actions.length;i++){float x=rightPoints[i][0]*w,y=rightPoints[i][1]*h;p.setStyle(Paint.Style.FILL);p.setColor(0xCC17617A);c.drawCircle(x,y,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(1.5f));p.setColor(Color.WHITE);c.drawCircle(x,y,r,p);p.setStyle(Paint.Style.FILL);p.setTextSize(dp(8));p.setColor(Color.WHITE);c.drawText(actions[i],x,y+dp(3),p);}
             }
-            if(toolbar) drawToolbar(c); else drawShortcutBubble(c);
+            p.setStyle(Paint.Style.FILL);p.setColor(Color.WHITE);p.setTextSize(dp(8));c.drawText(editing?"SERET TOMBOL • TAP W/H":"TAP W/H UNTUK UKURAN",w/2,h-dp(8),p);
         }
-        private void drawShortcutBubble(Canvas c){
-            p.setStyle(Paint.Style.FILL);p.setColor(0xE6223044);
-            c.drawRoundRect(new RectF(dp(8),dp(8),dp(64),dp(48)),dp(18),dp(18),p);
-            p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(23));
-            c.drawText("PAD",dp(36),dp(34),p);
-        }
-        private void drawToolbar(Canvas c){
-            p.setStyle(Paint.Style.FILL);p.setColor(0xD91A2230);c.drawRoundRect(new RectF(dp(5),dp(5),getWidth()-dp(5),dp(43)),dp(8),dp(8),p);
-            p.setTextSize(dp(11));p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.LEFT);
-            c.drawText("SAKU PAD • "+profile().toUpperCase(Locale.ROOT)+(editing?" • ATUR POSISI":" • MAIN"),dp(12),dp(29),p);
-            String[] opts={"EDIT","L-W","L-H","R-W","R-H","SAVE","RESET","HIDE"};
-            float cell=(getWidth()-dp(10))/8f;
-            for(int i=0;i<opts.length;i++){float x=dp(5)+cell*i;p.setColor(0xFF26364A);c.drawRoundRect(new RectF(x+dp(1),dp(48),x+cell-dp(2),dp(78)),dp(5),dp(5),p);p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(9));c.drawText(opts[i],x+cell/2,dp(67),p);}
-        }
+        private void drawChip(Canvas c,float x,float y,float w,float h,String s){p.setStyle(Paint.Style.FILL);p.setColor(0xFF25384B);c.drawRoundRect(new RectF(x,y,x+w,y+h),dp(5),dp(5),p);p.setColor(Color.WHITE);p.setTextSize(dp(9));p.setTextAlign(Paint.Align.CENTER);c.drawText(s,x+w/2,y+h/2+dp(3),p);}
         @Override public boolean onTouchEvent(MotionEvent e){
-            float x=e.getX(),y=e.getY();
-            if(getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)return false;
-            if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
-                if(!toolbar && x<dp(72) && y<dp(58)){toolbar=true;invalidate();return true;}
-                if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
-                selected=hitControl(x,y);if(selected<0)return false;
-                moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected,"DOWN",xs[selected],ys[selected]);}return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){float sx=selected==0?leftWidth:rightWidth,sy=selected==0?leftHeight:rightHeight;xs[selected]=clamp((x-(selected==0?getWidth()*.13f:getWidth()*.86f)*(1-sx))/getWidth()/sx);ys[selected]=clamp((y-getHeight()*.70f*(1-sy))/getHeight()/sy);invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(48)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
-            if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0){if(selected==0)sendTouch(0,"UP",xs[0],ys[0]);else sendTouch(selected,"UP",xs[selected],ys[selected]);}selected=-1;return true;}return true;
+            float x=e.getX(),y=e.getY(),w=Math.max(1,getWidth()),h=Math.max(1,getHeight());
+            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+                downX=x;downY=y;selected=-1;drag=false;
+                if(y<dp(52)){
+                    float cell=(w-dp(12))/4f;int ix=Math.min(3,Math.max(0,(int)((x-dp(6))/Math.max(1,cell))));
+                    if(ix==0){if(left)leftWidth=Math.max(.14f,leftWidth-.03f);else rightWidth=Math.max(.14f,rightWidth-.03f);}
+                    if(ix==1){if(left)leftWidth=Math.min(.36f,leftWidth+.03f);else rightWidth=Math.min(.38f,rightWidth+.03f);}
+                    if(ix==2){if(left)leftHeight=Math.max(.35f,leftHeight-.08f);else rightHeight=Math.max(.35f,rightHeight-.08f);}
+                    if(ix==3){if(left)leftHeight=Math.min(.95f,leftHeight+.08f);else rightHeight=Math.min(.95f,rightHeight+.08f);}
+                    save();updatePanels();return true;
+                }
+                if(left){float dx=x-analogX*w,dy=y-analogY*h;float r=Math.min(w*.34f,h*.24f);if(dx*dx+dy*dy<=r*r||editing){selected=0;drag=editing;if(!editing)sendTouch(0,"DOWN",panelNormX(true,x,w),panelNormY(y,h));return true;}}
+                else{float r=Math.max(dp(13),Math.min(w*.20f,h*.065f));for(int i=0;i<actions.length;i++){float dx=x-rightPoints[i][0]*w,dy=y-rightPoints[i][1]*h;if(dx*dx+dy*dy<=r*r||editing&&Math.abs(dx)<r*1.4f&&Math.abs(dy)<r*1.4f){selected=i;drag=editing;if(!editing)sendTouch(i+1,"DOWN",panelNormX(false,x,w),panelNormY(y,h));return true;}}}
+                // Empty portions of the small panel do not consume the rest of the phone screen.
+                return false;
+            }
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&selected>=0&&drag){
+                if(left){analogX=clamp(x/w,.15f,.85f);analogY=clamp(y/h,.20f,.85f);}else{rightPoints[selected][0]=clamp(x/w,.15f,.85f);rightPoints[selected][1]=clamp(y/h,.16f,.90f);}invalidate();return true;
+            }
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&selected==0&&!editing){float dx=(x-downX)/w,dy=(y-downY)/h;sendTouch(0,"MOVE",clamp(analogX+dx,.01f,.99f),clamp(analogY+dy,.01f,.99f));return true;}
+            if(e.getActionMasked()==MotionEvent.ACTION_UP&&selected>=0){
+                if(drag){save();invalidate();}else sendTouch(left?0:selected+1,"UP",panelNormX(left,x,w),panelNormY(y,h));
+                selected=-1;return true;
+            }
+            if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){if(selected>=0&&!drag)sendTouch(left?0:selected+1,"UP",panelNormX(left,x,w),panelNormY(y,h));selected=-1;return true;}
+            return selected>=0;
         }
-        private float cycleSize(float v){return v<0.85f?1f:(v<1.15f?1.35f:0.7f);}
-        private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
-        private void performToolbar(int a){
-            switch(a){case 0:editing=!editing;break;case 1:leftWidth=cycleSize(leftWidth);break;case 2:leftHeight=cycleSize(leftHeight);break;case 3:rightWidth=cycleSize(rightWidth);break;case 4:rightHeight=cycleSize(rightHeight);break;case 5:saveLayout();Toast.makeText(GamePadOverlayService.this,"Layout "+profile()+" disimpan",Toast.LENGTH_SHORT).show();break;case 6:reset();return;case 7:toolbar=false;break;}
-            saveLayout();invalidate();
-        }
-        private int hitControl(float x,float y){float best=Float.MAX_VALUE;int index=-1;for(int i=0;i<labels.length;i++){float sx=i==0?leftWidth:rightWidth,sy=i==0?leftHeight:rightHeight;float dx=x-groupX(i,xs[i],getWidth(),sx),dy=y-groupY(i,ys[i],getHeight(),sy);float r=dp((i==0?52:36)*scale)*Math.min(sx,sy);float d=dx*dx+dy*dy;if(d<=r*r&&d<best){best=d;index=i;}}return index;}
-        private float groupX(int i,float x,float w,float s){float anchor=i==0?w*.13f:w*.86f;return anchor+(x*w-anchor)*s;}
-        private float groupY(int i,float y,float h,float s){float anchor=h*.70f;return anchor+(y*h-anchor)*s;}
-        private float clamp(float v){return Math.max(.03f,Math.min(.97f,v));}
+        private float panelNormX(boolean isLeft,float x,float w){float screenX=isLeft?x:screenWidth-w+x;return clamp(screenX/screenWidth,.001f,.999f);}
+        private float panelNormY(float y,float h){float screenY=(screenHeight-h)/2f+y;return clamp(screenY/screenHeight,.001f,.999f);}
     }
+    private float clamp(float v,float lo,float hi){return Math.max(lo,Math.min(hi,v));}
 }
