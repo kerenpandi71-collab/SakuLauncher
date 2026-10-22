@@ -74,7 +74,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         final int id;
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
-            Result result=exec("am start --display "+id+" -n com.sakuhome.launcher/.MainActivity --ez saku_virtual_display_mode true");
+            Result result=exec("su 2000 -c \\"am start --display "+id+" -n com.sakuhome.launcher/.MainActivity --ez saku_virtual_display_mode true\\"");
             showStatus(result.code==0 ? "Permintaan membuka Saku Launcher di display "+id+": "+result.out :
                 "Gagal membuka launcher di display "+id+". Pastikan ID display benar. "+result.out);
         },"launch-saku-on-display").start();
@@ -83,7 +83,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         final int id;
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
-            Result result=exec("am start --display "+id+" -n com.sakuhome.launcher/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id+" --ez show_trackpad true");
+            Result result=exec("su 2000 -c \\"am start --display "+id+" -n com.sakuhome.launcher/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id+" --ez show_trackpad true\\"");
             showStatus(result.code==0 ? "Permintaan membuka trackpad fullscreen pada display "+id+": "+result.out :
                 "Trackpad gagal dibuka pada display "+id+". Pastikan layanan aksesibilitas aktif dan ID display benar. "+result.out);
         },"launch-trackpad-on-display").start();
