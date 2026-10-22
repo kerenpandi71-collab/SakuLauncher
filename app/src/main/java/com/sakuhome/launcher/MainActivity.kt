@@ -80,7 +80,7 @@ class MainActivity : Activity() {
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
-    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 64).coerceIn(40, 96)
+    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(40, 96)
     private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
     private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
@@ -196,7 +196,9 @@ class MainActivity : Activity() {
     private fun homeApps(): List<LaunchableApp> {
         val byPackage = apps.associateBy { it.packageName }
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
-        return homePackages().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
+        // Drawer-off mode behaves like iOS: every installed launchable app is on the desktop.
+        val packages = if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) homePackages() else apps.map { it.packageName }
+        return packages.distinct().filterNot { hidden.contains(it) }.mapNotNull { byPackage[it] }
     }
 
     private fun pinnedApps(): List<LaunchableApp> {
@@ -459,7 +461,7 @@ class MainActivity : Activity() {
         }
         shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
         desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 5)
+            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
             verticalSpacing = dp(10)
             horizontalSpacing = dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -468,7 +470,7 @@ class MainActivity : Activity() {
             clipToPadding = false
             clipChildren = false
             // Fixed compact layout: no configurable vertical icon-position mode.
-            setPadding(dp(2), dp(8), dp(2), dp(12))
+            setPadding(dp(2), dp(54), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -507,7 +509,7 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_UP -> {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
+                    if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
                         showStartPanel()
                         true
                     } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && startPanel.visibility == View.VISIBLE) {
