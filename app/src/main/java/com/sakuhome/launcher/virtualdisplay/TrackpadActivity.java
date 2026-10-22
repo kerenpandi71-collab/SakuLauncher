@@ -85,12 +85,12 @@ public class TrackpadActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(16), dp(18), dp(14));
-        root.setBackgroundColor(0xFF0B1220);
+        root.setBackgroundColor(0xFF000000);
 
-        TextView title = text("TRACKPAD", 23, 0xFFF4F7FC);
+        TextView title = text("TRACKPAD", 23, 0xFFFFFFFF);
         title.setTypeface(null, 1);
         root.addView(title);
-        TextView subtitle = text("Kontrol display virtual dari layar HP", 13, 0xFF9CAEC8);
+        TextView subtitle = text("VIRTUAL DESKTOP  /  INPUT CONTROL", 12, 0xFF55D6FF);
         root.addView(subtitle);
 
         LinearLayout config = new LinearLayout(this);
@@ -109,7 +109,7 @@ public class TrackpadActivity extends Activity {
         connect.setOnClickListener(v -> connectTarget());
         root.addView(connect);
 
-        connectionStatus = text("Belum tersambung", 12, 0xFFFFD27D);
+        connectionStatus = text("BELUM TERSAMBUNG", 12, 0xFFFFC857);
         root.addView(connectionStatus);
 
         Button logs = button("Lihat / Salin Log Error");
@@ -130,7 +130,7 @@ public class TrackpadActivity extends Activity {
         actions.addView(button("Klik Kanan", v -> injectTap(true)), new LinearLayout.LayoutParams(0, dp(48), 1));
         actions.addView(button("Pusatkan Kursor", v -> resetCursor()), new LinearLayout.LayoutParams(0, dp(48), 1));
         root.addView(actions);
-        TextView help = text("Geser satu jari untuk mengarahkan kursor • ketuk untuk klik • tombol kanan untuk klik kanan", 11, 0xFF8495AF);
+        TextView help = text("1 jari: gerakkan kursor  •  ketuk: klik  •  kanan: klik kanan", 11, 0xFFB7C7D9);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
         root.addView(help, hp);
@@ -151,7 +151,14 @@ public class TrackpadActivity extends Activity {
         return e;
     }
     private Button button(String label) {
-        Button b = new Button(this); b.setText(label); return b;
+        Button b = new Button(this);
+        b.setText(label.toUpperCase(java.util.Locale.ROOT));
+        b.setTextColor(0xFF65E5FF);
+        b.setTextSize(12);
+        b.setAllCaps(false);
+        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF101820));
+        b.setStateListAnimator(null);
+        return b;
     }
     private Button button(String label, View.OnClickListener listener) {
         Button b = button(label); b.setOnClickListener(listener); return b;
@@ -746,18 +753,18 @@ public class TrackpadActivity extends Activity {
         private float lastX, lastY;
         private float startX, startY;
         private boolean gestureMoved;
-        TrackpadSurface() { super(TrackpadActivity.this); setBackgroundColor(0xFF17243A); setLayerType(View.LAYER_TYPE_HARDWARE, null); }
+        TrackpadSurface() { super(TrackpadActivity.this); setBackgroundColor(0xFF000000); setLayerType(View.LAYER_TYPE_HARDWARE, null); }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             float inset = dp(12);
-            paint.setColor(0xFF253752); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(1));
+            paint.setColor(0xFF123847); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(1));
             canvas.drawRoundRect(new RectF(inset, inset, getWidth()-inset, getHeight()-inset), dp(18), dp(18), paint);
-            paint.setStyle(Paint.Style.FILL); paint.setColor(0xFF8AB4FF);
+            paint.setStyle(Paint.Style.FILL); paint.setColor(0xFF5CE1FF);
             float cx = inset + (cursorX / Math.max(1, targetWidth)) * (getWidth()-2*inset);
             float cy = inset + (cursorY / Math.max(1, targetHeight)) * (getHeight()-2*inset);
             canvas.drawCircle(cx, cy, dp(7), paint);
-            paint.setColor(0x668AB4FF); canvas.drawCircle(cx, cy, dp(15), paint);
-            paint.setColor(0xFF8B9DB7); paint.setTextSize(dp(12)); paint.setTextAlign(Paint.Align.CENTER);
+            paint.setColor(0x665CE1FF); canvas.drawCircle(cx, cy, dp(18), paint);
+            paint.setColor(0xFF55D6FF); paint.setTextSize(dp(12)); paint.setTextAlign(Paint.Align.CENTER);
             canvas.drawText("AREA TRACKPAD", getWidth()/2f, getHeight()/2f, paint);
         }
         @Override public boolean onTouchEvent(MotionEvent event) {
