@@ -429,6 +429,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        // One-time migration: make the iOS-style all-apps home the default for existing installs,
+        // while keeping the drawer switch available in Settings afterward.
+        if (!preferences.getBoolean(KEY_APP_DRAWER_MIGRATED, false)) {
+            preferences.edit()
+                .putBoolean(KEY_APP_DRAWER_ENABLED, false)
+                .putBoolean(KEY_APP_DRAWER_MIGRATED, true)
+                .apply()
+        }
         applyDisplayAwareOrientation()
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         apps = loadApps()
@@ -3274,6 +3282,7 @@ class MainActivity : Activity() {
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_APP_DRAWER_ENABLED = "app_drawer_enabled"
+        private const val KEY_APP_DRAWER_MIGRATED = "app_drawer_migrated"
         private const val KEY_HOME_DOCK_VISIBLE = "home_dock_visible"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
