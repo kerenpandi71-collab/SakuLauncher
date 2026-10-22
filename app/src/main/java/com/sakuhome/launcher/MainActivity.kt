@@ -315,8 +315,8 @@ class MainActivity : Activity() {
             includeFontPadding = false
         }
         topBar.addView(TextView(this).apply {
-            text = "◉"
-            textSize = 11f
+            text = "⌁"
+            textSize = 13f
             gravity = Gravity.CENTER
             setTextColor(secondaryText)
             contentDescription = "Status koneksi"
