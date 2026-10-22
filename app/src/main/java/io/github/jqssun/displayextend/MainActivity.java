@@ -110,6 +110,22 @@ public class MainActivity extends AppCompatActivity {
   private final Shizuku.OnRequestPermissionResultListener requestPermissionResultListener =
       this::_onPermissionResult;
 
+  private final Shizuku.OnBinderReceivedListener binderReceivedListener = () -> {
+    State.log("Shizuku binder connected");
+    if (ShizukuUtils.hasPermission() && State.userService == null) {
+      try {
+        Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
+        Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
+      } catch (Throwable e) { State.log("failed to bind Shizuku user service: " + e); }
+    }
+    State.resumeJob();
+  };
+
+  private final Shizuku.OnBinderDeadListener binderDeadListener = () -> {
+    State.log("Shizuku binder disconnected; waiting for service restart");
+    State.unbindUserService();
+  };
+
   @Override
   protected void attachBaseContext(Context base) {
     super.attachBaseContext(base);
@@ -128,10 +144,9 @@ public class MainActivity extends AppCompatActivity {
     EdgeToEdge.enable(this);
     super.onCreate(savedInstanceState);
     Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
-    if (ShizukuUtils.hasPermission() && State.userService == null) {
-      Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
-      Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
-    }
+    Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
+    Shizuku.addBinderDeadListener(binderDeadListener);
+    // Binder listener handles both an already-running and a newly-started server.
 
     setContentView(R.layout.activity_main);
     TvFocus.attach(getWindow());
@@ -219,6 +234,8 @@ public class MainActivity extends AppCompatActivity {
     super.onDestroy();
     State.unbindUserService();
     Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener);
+    Shizuku.removeBinderReceivedListener(binderReceivedListener);
+    Shizuku.removeBinderDeadListener(binderDeadListener);
     State.currentActivity = new WeakReference<>(null);
     unregisterReceiver(usbPermissionReceiver);
   }
