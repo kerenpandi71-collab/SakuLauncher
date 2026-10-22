@@ -3264,6 +3264,7 @@ class MainActivity : Activity() {
         private const val KEY_HIDE_PAGE_CONTROLS = "hide_home_page_controls"
         private const val KEY_NATIVE_QS_DISABLED = "native_quick_settings_disabled"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
+        private const val KEY_APP_DRAWER_ENABLED = "app_drawer_enabled"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
         private const val KEY_TRANSPARENCY = "dock_transparency"
