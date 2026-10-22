@@ -51,8 +51,21 @@ public final class RootInputBridge {
                 }
             }
         } catch (Throwable error) {
-            System.out.println("BRIDGE_ERROR " + error.getClass().getSimpleName() + ": "
-                + String.valueOf(error.getMessage()));
+            StringBuilder detail = new StringBuilder();
+            Throwable current = error;
+            int depth = 0;
+            while (current != null && depth++ < 8) {
+                if (detail.length() > 0) detail.append(" <- ");
+                detail.append(current.getClass().getName()).append(": ")
+                    .append(String.valueOf(current.getMessage()));
+                if (current instanceof java.lang.reflect.InvocationTargetException) {
+                    Throwable target = ((java.lang.reflect.InvocationTargetException) current).getTargetException();
+                    if (target != null && target != current) { current = target; continue; }
+                }
+                current = current.getCause();
+            }
+            System.out.println("BRIDGE_ERROR " + detail);
+            error.printStackTrace(System.out);
             System.out.flush();
         }
     }
