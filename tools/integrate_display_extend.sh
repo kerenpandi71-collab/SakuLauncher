@@ -20,6 +20,8 @@ for p in root.rglob("*.java"):
     s=p.read_text()
     s=s.replace("import io.github.jqssun.displayextend.R;", "import com.sakuhome.launcher.R;")
     s=s.replace("import io.github.jqssun.displayextend.BuildConfig;", "import com.sakuhome.launcher.BuildConfig;")
+    if re.search(r"\bBuildConfig\.", s) and not re.search(r"import [\w.]+\.BuildConfig;", s):
+        s=re.sub(r"(package [^;]+;)", r"\1\n\nimport com.sakuhome.launcher.BuildConfig;", s, count=1)
     if re.search(r"\bR\.", s) and not re.search(r"import [\w.]+\.R;", s):
         s=re.sub(r"(package [^;]+;)", r"\1\n\nimport com.sakuhome.launcher.R;", s, count=1)
     p.write_text(s)
