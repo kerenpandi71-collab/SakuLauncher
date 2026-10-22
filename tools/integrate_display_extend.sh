@@ -69,17 +69,17 @@ s=p.read_text()
 if 'include(":hidden-api-stub")' not in s: s += '\ninclude(":hidden-api-stub")\n'
 p.write_text(s)
 p=Path("build.gradle.kts")
-import re
 s=p.read_text()
-# Remove a previously generated standalone refine plugins block, which Gradle rejects.
-s=re.sub(r'\\nplugins\\s*\\{\\s*id\\(["\\']dev\\.rikka\\.tools\\.refine["\\']\\)\\s+version\\s+["\\']4\\.1\\.0["\\']\\s+apply\\s+false\\s*\\}\\s*', '\\n', s)
-# Keep exactly one root plugins block and put the refine declaration inside it.
+# Remove the exact standalone plugin block created by earlier integration attempts.
+s=s.replace('\\nplugins { id("dev.rikka.tools.refine") version "4.1.0" apply false }\\n', '\\n')
+# Ensure the refine plugin is declared in the existing root plugins block.
 start=s.find("plugins {")
 end=s.find("}", start)
 if start < 0 or end < 0:
     raise SystemExit("Could not find root plugins block in build.gradle.kts")
-if 'id("dev.rikka.tools.refine") version "4.1.0" apply false' not in s[start:end]:
-    s=s[:end] + '    id("dev.rikka.tools.refine") version "4.1.0" apply false\\n' + s[end:]
+declaration='id("dev.rikka.tools.refine") version "4.1.0" apply false'
+if declaration not in s[start:end]:
+    s=s[:end] + '    ' + declaration + "\\n" + s[end:]
 p.write_text(s)
 p=Path("app/build.gradle.kts")
 s=p.read_text()
