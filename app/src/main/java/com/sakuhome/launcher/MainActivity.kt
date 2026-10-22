@@ -59,8 +59,8 @@ class MainActivity : Activity() {
     private lateinit var appWidgetHost: AppWidgetHost
     private lateinit var desktopGrid: GridView
     private lateinit var startSearchField: EditText
-    private lateinit var pinnedTabButton: TextView
-    private lateinit var allAppsTabButton: TextView
+    private lateinit var drawerGridButton: TextView
+    private lateinit var drawerListButton: TextView
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
     private lateinit var pinnedAdapter: AppGridAdapter
@@ -68,7 +68,7 @@ class MainActivity : Activity() {
 
     private var apps: List<LaunchableApp> = emptyList()
     private var searchQuery = ""
-    private var showingAllApps = true
+    private var drawerListMode = false
     private var homePage = 0
     private var homePageLabel: TextView? = null
     private var pageTransitionInProgress = false
@@ -183,6 +183,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        drawerListMode = preferences.getBoolean(KEY_DRAWER_LIST_MODE, false)
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         homePage = preferences.getInt(KEY_LAST_HOME_PAGE, 0).coerceIn(0, homePageCount() - 1)
         apps = loadApps()
@@ -511,20 +512,28 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(7), 0, dp(7))
         }
-        pinnedTabButton = chipButton("Disematkan", if (!showingAllApps) accent else cardSurface, primaryText, 15).apply {
+        filters.addView(TextView(this).apply {
+            text = "Aplikasi"
             textSize = 12f
-            setOnClickListener { switchStartTab(showAllApps = false) }
-        }
-        allAppsTabButton = chipButton("Semua aplikasi", if (showingAllApps) accent else cardSurface, primaryText, 15).apply {
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(0, dp(38), 1f))
+        drawerGridButton = chipButton("▦ Grid", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
             textSize = 12f
-            setOnClickListener { switchStartTab(showAllApps = true) }
+            setOnClickListener { setDrawerLayout(listMode = false) }
+            contentDescription = "Tampilan grid"
         }
-        filters.addView(pinnedTabButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(6) })
-        filters.addView(allAppsTabButton, LinearLayout.LayoutParams(0, dp(38), 1f))
+        drawerListButton = chipButton("☷ List", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 12f
+            setOnClickListener { setDrawerLayout(listMode = true) }
+            contentDescription = "Tampilan daftar"
+        }
+        filters.addView(drawerGridButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(6) })
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(-2, dp(38) ))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
+            numColumns = if (drawerListMode) 1 else preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
             verticalSpacing = dp(7)
             horizontalSpacing = dp(7)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -542,12 +551,9 @@ class MainActivity : Activity() {
             when (event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
                 android.view.MotionEvent.ACTION_UP -> {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                        switchStartTab(showAllApps = dx < 0)
-                        true
-                    } else false
+                    // The app drawer is one complete library; horizontal gestures are left available
+                    // to normal list/grid interaction instead of switching to a pinned-only tab.
+                    false
                 }
                 else -> false
             }
@@ -578,7 +584,6 @@ class MainActivity : Activity() {
         startGrid.animate().cancel()
         startGrid.alpha = 1f
         startGrid.translationX = 0f
-        showingAllApps = true
         startPanel.visibility = View.VISIBLE
         startScrim.visibility = View.VISIBLE
         startPanel.bringToFront()
@@ -618,36 +623,30 @@ class MainActivity : Activity() {
     }
 
     private fun refreshStartPanel() {
-        updateStartTabAppearance()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
     }
 
-    private fun updateStartTabAppearance() {
-        if (!::pinnedTabButton.isInitialized) return
-        pinnedTabButton.background = rounded(if (!showingAllApps) accent else cardSurface, 15)
-        allAppsTabButton.background = rounded(if (showingAllApps) accent else cardSurface, 15)
-    }
-
-    private fun switchStartTab(showAllApps: Boolean) {
-        if (showingAllApps == showAllApps) return
-        showingAllApps = showAllApps
-        updateStartTabAppearance()
-        if (!::startGrid.isInitialized || !::startAdapter.isInitialized) return
-        val direction = if (showAllApps) 1f else -1f
-        startGrid.animate().cancel()
-        startGrid.animate().alpha(0f).translationX(-direction * dp(20).toFloat())
-            .setDuration(105).setInterpolator(AccelerateInterpolator()).withEndAction {
-                startAdapter.notifyDataSetChanged()
-                startGrid.translationX = direction * dp(20).toFloat()
-                startGrid.animate().alpha(1f).translationX(0f)
-                    .setDuration(190).setInterpolator(DecelerateInterpolator(1.5f)).start()
-            }.start()
+    private fun setDrawerLayout(listMode: Boolean) {
+        if (drawerListMode == listMode) return
+        drawerListMode = listMode
+        preferences.edit().putBoolean(KEY_DRAWER_LIST_MODE, listMode).apply()
+        if (::startGrid.isInitialized) {
+            startGrid.numColumns = if (listMode) 1 else preferences.getInt(
+                KEY_DRAWER_GRID_COLUMNS,
+                if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4
+            )
+            startGrid.animate().cancel()
+            startGrid.alpha = 0.75f
+            startAdapter.notifyDataSetChanged()
+            startGrid.animate().alpha(1f).setDuration(150).start()
+        }
+        if (::drawerGridButton.isInitialized) drawerGridButton.background = rounded(if (!listMode) accent else cardSurface, 15)
+        if (::drawerListButton.isInitialized) drawerListButton.background = rounded(if (listMode) accent else cardSurface, 15)
     }
 
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
-        val base = (if (isStartMenu && !showingAllApps) pinnedApps() else apps).filterNot { hidden.contains(it.packageName) }
-        // Keep Start tidy: reveal apps only after the user types a query.
+        val base = apps.filterNot { hidden.contains(it.packageName) }
         return if (searchQuery.isBlank()) base else base.filter { it.label.contains(searchQuery, ignoreCase = true) }
     }
 
@@ -704,8 +703,6 @@ class MainActivity : Activity() {
     private fun showAppMenu(app: LaunchableApp) {
         val isHome = homePackages().contains(app.packageName)
         val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
-        val isPinned = pinnedPackages().contains(app.packageName)
-        val pinAction = if (isPinned) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
             "Buka sebagai jendela",
             "Buka layar penuh",
@@ -713,7 +710,6 @@ class MainActivity : Activity() {
             "Pindah posisi ke kiri",
             "Pindah posisi ke kanan",
             "Pindahkan ke layar lain",
-            pinAction,
             "Info aplikasi",
             "Buka di Play Store",
             "Copot pemasangan"
@@ -743,10 +739,9 @@ class MainActivity : Activity() {
                         }.setNegativeButton("Batal", null).show()
                     }
                 }
-                6 -> togglePinned(app)
-                7 -> openAppInfo(app)
-                8 -> openPlayStore(app)
-                9 -> uninstallApp(app)
+                6 -> openAppInfo(app)
+                7 -> openPlayStore(app)
+                8 -> uninstallApp(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1553,30 +1548,40 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
-            val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(2), dp(5), dp(2), dp(5))
-                // iPhone-style icon grid: no bubble/card enclosing each app icon.
+            val wantedMode = if (isStartMenu && drawerListMode) "list" else "grid"
+            val existing = convertView as? LinearLayout
+            val cell = if (existing?.tag == wantedMode) existing else LinearLayout(this@MainActivity).apply {
+                tag = wantedMode
+                orientation = if (wantedMode == "list") LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                gravity = if (wantedMode == "list") Gravity.CENTER_VERTICAL else Gravity.CENTER
+                setPadding(if (wantedMode == "list") dp(10) else dp(2), dp(5), if (wantedMode == "list") dp(10) else dp(2), dp(5))
+                // Transparent cells keep the native icon artwork free of enclosing bubbles.
                 background = ColorDrawable(Color.TRANSPARENT)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 88 else 96))
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (wantedMode == "list") 62 else if (isStartMenu) 88 else 96))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                    // Keep the app's native icon artwork; do not add an artificial circular plate.
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4), dp(if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4)))
+                }, LinearLayout.LayoutParams(dp(if (wantedMode == "list") 42 else if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4), dp(if (wantedMode == "list") 42 else if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4)).apply {
+                    if (wantedMode == "list") marginEnd = dp(14)
+                })
                 addView(TextView(context).apply {
                     id = android.R.id.text1
-                    textSize = 10.5f
+                    textSize = if (wantedMode == "list") 14f else 10.5f
                     setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
-                    gravity = Gravity.CENTER
+                    gravity = if (wantedMode == "list") Gravity.CENTER_VERTICAL or Gravity.START else Gravity.CENTER
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                    setPadding(0, dp(5), 0, 0)
+                    setPadding(if (wantedMode == "list") 0 else 0, if (wantedMode == "list") 0 else dp(5), 0, 0)
                     visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
-                }, LinearLayout.LayoutParams(-1, -2))
+                }, LinearLayout.LayoutParams(if (wantedMode == "list") 0 else -1, -2, if (wantedMode == "list") 1f else 0f))
+                if (wantedMode == "list") addView(TextView(context).apply {
+                    text = "›"
+                    textSize = 24f
+                    setTextColor(secondaryText)
+                    gravity = Gravity.CENTER
+                }, LinearLayout.LayoutParams(dp(20), -1))
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
@@ -1621,6 +1626,7 @@ class MainActivity : Activity() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
+        private const val KEY_DRAWER_LIST_MODE = "drawer_list_mode"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_FROZEN_APPS = "frozen_app_packages"
