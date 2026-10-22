@@ -46,6 +46,7 @@ import java.util.ArrayDeque;
 public class TrackpadActivity extends Activity {
     private EditText displayInput, widthInput, heightInput;
     private TextView connectionStatus, coordinateStatus;
+    private Button gamePadVisibilityButton;
     private TrackpadSurface pad;
     private final ExecutorService inputQueue = Executors.newSingleThreadExecutor();
     private volatile int targetDisplayId = -1;
@@ -100,6 +101,18 @@ public class TrackpadActivity extends Activity {
         }
     }
 
+    private void toggleGamePadVisibility() {
+        int displayId = targetDisplayId >= 0 ? targetDisplayId : 0;
+        android.content.Intent service = new android.content.Intent(this, GamePadOverlayService.class)
+            .setAction("TOGGLE_VISIBILITY").putExtra("display_id", displayId);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(service); else startService(service);
+            Toast.makeText(this, "Perintah tampil/sembunyi Game Pad dikirim", Toast.LENGTH_SHORT).show();
+        } catch (Throwable error) {
+            Toast.makeText(this, "Game Pad: " + error.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -111,6 +124,10 @@ public class TrackpadActivity extends Activity {
         root.addView(title);
         TextView subtitle = text("VIRTUAL DESKTOP  /  INPUT CONTROL", 12, 0xFF55D6FF);
         root.addView(subtitle);
+        gamePadVisibilityButton = button("GAME PAD: TAMPIL / SEMBUNYI", v -> toggleGamePadVisibility());
+        LinearLayout.LayoutParams visibilityParams = new LinearLayout.LayoutParams(-2, dp(36));
+        visibilityParams.topMargin = dp(3);
+        root.addView(gamePadVisibilityButton, visibilityParams);
 
         LinearLayout config = new LinearLayout(this);
         config.setGravity(Gravity.CENTER_VERTICAL);
