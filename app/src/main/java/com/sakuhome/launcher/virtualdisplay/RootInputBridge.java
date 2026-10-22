@@ -141,13 +141,12 @@ public final class RootInputBridge {
         keyDisplaySetter.setAccessible(true);
         KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0);
         KeyEvent up = new KeyEvent(now, now + 12L, KeyEvent.ACTION_UP, keyCode, 0);
-        try {
-            keyDisplaySetter.invoke(down, displayId);
-            keyDisplaySetter.invoke(up, displayId);
-            Object downResult = injectInputEvent.invoke(inputManager, down, INJECT_ASYNC);
-            Object upResult = injectInputEvent.invoke(inputManager, up, INJECT_ASYNC);
-            if (!Boolean.TRUE.equals(downResult) || !Boolean.TRUE.equals(upResult))
-                throw new IllegalStateException("IInputManager menolak tombol " + keyCode + " pada display " + displayId);
+        keyDisplaySetter.invoke(down, displayId);
+        keyDisplaySetter.invoke(up, displayId);
+        Object downResult = injectInputEvent.invoke(inputManager, down, INJECT_ASYNC);
+        Object upResult = injectInputEvent.invoke(inputManager, up, INJECT_ASYNC);
+        if (!Boolean.TRUE.equals(downResult) || !Boolean.TRUE.equals(upResult)) {
+            throw new IllegalStateException("IInputManager menolak tombol " + keyCode + " pada display " + displayId);
         }
     }
 
