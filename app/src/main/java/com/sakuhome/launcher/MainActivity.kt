@@ -201,8 +201,11 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android; retained for broad device compatibility")
     override fun onBackPressed() {
-        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
-        else super.onBackPressed()
+        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) {
+            hideStartPanel()
+        }
+        // Keep the desktop shell alive on virtual displays. Letting Activity.finish()
+        // run here leaves the virtual display black after the Back key is injected.
     }
 
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
