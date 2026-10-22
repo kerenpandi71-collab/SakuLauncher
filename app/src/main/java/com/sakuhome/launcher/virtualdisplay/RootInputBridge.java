@@ -98,6 +98,11 @@ public final class RootInputBridge {
 
         if ("MOVE".equals(action)) {
             injectMouse(displayId, x, y, MotionEvent.ACTION_HOVER_MOVE, 0, 0L);
+        } else if ("SCROLL".equals(action)) {
+            if (parts.length < 6) throw new IllegalArgumentException("format SCROLL display x y h v");
+            float horizontal = Float.parseFloat(parts[4]);
+            float vertical = Float.parseFloat(parts[5]);
+            injectScroll(displayId, x, y, horizontal, vertical);
         } else if ("CLICK".equals(action)) {
             if (parts.length < 5) throw new IllegalArgumentException("jenis klik tidak ada");
             int button = "RIGHT".equalsIgnoreCase(parts[4])
@@ -109,6 +114,21 @@ public final class RootInputBridge {
         } else {
             throw new IllegalArgumentException("aksi tidak dikenal: " + action);
         }
+    }
+
+    private static void injectScroll(int displayId, float x, float y, float horizontal, float vertical) throws Exception {
+        long now = SystemClock.uptimeMillis();
+        MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, x, y, 0);
+        try {
+            event.setSource(InputDevice.SOURCE_MOUSE);
+            event.setAxisValue(MotionEvent.AXIS_HSCROLL, horizontal);
+            event.setAxisValue(MotionEvent.AXIS_VSCROLL, vertical);
+            setDisplayId.invoke(event, displayId);
+            Object result = injectInputEvent.invoke(inputManager, event, INJECT_ASYNC);
+            if (!(result instanceof Boolean) || !((Boolean) result)) {
+                throw new IllegalStateException("IInputManager menolak scroll pada display " + displayId);
+            }
+        } finally { event.recycle(); }
     }
 
     private static void injectMouse(int displayId, float x, float y, int action,
