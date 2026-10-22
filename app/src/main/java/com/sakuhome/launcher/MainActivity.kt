@@ -300,6 +300,14 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Fresh iOS-style home renderer.
+     *
+     * The desktop is a real icon grid rather than a recycled drawer/pinned-app view.
+     * All launchable apps are eligible for the home screen when the drawer is off.
+     * Persisted custom positions are respected only when they are valid; new/legacy
+     * shortcuts are laid out in a predictable grid so stale coordinates cannot hide icons.
+     */
     private fun renderHomeCanvas() {
         if (!::desktopGrid.isInitialized || !::pinnedAdapter.isInitialized) return
         val canvas = desktopGrid
@@ -307,99 +315,90 @@ class MainActivity : Activity() {
             canvas.post { renderHomeCanvas() }
             return
         }
-        // Recover the desktop surface from interrupted drawer/page animations before rebuilding icons.
+
         canvas.animate().cancel()
         canvas.visibility = View.VISIBLE
         canvas.alpha = 1f
         canvas.translationX = 0f
         canvas.translationY = 0f
-        // Refresh the shortcut adapter from the exact page being rendered.
-        // Do not rely on a possibly stale adapter snapshot after preferences change.
-        pinnedAdapter.refreshHomeItems()
-        val currentApps = homeDesktopApps()
-        val positions = homeIconPositions()
-        val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
-        val contentHeight = (canvas.height - canvas.paddingTop - canvas.paddingBottom).coerceAtLeast(dp(1))
-        val cellWidth = dp((iconSizeDp + 24).coerceIn(64, 112))
-        val cellHeight = dp(if (hideLabels) iconSizeDp + 12 else iconSizeDp + 34)
-        val columns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4).coerceIn(1, 12)
-        val rows = maxOf(1, kotlin.math.ceil(currentApps.size.toDouble() / columns).toInt())
-        val maxLeft = (contentWidth - cellWidth).coerceAtLeast(0)
-        val maxTop = (contentHeight - cellHeight).coerceAtLeast(0)
-        val defaults = mutableMapOf<String, Pair<Float, Float>>()
-        currentApps.forEachIndexed { index, app ->
-            val row = index / columns
-            val col = index % columns
-            val x = if (columns <= 1) 0.5f else col.toFloat() / (columns - 1).coerceAtLeast(1)
-            val y = if (rows <= 1) 0.12f else (row.toFloat() / (rows - 1).coerceAtLeast(1)).coerceIn(0f, 1f)
-            defaults[app.packageName] = x to y
-        }
-        var changed = false
-        currentApps.forEach { app ->
-            if (app.packageName !in positions) {
-                positions[app.packageName] = defaults[app.packageName] ?: (0.5f to 0.5f)
-                changed = true
-            }
-        }
-        if (changed) saveHomeIconPositions(positions)
         canvas.removeAllViews()
-        currentApps.forEachIndexed { index, app ->
-            val cell = pinnedAdapter.getView(index, null, canvas)
-            // Shortcut children consume touch events themselves, so give each one the
-            // same swipe gestures as the empty desktop area without blocking taps/long-press.
-            var gestureDownX = 0f
-            var gestureDownY = 0f
-            cell.setOnTouchListener { _, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        gestureDownX = event.x
-                        gestureDownY = event.y
-                        false
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        val dx = event.x - gestureDownX
-                        val dy = event.y - gestureDownY
-                        if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false) && dy < -dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f) {
-                            showStartPanel()
-                            true
-                        } else if (dy > dp(64) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.2f && ::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) {
-                            hideStartPanel()
-                            true
-                        } else if (kotlin.math.abs(dx) > dp(72)) {
-                            val direction = if (dx < 0) -1f else 1f
-                            canvas.animate().cancel()
-                            canvas.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
-                                .setDuration(115L)
-                                .setInterpolator(android.view.animation.AccelerateInterpolator())
-                                .withEndAction {
-                                    showHomePage(homePage + if (dx < 0) 1 else -1)
-                                    canvas.translationX = direction * dp(30).toFloat()
-                                    canvas.animate().alpha(1f).translationX(0f)
-                                        .setDuration(235L)
-                                        .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                        .start()
-                                }.start()
-                            true
-                        } else false
-                    }
-                    else -> false
-                }
-            }
-            val point = positions[app.packageName] ?: defaults[app.packageName] ?: (0.5f to 0.5f)
-            val left = canvas.paddingLeft + (point.first * maxLeft).toInt()
-            val top = canvas.paddingTop + (point.second * maxTop).toInt()
-            // AppGridAdapter normally creates AbsListView.LayoutParams for GridView.
-            // This canvas is a FrameLayout, so replace them explicitly and force a fresh measure.
-            cell.layoutParams = FrameLayout.LayoutParams(cellWidth, cellHeight).apply {
-                leftMargin = left.coerceIn(canvas.paddingLeft, canvas.paddingLeft + maxLeft)
-                topMargin = top.coerceIn(canvas.paddingTop, canvas.paddingTop + maxTop)
-            }
+        pinnedAdapter.refreshHomeItems()
+
+        val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+        val allApps = if (preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)) {
+            homeApps()
+        } else {
+            apps.filterNot { hidden.contains(it.packageName) }
+        }
+        if (allApps.isEmpty()) return
+
+        val columns = preferences.getInt(
+            KEY_HOME_GRID_COLUMNS,
+            if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4
+        ).coerceIn(3, 6)
+        val cellWidth = dp((iconSizeDp + 20).coerceIn(68, 104))
+        val cellHeight = dp(if (hideLabels) iconSizeDp + 14 else iconSizeDp + 36)
+        val availableWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
+        val availableHeight = (canvas.height - canvas.paddingTop - canvas.paddingBottom).coerceAtLeast(dp(1))
+        val actualColumns = minOf(columns, maxOf(1, availableWidth / cellWidth))
+        val rowsPerPage = maxOf(1, availableHeight / cellHeight)
+        val pageCapacity = actualColumns * rowsPerPage
+        val requiredPages = maxOf(1, kotlin.math.ceil(allApps.size.toDouble() / pageCapacity).toInt())
+
+        // Grow the home-page count when the installed app list needs more pages.
+        // Existing pages are never removed, so user-created pages and shortcuts remain intact.
+        if (!preferences.getBoolean(KEY_APP_PAGES_MIGRATED, false)) {
+            preferences.edit()
+                .putInt(KEY_HOME_PAGE_COUNT, maxOf(homePageCount(), requiredPages))
+                .putBoolean(KEY_APP_PAGES_MIGRATED, true)
+                .apply()
+        } else if (homePageCount() < requiredPages) {
+            preferences.edit().putInt(KEY_HOME_PAGE_COUNT, requiredPages).apply()
+        }
+        homePage = homePage.coerceIn(0, homePageCount() - 1)
+        homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
+
+        val pageApps = allApps.drop(homePage * pageCapacity).take(pageCapacity)
+        val positions = homeIconPositions()
+        val maxLeft = (availableWidth - cellWidth).coerceAtLeast(0)
+        val maxTop = (availableHeight - cellHeight).coerceAtLeast(0)
+        val occupied = mutableListOf<Pair<Int, Int>>()
+
+        pageApps.forEachIndexed { index, app ->
+            val cell = pinnedAdapter.getView(index.coerceAtMost(allApps.lastIndex), null, canvas)
             cell.visibility = View.VISIBLE
             cell.alpha = 1f
             cell.isEnabled = true
-            cell.requestLayout()
+            cell.setBackgroundColor(Color.TRANSPARENT)
+
+            // Use saved positions when present; otherwise arrange icons as an iOS-like grid.
+            val saved = positions[app.packageName]
+            var left: Int
+            var top: Int
+            if (saved != null) {
+                left = (saved.first * maxLeft).toInt().coerceIn(0, maxLeft)
+                top = (saved.second * maxTop).toInt().coerceIn(0, maxTop)
+                val collision = occupied.any { kotlin.math.abs(it.first - left) < cellWidth * 0.7f && kotlin.math.abs(it.second - top) < cellHeight * 0.7f }
+                if (collision) {
+                    left = (index % actualColumns) * (availableWidth / actualColumns)
+                    top = (index / actualColumns) * cellHeight
+                }
+            } else {
+                left = (index % actualColumns) * (availableWidth / actualColumns)
+                top = (index / actualColumns) * cellHeight
+            }
+            left = left.coerceIn(0, maxLeft)
+            top = top.coerceIn(0, maxTop)
+            occupied.add(left to top)
+
+            cell.layoutParams = FrameLayout.LayoutParams(cellWidth, cellHeight).apply {
+                leftMargin = canvas.paddingLeft + left
+                topMargin = canvas.paddingTop + top
+            }
             canvas.addView(cell)
         }
+        canvas.requestLayout()
+        canvas.invalidate()
     }
 
     private fun placeHomeIcon(packageName: String, dropX: Float, dropY: Float) {
@@ -3283,6 +3282,7 @@ class MainActivity : Activity() {
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_APP_DRAWER_ENABLED = "app_drawer_enabled"
         private const val KEY_APP_DRAWER_MIGRATED = "app_drawer_migrated"
+        private const val KEY_APP_PAGES_MIGRATED = "home_app_pages_migrated"
         private const val KEY_HOME_DOCK_VISIBLE = "home_dock_visible"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_POSITION = "drawer_landscape_position"
