@@ -36,6 +36,7 @@ public final class GamePadOverlayService extends Service {
     private boolean toolbar = true;
     private int alpha = 185, selected = -1;
     private float scale = 1f;
+    private float leftWidth=1f,leftHeight=1f,rightWidth=1f,rightHeight=1f;
     private final String[] labels = {"ANALOG","SERANG","SKILL 1","SKILL 2","SKILL 3","FLICKER","REGEN","RECALL"};
     // Analog di kiri; tombol aksi di kanan. Koordinat relatif agar menyesuaikan resolusi landscape.
     private final float[][] defaults = {{.13f,.72f},{.91f,.76f},{.76f,.55f},{.86f,.43f},{.94f,.32f},{.74f,.84f},{.84f,.88f},{.94f,.88f}};
@@ -53,7 +54,7 @@ public final class GamePadOverlayService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         prefs=getSharedPreferences("gamepad_layouts",MODE_PRIVATE);
-        alpha=prefs.getInt("alpha",185); scale=prefs.getFloat("scale",1f);
+        alpha=prefs.getInt("alpha",185); scale=prefs.getFloat("scale",1f);\n        leftWidth=prefs.getFloat("left_width",1f); leftHeight=prefs.getFloat("left_height",1f);\n        rightWidth=prefs.getFloat("right_width",1f); rightHeight=prefs.getFloat("right_height",1f);
         loadLayout();
         if(Build.VERSION.SDK_INT>=26) {
             NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
@@ -114,7 +115,7 @@ public final class GamePadOverlayService extends Service {
         for(int i=0;i<labels.length;i++){xs[i]=prefs.getFloat(key("x"+i),defaults[i][0]);ys[i]=prefs.getFloat(key("y"+i),defaults[i][1]);}
     }
     private void saveLayout() {
-        SharedPreferences.Editor e=prefs.edit().putInt("alpha",alpha).putFloat("scale",scale);
+        SharedPreferences.Editor e=prefs.edit().putInt("alpha",alpha).putFloat("scale",scale)\n            .putFloat("left_width",leftWidth).putFloat("left_height",leftHeight)\n            .putFloat("right_width",rightWidth).putFloat("right_height",rightHeight);
         for(int i=0;i<labels.length;i++)e.putFloat(key("x"+i),xs[i]).putFloat(key("y"+i),ys[i]);
         e.apply();
     }
@@ -138,7 +139,7 @@ public final class GamePadOverlayService extends Service {
             super.onDraw(c); float w=getWidth(),h=getHeight();
             if(getResources().getConfiguration().orientation!=Configuration.ORIENTATION_LANDSCAPE)return;
             for(int i=0;i<labels.length;i++){
-                float r=dp((i==0?48:30)*scale),cx=xs[i]*w,cy=ys[i]*h;
+                float sx=i==0?leftWidth:rightWidth, sy=i==0?leftHeight:rightHeight;\n                float cx=groupX(i,xs[i],w,sx),cy=groupY(i,ys[i],h,sy);\n                float r=dp((i==0?48:30)*scale)*Math.min(sx,sy);
                 p.setStyle(Paint.Style.FILL);p.setColor((alpha<<24)|0x00A6DFFF);c.drawCircle(cx,cy,r,p);
                 p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(2));p.setColor(editing&&i==selected?Color.YELLOW:0xDDEAF5FF);c.drawCircle(cx,cy,r,p);
                 p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(labels[i].length()>7?8:10));p.setColor(Color.WHITE);c.drawText(labels[i],cx,cy+dp(4),p);
@@ -156,7 +157,7 @@ public final class GamePadOverlayService extends Service {
             p.setStyle(Paint.Style.FILL);p.setColor(0xD91A2230);c.drawRoundRect(new RectF(dp(5),dp(5),getWidth()-dp(5),dp(43)),dp(8),dp(8),p);
             p.setTextSize(dp(11));p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.LEFT);
             c.drawText("SAKU PAD • "+profile().toUpperCase(Locale.ROOT)+(editing?" • ATUR POSISI":" • MAIN"),dp(12),dp(29),p);
-            String[] opts={"EDIT","SIZE−","SIZE+","ALPHA","SAVE","RESET","HIDE","×"};
+            String[] opts={"EDIT","L-W","L-H","R-W","R-H","SAVE","RESET","HIDE"};
             float cell=(getWidth()-dp(10))/8f;
             for(int i=0;i<opts.length;i++){float x=dp(5)+cell*i;p.setColor(0xFF26364A);c.drawRoundRect(new RectF(x+dp(1),dp(48),x+cell-dp(2),dp(78)),dp(5),dp(5),p);p.setColor(Color.WHITE);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(9));c.drawText(opts[i],x+cell/2,dp(67),p);}
         }
@@ -168,16 +169,16 @@ public final class GamePadOverlayService extends Service {
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
                 selected=hitControl(x,y);if(selected<0)return false;
                 moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected,"DOWN",xs[selected],ys[selected]);}return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){float sx=selected==0?leftWidth:rightWidth,sy=selected==0?leftHeight:rightHeight;xs[selected]=clamp((x-(selected==0?getWidth()*.13f:getWidth()*.86f)*(1-sx))/getWidth()/sx);ys[selected]=clamp((y-getHeight()*.70f*(1-sy))/getHeight()/sy);invalidate();return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(48)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0){if(selected==0)sendTouch(0,"UP",xs[0],ys[0]);else sendTouch(selected,"UP",xs[selected],ys[selected]);}selected=-1;return true;}return true;
         }
-        private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
+        private float cycleSize(float v){return v<0.85f?1f:(v<1.15f?1.35f:0.7f);}\n        private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
         private void performToolbar(int a){
-            switch(a){case 0:editing=!editing;break;case 1:scale=Math.max(.55f,scale-.1f);break;case 2:scale=Math.min(2.8f,scale+.1f);break;case 3:alpha=alpha>=230?80:alpha+30;break;case 4:saveLayout();Toast.makeText(GamePadOverlayService.this,"Layout "+profile()+" disimpan",Toast.LENGTH_SHORT).show();break;case 5:reset();return;case 6:toolbar=false;break;case 7:stopSelf();return;}
+            switch(a){case 0:editing=!editing;break;case 1:leftWidth=cycleSize(leftWidth);break;case 2:leftHeight=cycleSize(leftHeight);break;case 3:rightWidth=cycleSize(rightWidth);break;case 4:rightHeight=cycleSize(rightHeight);break;case 5:saveLayout();Toast.makeText(GamePadOverlayService.this,"Layout "+profile()+" disimpan",Toast.LENGTH_SHORT).show();break;case 6:reset();return;case 7:toolbar=false;break;}
             saveLayout();invalidate();
         }
-        private int hitControl(float x,float y){float best=Float.MAX_VALUE;int index=-1;for(int i=0;i<labels.length;i++){float dx=x-xs[i]*getWidth(),dy=y-ys[i]*getHeight();float r=dp((i==0?52:36)*scale);float d=dx*dx+dy*dy;if(d<=r*r&&d<best){best=d;index=i;}}return index;}
+        private int hitControl(float x,float y){float best=Float.MAX_VALUE;int index=-1;for(int i=0;i<labels.length;i++){float sx=i==0?leftWidth:rightWidth,sy=i==0?leftHeight:rightHeight;float dx=x-groupX(i,xs[i],getWidth(),sx),dy=y-groupY(i,ys[i],getHeight(),sy);float r=dp((i==0?52:36)*scale)*Math.min(sx,sy);float d=dx*dx+dy*dy;if(d<=r*r&&d<best){best=d;index=i;}}return index;}\n        private float groupX(int i,float x,float w,float s){float anchor=i==0?w*.13f:w*.86f;return anchor+(x*w-anchor)*s;}\n        private float groupY(int i,float y,float h,float s){float anchor=h*.70f;return anchor+(y*h-anchor)*s;}
         private float clamp(float v){return Math.max(.03f,Math.min(.97f,v));}
     }
 }
