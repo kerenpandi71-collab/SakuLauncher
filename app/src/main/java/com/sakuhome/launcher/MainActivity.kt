@@ -281,7 +281,7 @@ class MainActivity : Activity() {
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(TextView(this).apply {
-            text = "SAKU DESKTOP"
+            text = "SAKU"
             textSize = 10f
             letterSpacing = 0.22f
             setTextColor(accent)
@@ -312,7 +312,7 @@ class MainActivity : Activity() {
             setPadding(dp(5), dp(13), dp(5), dp(10))
         }
         pageControls.addView(TextView(this).apply {
-            text = "LAYAR UTAMA"
+            text = "Layar Utama"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(secondaryText)
@@ -474,17 +474,17 @@ class MainActivity : Activity() {
     private fun buildStartPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = if (liquidGlass) glassSurface(28) else rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 28)
-            elevation = dp(16).toFloat()
+            setPadding(dp(18), dp(18), dp(18), dp(14))
+            background = if (liquidGlass) glassSurface(32) else rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 32)
+            elevation = dp(18).toFloat()
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(TextView(this).apply {
-            text = "Start"
-            textSize = 20f
+            text = "App Library"
+            textSize = 21f
             setTextColor(primaryText)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -500,7 +500,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(15), 0, dp(15), 0)
-            background = rounded(cardSurface, 18)
+            background = rounded(cardSurface, 24)
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             contentDescription = "Cari aplikasi di menu Start"
         }
@@ -525,8 +525,8 @@ class MainActivity : Activity() {
 
         startGrid = GridView(this).apply {
             numColumns = preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)
-            verticalSpacing = dp(5)
-            horizontalSpacing = dp(4)
+            verticalSpacing = dp(7)
+            horizontalSpacing = dp(7)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setSelector(ColorDrawable(Color.TRANSPARENT))
             isVerticalScrollBarEnabled = false
@@ -1556,14 +1556,16 @@ class MainActivity : Activity() {
             val cell = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(5), dp(9), dp(5), dp(9))
-                background = if (liquidGlass) glassSurface(19) else rounded(if (isDarkTheme) Color.argb(if (isStartMenu) 245 else 110, 45, 61, 84) else Color.argb(if (isStartMenu) 255 else 135, 250, 252, 255), 19)
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 94 else 102))
+                setPadding(dp(2), dp(5), dp(2), dp(5))
+                // iPhone-style icon grid: no bubble/card enclosing each app icon.
+                background = ColorDrawable(Color.TRANSPARENT)
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (isStartMenu) 88 else 96))
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     contentDescription = null
-                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp), dp(if (isStartMenu) (iconSizeDp - 6).coerceAtLeast(28) else iconSizeDp)))
+                    // Keep the app's native icon artwork; do not add an artificial circular plate.
+                }, LinearLayout.LayoutParams(dp(if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4), dp(if (isStartMenu) (iconSizeDp + 2).coerceAtLeast(30) else iconSizeDp + 4)))
                 addView(TextView(context).apply {
                     id = android.R.id.text1
                     textSize = 10.5f
