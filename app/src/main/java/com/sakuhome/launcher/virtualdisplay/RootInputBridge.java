@@ -1,6 +1,6 @@
 package com.sakuhome.launcher.virtualdisplay;
 
-import android.hardware.input.InputManager;
+import android.os.IBinder;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -10,8 +10,8 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 
 /**
- * Small root-side input bridge. TrackpadActivity sends MOVE and CLICK lines over stdin.
- * This runs under app_process with root privileges so mouse events can target a virtual display.
+ * Root-side input bridge. Resolve the input service directly through ServiceManager:
+ * InputManager.getInstance() can throw when app_process has no framework singleton.
  */
 public final class RootInputBridge {
     private static final int INJECT_ASYNC = 0;
@@ -24,11 +24,25 @@ public final class RootInputBridge {
 
     public static void main(String[] args) {
         try {
-            Class<?> managerClass = Class.forName("android.hardware.input.InputManager");
-            Method getInstance = managerClass.getDeclaredMethod("getInstance");
-            getInstance.setAccessible(true);
-            inputManager = getInstance.invoke(null);
-            injectInputEvent = managerClass.getDeclaredMethod("injectInputEvent", InputEvent.class, int.class);
+            System.out.println("INIT service lookup");
+            Class<?> serviceManager = Class.forName("android.os.ServiceManager");
+            Method getService = serviceManager.getDeclaredMethod("getService", String.class);
+            getService.setAccessible(true);
+            IBinder binder = (IBinder) getService.invoke(null, "input");
+            if (binder == null) {
+                throw new IllegalStateException("ServiceManager tidak menemukan service input");
+            }
+
+            Class<?> stubClass = Class.forName("android.hardware.input.IInputManager$Stub");
+            Method asInterface = stubClass.getDeclaredMethod("asInterface", IBinder.class);
+            asInterface.setAccessible(true);
+            inputManager = asInterface.invoke(null, binder);
+            if (inputManager == null) {
+                throw new IllegalStateException("IInputManager.asInterface menghasilkan null");
+            }
+
+            Class<?> managerInterface = Class.forName("android.hardware.input.IInputManager");
+            injectInputEvent = managerInterface.getDeclaredMethod("injectInputEvent", InputEvent.class, int.class);
             injectInputEvent.setAccessible(true);
             setDisplayId = MotionEvent.class.getDeclaredMethod("setDisplayId", int.class);
             setDisplayId.setAccessible(true);
@@ -47,6 +61,7 @@ public final class RootInputBridge {
                 } catch (Throwable error) {
                     System.out.println("INPUT_ERROR " + trimmed + " :: "
                         + error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage()));
+                    error.printStackTrace(System.out);
                     System.out.flush();
                 }
             }
@@ -107,7 +122,7 @@ public final class RootInputBridge {
             setDisplayId.invoke(event, displayId);
             Object result = injectInputEvent.invoke(inputManager, event, INJECT_ASYNC);
             if (!(result instanceof Boolean) || !((Boolean) result)) {
-                throw new IllegalStateException("InputManager menolak event pada display " + displayId
+                throw new IllegalStateException("IInputManager menolak event pada display " + displayId
                     + " action=" + action + " x=" + x + " y=" + y);
             }
         } finally {
