@@ -67,7 +67,7 @@ public class VirtualDisplayManagerActivity extends Activity {
     private static final class Result{final String out;final int code;Result(String output,int exit){out=output;code=exit;}}
     private Result exec(String command){StringBuilder output=new StringBuilder();Process process=null;try{
         process=new ProcessBuilder("su","-c",command).redirectErrorStream(true).start();
-        try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()))){String line;while((line=reader.readLine())!=null&&output.length()<8000)output.append(line).append('\\n');}
+        try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()))){String line;while((line=reader.readLine())!=null&&output.length()<8000)output.append(line).append('\n');}
         if(!process.waitFor(8,TimeUnit.SECONDS)){process.destroyForcibly();return new Result("Perintah timeout",124);}
         return new Result(output.toString().trim(),process.exitValue());
       }catch(Exception e){return new Result(e.getClass().getSimpleName()+": "+e.getMessage(),1);}finally{if(process!=null)process.destroy();}
