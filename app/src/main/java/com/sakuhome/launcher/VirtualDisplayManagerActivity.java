@@ -74,19 +74,26 @@ public class VirtualDisplayManagerActivity extends Activity {
         final int id;
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
-            Result result=exec("su 2000 -c \"am start --display "+id+" -n com.sakuhome.launcher/.MainActivity --ez saku_virtual_display_mode true\"");
-            showStatus(result.code==0 ? "Permintaan membuka Saku Launcher di display "+id+": "+result.out :
-                "Gagal membuka launcher di display "+id+". Pastikan ID display benar. "+result.out);
+            // Match the working Taskbar implementation: use the root path for --display.
+            Result result=exec("am start --display "+id+" --windowingMode 1 -f 0x10008000 -n "
+                +getPackageName()+"/.MainActivity --ez saku_virtual_display_mode true");
+            showStatus(result.code==0 && !result.out.contains("Permission Denial") && !result.out.contains("Error:")
+                ? "Saku Launcher diminta terbuka pada display "+id+": "+result.out
+                : "Launcher gagal dibuka pada display "+id+": "+result.out);
         },"launch-saku-on-display").start();
     }
     private void openTrackpad(){
         final int id;
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
-            Result result=exec("su 2000 -c \"am start --display "+id+" -n com.sakuhome.launcher/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id+" --ez show_trackpad true\"");
-            showStatus(result.code==0 ? "Permintaan membuka trackpad fullscreen pada display "+id+": "+result.out :
-                "Trackpad gagal dibuka pada display "+id+". Pastikan layanan aksesibilitas aktif dan ID display benar. "+result.out);
-        },"launch-trackpad-on-display").start();
+            // Trackpad UI stays fullscreen on the phone; only its input target is the virtual display.
+            Result result=exec("am start --display 0 --windowingMode 1 -f 0x10008000 -n "
+                +getPackageName()+"/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id
+                +" --ez show_trackpad true");
+            showStatus(result.code==0 && !result.out.contains("Permission Denial") && !result.out.contains("Error:")
+                ? "Trackpad fullscreen diminta pada layar HP untuk mengendalikan display "+id+": "+result.out
+                : "Trackpad gagal dibuka pada layar HP: "+result.out);
+        },"launch-trackpad-on-phone").start();
     }
     private void restoreOverlay(){
         if(!prefs.getBoolean(SAVED,false)){error("Belum ada konfigurasi sebelumnya yang dicadangkan.");return;}
