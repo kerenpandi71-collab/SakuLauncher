@@ -9,6 +9,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: display-extend-integration
+  cancel-in-progress: true
 jobs:
   integrate-and-build:
     runs-on: ubuntu-latest
