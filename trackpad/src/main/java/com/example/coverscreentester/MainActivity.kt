@@ -211,6 +211,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
             serviceIntent.putExtra("show_trackpad", true)
         }
 
+        if (originIntent.getBooleanExtra("show_trackpad", false)) {
+            serviceIntent.putExtra("show_trackpad", true)
+        }
+
         // Forward force_start flag
         if (originIntent.hasExtra("force_start")) {
              serviceIntent.putExtra("force_start", true)
