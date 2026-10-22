@@ -148,19 +148,29 @@ public final class RootInputBridge {
             Object upResult = injectInputEvent.invoke(inputManager, up, INJECT_ASYNC);
             if (!Boolean.TRUE.equals(downResult) || !Boolean.TRUE.equals(upResult))
                 throw new IllegalStateException("IInputManager menolak tombol " + keyCode + " pada display " + displayId);
-        } finally {
-            down.recycle();
-            up.recycle();
         }
     }
 
     private static void injectScroll(int displayId, float x, float y, float horizontal, float vertical) throws Exception {
         long now = SystemClock.uptimeMillis();
-        MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, x, y, 0);
+        MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[1];
+        properties[0] = new MotionEvent.PointerProperties();
+        properties[0].id = 0;
+        properties[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+
+        MotionEvent.PointerCoords[] coordinates = new MotionEvent.PointerCoords[1];
+        coordinates[0] = new MotionEvent.PointerCoords();
+        coordinates[0].x = x;
+        coordinates[0].y = y;
+        coordinates[0].pressure = 1f;
+        coordinates[0].size = 1f;
+        coordinates[0].setAxisValue(MotionEvent.AXIS_HSCROLL, horizontal);
+        coordinates[0].setAxisValue(MotionEvent.AXIS_VSCROLL, vertical);
+
+        MotionEvent event = MotionEvent.obtain(
+            now, now, MotionEvent.ACTION_SCROLL, 1, properties, coordinates,
+            0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
         try {
-            event.setSource(InputDevice.SOURCE_MOUSE);
-            event.setAxisValue(MotionEvent.AXIS_HSCROLL, horizontal);
-            event.setAxisValue(MotionEvent.AXIS_VSCROLL, vertical);
             setDisplayId.invoke(event, displayId);
             Object result = injectInputEvent.invoke(inputManager, event, INJECT_ASYNC);
             if (!(result instanceof Boolean) || !((Boolean) result)) {
