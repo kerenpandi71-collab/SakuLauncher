@@ -1,0 +1,281 @@
+package io.github.jqssun.displayextend;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.hardware.display.DisplayManager;
+import android.hardware.input.InputManager;
+import android.media.projection.MediaProjection;
+import android.media.projection.MediaProjectionManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.view.Display;
+import android.view.View;
+import android.widget.Toast;
+import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.navigation.NavController;
+import androidx.navigation.fragment.NavHostFragment;
+import androidx.navigation.ui.AppBarConfiguration;
+import androidx.navigation.ui.NavigationUI;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import io.github.jqssun.displayextend.job.AcquireShizuku;
+import io.github.jqssun.displayextend.job.DisplayMonitor;
+import io.github.jqssun.displayextend.job.InputDeviceMonitor;
+import io.github.jqssun.displayextend.shizuku.ShizukuUtils;
+import java.lang.ref.WeakReference;
+import org.lsposed.hiddenapibypass.HiddenApiBypass;
+import rikka.shizuku.Shizuku;
+
+public class MainActivity extends AppCompatActivity {
+  public static final String ACTION_USB_PERMISSION =
+      "io.github.jqssun.displayextend.USB_PERMISSION";
+  public static final String ACTION_OPEN_OVERVIEW =
+      "io.github.jqssun.displayextend.action.OPEN_OVERVIEW";
+  public static final String ACTION_OPEN_DISPLAY_DETAIL =
+      "io.github.jqssun.displayextend.action.OPEN_DISPLAY_DETAIL";
+  public static final String ACTION_OPEN_SETTINGS =
+      "io.github.jqssun.displayextend.action.OPEN_SETTINGS";
+  public static final String EXTRA_DISPLAY_ID = "display_id";
+  private NavController navController;
+  private BottomNavigationView bottomNav;
+  private final ActivityResultLauncher<Intent> mediaProjectionLauncher =
+      registerForActivityResult(
+          new ActivityResultContracts.StartActivityForResult(),
+          result -> {
+            if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+              Intent data = result.getData();
+              State.log("user granted projection permission");
+              if (MediaProjectionService.instance != null) {
+                MediaProjectionManager mpm =
+                    (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                State.setMediaProjection(mpm.getMediaProjection(RESULT_OK, data));
+                State.getMediaProjection()
+                    .registerCallback(
+                        new MediaProjection.Callback() {
+                          @Override
+                          public void onStop() {
+                            super.onStop();
+                            State.log("MediaProjection onStop callback");
+                          }
+                        },
+                        null);
+                State.resumeJob();
+              } else {
+                Intent svc = new Intent(this, MediaProjectionService.class);
+                svc.putExtra("data", data);
+                startService(svc);
+              }
+            } else {
+              MediaProjectionService.isStarting = false;
+              State.log("user denied projection permission");
+              State.resumeJob();
+            }
+          });
+
+  public ActivityResultLauncher<Intent> getMediaProjectionLauncher() {
+    return mediaProjectionLauncher;
+  }
+
+  private final BroadcastReceiver usbPermissionReceiver =
+      new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+          android.util.Log.d("MainActivity", "received action: " + intent.getAction());
+          String action = intent.getAction();
+          if (ACTION_USB_PERMISSION.equals(action)) {
+            State.resumeJob();
+          }
+        }
+      };
+
+  private void _onPermissionResult(int requestCode, int grantResult) {
+    if (requestCode == AcquireShizuku.SHIZUKU_PERMISSION_REQUEST_CODE) {
+      State.log(
+          "Shizuku permission result: "
+              + (grantResult == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
+      State.resumeJob();
+    } else {
+      State.log("unknown Shizuku request code: " + requestCode);
+    }
+  }
+
+  private final Shizuku.OnRequestPermissionResultListener requestPermissionResultListener =
+      this::_onPermissionResult;
+
+  @Override
+  protected void attachBaseContext(Context base) {
+    super.attachBaseContext(base);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      try {
+        HiddenApiBypass.addHiddenApiExemptions("");
+        android.util.Log.i("MainActivity", "hidden API exemption added");
+      } catch (Exception e) {
+        android.util.Log.e("MainActivity", "failed to add hidden API exemption: " + e.getMessage());
+      }
+    }
+  }
+
+  @Override
+  protected void onCreate(Bundle savedInstanceState) {
+    EdgeToEdge.enable(this);
+    super.onCreate(savedInstanceState);
+    Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
+    if (ShizukuUtils.hasPermission() && State.userService == null) {
+      Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
+      Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
+    }
+
+    setContentView(R.layout.activity_main);
+    TvFocus.attach(getWindow());
+
+    State.currentActivity = new WeakReference<>(this);
+    State.reconcileLastSingleAppDisplay(this);
+    State.refreshUI();
+
+    NavHostFragment navHostFragment =
+        (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
+    navController = navHostFragment.getNavController();
+    bottomNav = findViewById(R.id.bottom_nav);
+    View navHost = findViewById(R.id.nav_host_fragment);
+    bottomNav.addOnLayoutChangeListener(
+        (v, l, t, r, b, ol, ot, orr, ob) ->
+            navHost.setPadding(
+                navHost.getPaddingLeft(),
+                navHost.getPaddingTop(),
+                navHost.getPaddingRight(),
+                b - t));
+    MaterialToolbar toolbar = findViewById(R.id.toolbar);
+    setSupportActionBar(toolbar);
+    AppBarConfiguration appBarConfig =
+        new AppBarConfiguration.Builder(R.id.overview_fragment, R.id.logs_fragment, R.id.settings_fragment)
+            .build();
+    NavigationUI.setupActionBarWithNavController(this, navController, appBarConfig);
+    NavigationUI.setupWithNavController(bottomNav, navController);
+    _handleLaunchIntent(getIntent());
+
+    IntentFilter permissionFilter = new IntentFilter(ACTION_USB_PERMISSION);
+    registerReceiver(
+        usbPermissionReceiver, permissionFilter, null, null, Context.RECEIVER_EXPORTED);
+
+    DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+    DisplayMonitor.init(displayManager);
+    InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+    InputDeviceMonitor.init(inputManager);
+  }
+
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    _handleLaunchIntent(intent);
+  }
+
+  @Override
+  public boolean onSupportNavigateUp() {
+    return NavigationUI.navigateUp(
+            navController,
+            new AppBarConfiguration.Builder(R.id.overview_fragment, R.id.logs_fragment, R.id.settings_fragment)
+                .build())
+        || super.onSupportNavigateUp();
+  }
+
+  public void navigateToDisplayDetail(int displayId) {
+    if (_isShowingDisplayDetail(displayId)) {
+      return;
+    }
+    if (navController.getCurrentDestination() != null
+        && navController.getCurrentDestination().getId() == R.id.display_detail_fragment) {
+      navController.popBackStack(R.id.overview_fragment, false);
+    }
+    Bundle args = new Bundle();
+    args.putInt("display_id", displayId);
+    navController.navigate(R.id.display_detail_fragment, args);
+  }
+
+  public void navigateToInputDeviceDetail(int deviceId) {
+    Bundle args = new Bundle();
+    args.putInt("device_id", deviceId);
+    navController.navigate(R.id.input_device_detail_fragment, args);
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    State.currentActivity = new WeakReference<>(this);
+    State.reconcileLastSingleAppDisplay(this);
+    State.resumeJob();
+  }
+
+  @Override
+  protected void onDestroy() {
+    super.onDestroy();
+    State.unbindUserService();
+    Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener);
+    State.currentActivity = new WeakReference<>(null);
+    unregisterReceiver(usbPermissionReceiver);
+  }
+
+  private void _handleLaunchIntent(Intent intent) {
+    if (intent == null) return;
+    String action = intent.getAction();
+    State.log("MainActivity created with action: " + action);
+    if (ACTION_OPEN_OVERVIEW.equals(action)) {
+      _navigateToOverview();
+      return;
+    }
+    if (ACTION_OPEN_SETTINGS.equals(action)) {
+      _navigateToSettings();
+      return;
+    }
+    if (!ACTION_OPEN_DISPLAY_DETAIL.equals(action)) return;
+    int displayId = intent.getIntExtra(EXTRA_DISPLAY_ID, -1);
+    DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+    Display display = displayManager != null ? displayManager.getDisplay(displayId) : null;
+    if (display == null) {
+      _navigateToOverview();
+      Toast.makeText(this, R.string.display_unavailable_opened_overview, Toast.LENGTH_SHORT).show();
+      return;
+    }
+    if (_isShowingDisplayDetail(displayId)) return;
+    _navigateToOverview();
+    navigateToDisplayDetail(displayId);
+  }
+
+  private void _navigateToOverview() {
+    _navigateToTopLevelDestination(R.id.overview_fragment);
+  }
+
+  private void _navigateToSettings() {
+    _navigateToTopLevelDestination(R.id.settings_fragment);
+  }
+
+  private void _navigateToTopLevelDestination(int destinationId) {
+    if (bottomNav != null && bottomNav.getSelectedItemId() != destinationId) {
+      bottomNav.setSelectedItemId(destinationId);
+    }
+    if (navController.getCurrentDestination() != null
+        && navController.getCurrentDestination().getId() != destinationId) {
+      navController.popBackStack(destinationId, false);
+    }
+  }
+
+  private boolean _isShowingDisplayDetail(int displayId) {
+    if (navController.getCurrentDestination() == null
+        || navController.getCurrentDestination().getId() != R.id.display_detail_fragment) {
+      return false;
+    }
+
+    Bundle args =
+        navController.getCurrentBackStackEntry() != null
+            ? navController.getCurrentBackStackEntry().getArguments()
+            : null;
+    return args != null && args.getInt("display_id", -1) == displayId;
+  }
+
+}

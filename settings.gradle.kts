@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "SakuLauncher"
 include(":app")
+
+include(":hidden-api-stub")

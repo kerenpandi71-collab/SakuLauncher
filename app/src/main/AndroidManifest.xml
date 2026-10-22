@@ -1,43 +1,59 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<?xml version='1.0' encoding='utf-8'?>
+<manifest xmlns:ns0="http://schemas.android.com/apk/res/android" xmlns:ns1="http://schemas.android.com/tools">
+    <uses-feature ns0:name="android.hardware.touchscreen" ns0:required="false" />
+    <uses-feature ns0:name="android.software.leanback" ns0:required="false" />
+    <uses-feature ns0:name="android.hardware.usb.host" ns0:required="false" />
+    <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission ns0:name="android.permission.WRITE_SECURE_SETTINGS" ns1:ignore="ProtectedPermissions" />
+    <uses-permission ns0:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission ns0:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission ns0:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission ns0:name="android.permission.POST_NOTIFICATIONS" />
     <queries>
         <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
+            <action ns0:name="android.intent.action.MAIN" />
+            <category ns0:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
-
-    <application
-        android:allowBackup="true"
-        android:label="Saku Launcher"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:resizeableActivity="true">
+    <application ns0:allowBackup="true" ns0:label="Saku Launcher" ns0:supportsRtl="true" ns0:theme="@style/AppTheme">
+        <activity ns0:name=".MainActivity" ns0:exported="true" ns0:resizeableActivity="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action ns0:name="android.intent.action.MAIN" />
+                <category ns0:name="android.intent.category.HOME" />
+                <category ns0:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action ns0:name="android.intent.action.MAIN" />
+                <category ns0:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name=".FloatingDockService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Menjaga dock Saku yang diaktifkan pengguna tetap terlihat di atas aplikasi lain" />
+        <service ns0:name=".FloatingDockService" ns0:exported="false" ns0:foregroundServiceType="specialUse">
+            <property ns0:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" ns0:value="Menjaga dock Saku yang diaktifkan pengguna tetap terlihat di atas aplikasi lain" />
         </service>
+        <activity ns0:name=".OverlayDisplayActivity" ns0:exported="false" ns0:theme="@style/AppTheme" />
+        <activity ns0:name=".LauncherActivity" ns0:launchMode="singleTask" ns0:excludeFromRecents="true" ns0:exported="false" />
+        <activity ns0:name=".TouchpadActivity" ns0:launchMode="singleTask" ns0:exported="false" ns0:theme="@style/AppTheme" />
+        <activity ns0:name=".PureBlackActivity" ns0:launchMode="singleTask" ns0:exported="false" ns0:theme="@style/AppTheme" />
+        <activity ns0:name=".AccessibilityConsentActivity" ns0:launchMode="singleTask" ns0:excludeFromRecents="true" ns0:exported="false" ns0:theme="@style/AppTheme.Transparent" />
+        <activity ns0:name=".ManagedVirtualDisplayActivity" ns0:launchMode="singleTask" ns0:exported="false" ns0:theme="@style/AppTheme" />
+        <service ns0:name=".FloatingKeyboardService" ns0:enabled="true" ns0:exported="false" />
+        <service ns0:name=".MediaProjectionService" ns0:foregroundServiceType="mediaProjection" ns0:exported="false" />
+        <service ns0:name=".TouchpadAccessibilityService" ns0:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" ns0:exported="false">
+            <intent-filter>
+                <action ns0:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data ns0:name="android.accessibilityservice" ns0:resource="@xml/accessibility_service_config" />
+        </service>
+        <provider ns0:name="rikka.shizuku.ShizukuProvider" ns0:authorities="${applicationId}.shizuku" ns0:multiprocess="false" ns0:enabled="true" ns0:exported="true" ns0:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <provider ns0:name="androidx.core.content.FileProvider" ns0:authorities="${applicationId}.provider" ns0:exported="false" ns0:grantUriPermissions="true">
+            <meta-data ns0:name="android.support.FILE_PROVIDER_PATHS" ns0:resource="@xml/file_paths" />
+        </provider>
+        <service ns0:name=".FloatingButtonService" ns0:enabled="true" ns0:exported="false" />
+        <receiver ns0:name=".PureBlackActivity$ExitReceiver" ns0:exported="true">
+            <intent-filter>
+                <action ns0:name="io.github.jqssun.displayextend.EXIT_PURE_BLACK" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

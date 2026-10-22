@@ -1,0 +1,1659 @@
+package io.github.jqssun.displayextend;
+
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.annotation.SuppressLint;
+import android.app.ActivityTaskManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.ColorStateList;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.hardware.display.DisplayManager;
+import android.hardware.input.IInputManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.provider.Settings;
+import android.util.Log;
+import android.util.SparseArray;
+import android.view.Display;
+import android.view.Gravity;
+import android.view.InputDevice;
+import android.view.KeyCharacterMap;
+import android.view.KeyEvent;
+import android.view.KeyEventHidden;
+import android.view.MotionEvent;
+import android.view.MotionEventHidden;
+import android.view.View;
+import android.view.ViewConfiguration;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.ImageView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import com.google.android.material.button.MaterialButton;
+import dev.rikka.tools.refine.Refine;
+import io.github.jqssun.displayextend.job.StartTouchPad;
+import io.github.jqssun.displayextend.shizuku.ServiceUtils;
+import io.github.jqssun.displayextend.shizuku.ShizukuUtils;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class TouchpadActivity extends AppCompatActivity {
+  private static volatile TouchpadActivity activeInstance;
+
+  public static final int INJECT_INPUT_EVENT_MODE_ASYNC = 0;
+  private View touchpadArea;
+  private TextView gestureHint;
+  private View touchpadHintContainer;
+  private View touchpadRoot;
+  private View topBar;
+  private View bottomButtons;
+  private View touchpadOverlay;
+  private ImageView cursorView;
+  private int displayId;
+  private static final String TAG = "TouchpadActivity";
+  private float cursorX = 0;
+  private float cursorY = 0;
+  private WindowManager.LayoutParams cursorParams;
+  private float halfWidth;
+  private float halfHeight;
+  private IInputManager inputManager;
+  private GestureState gestureState = new GestureState();
+  private final ExecutorService ipcExecutor = Executors.newSingleThreadExecutor();
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
+  private int doubleTapTimeout;
+  private int touchSlop;
+  private static final long TAP_MAX_DURATION_MS = 180;
+  private static final long DRAG_SEGMENT_DURATION_MS = 20;
+  private boolean isCursorLocked = false;
+  private boolean useAccessibilityCursor = false;
+  private boolean useAccessibilityTouchOverlay = false;
+  private float sensitivity = 3.0f;
+  private Spinner modeSpinner;
+  private static final int MODE_NORMAL = 0;
+  private static final int MODE_CURSOR_LOCKED = 1;
+  private int rotation = 0; // 0=0°, 1=90° cw, 2=180°, 3=270° cw
+  private boolean isNightModeEnabled = false;
+  private MaterialButton nightModeButton;
+  private View scrollStrip;
+  private final Map<MaterialButton, ColorStateList> nightModeButtonTints = new LinkedHashMap<>();
+  private final Map<MaterialButton, ColorStateList> nightModeButtonIconTints =
+      new LinkedHashMap<>();
+  private final Map<MaterialButton, Drawable> nightModeTextButtonBackgrounds =
+      new LinkedHashMap<>();
+  private Drawable defaultRootBackground;
+  private Drawable defaultTopBarBackground;
+  private Drawable defaultBottomButtonsBackground;
+
+  private static class GestureState {
+    List<MotionEvent> allMotionEvents = new ArrayList<>();
+    int lastReplayed = 0;
+    boolean isSingleFinger;
+    float initialTouchX = 0;
+    float initialTouchY = 0;
+
+    // tap-hold-drag: first tap is deferred so a followup hold can latch drag
+    List<MotionEvent> pendingTapEvents = new ArrayList<>();
+    Runnable pendingTapReplay;
+    long lastTapUpTime = 0;
+    float lastTapUpX = 0;
+    float lastTapUpY = 0;
+    long downTime = 0;
+    boolean dragLatched;
+
+    // accessibility drag-stroke chaining state
+    GestureDescription.StrokeDescription dragStroke;
+    boolean dragStrokeInFlight;
+    float lastStrokeX;
+    float lastStrokeY;
+    float pendingDragX;
+    float pendingDragY;
+    boolean dragEndPending;
+  }
+
+  private static class StrokePoint {
+    float x;
+    float y;
+    long time;
+
+    StrokePoint(float x, float y, long time) {
+      this.x = x;
+      this.y = y;
+      this.time = time;
+    }
+  }
+
+  public static boolean startTouchpad(Context context, int displayId, boolean dryRun) {
+    if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.Q
+        && !ShizukuUtils.hasPermission()) {
+      return false;
+    }
+    if (displayId == Display.DEFAULT_DISPLAY) {
+      return false;
+    }
+    if (!Settings.canDrawOverlays(context)) {
+      if (!dryRun) {
+        Intent intent =
+            new Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + context.getPackageName()));
+        context.startActivity(intent);
+      }
+      return false;
+    }
+
+    if (ShizukuUtils.hasShizukuStarted()) {
+      if (!dryRun && Pref.getTouchpadAccessibilityOverlay()) {
+        TouchpadAccessibilityService.ensureServiceAvailable(context, false);
+      }
+      if (!dryRun) {
+        State.startNewJob(new StartTouchPad(displayId, context));
+      }
+      return true;
+    }
+
+    if (!TouchpadAccessibilityService.isAccessibilityServiceEnabled(context)) {
+      if (!dryRun) {
+        TouchpadAccessibilityService.ensureServiceAvailable(context, true);
+      }
+      return false;
+    }
+
+    if (!dryRun) {
+      if (TouchpadAccessibilityService.getInstance() != null) {
+        Intent touchpadIntent = new Intent(context, TouchpadActivity.class);
+        touchpadIntent.putExtra("display_id", displayId);
+        context.startActivity(touchpadIntent);
+        return true;
+      }
+      Intent serviceIntent = new Intent(context, TouchpadAccessibilityService.class);
+      context.startService(serviceIntent);
+
+      new Handler()
+          .postDelayed(
+              () -> {
+                if (TouchpadAccessibilityService.getInstance() == null) {
+                  TouchpadAccessibilityService.ensureServiceAvailable(context, true);
+                } else {
+                  Intent touchpadIntent = new Intent(context, TouchpadActivity.class);
+                  touchpadIntent.putExtra("display_id", displayId);
+                  context.startActivity(touchpadIntent);
+                }
+              },
+              1000);
+    }
+    return true;
+  }
+
+  @Override
+  protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    activeInstance = this;
+    setContentView(R.layout.activity_touchpad);
+
+    touchpadRoot = findViewById(R.id.touchpad_root);
+    topBar = findViewById(R.id.top_bar);
+    bottomButtons = findViewById(R.id.bottom_buttons);
+    modeSpinner = findViewById(R.id.mode_spinner);
+    touchpadArea = findViewById(R.id.touchpad_area);
+    gestureHint = findViewById(R.id.touchpad_gesture_hint);
+    touchpadHintContainer = findViewById(R.id.touchpad_button_hints);
+    defaultRootBackground = touchpadRoot.getBackground();
+    defaultTopBarBackground = topBar.getBackground();
+    defaultBottomButtonsBackground = bottomButtons.getBackground();
+    _updateHelp();
+    _bindHintRow(R.id.hint_back, R.drawable.ic_back, R.string.touchpad_hint_back);
+    _bindHintRow(R.id.hint_home, R.drawable.ic_home, R.string.touchpad_hint_home);
+    _bindHintRow(R.id.hint_night_mode, R.drawable.ic_night_mode, R.string.touchpad_hint_night_mode);
+    _bindHintRow(R.id.hint_rotate_ccw, R.drawable.ic_rotate, R.string.touchpad_hint_rotate_ccw);
+    _bindHintRow(R.id.hint_rotate_cw, R.drawable.ic_rotate_cw, R.string.touchpad_hint_rotate_cw);
+
+    if (savedInstanceState != null) {
+      rotation = savedInstanceState.getInt("rotation", 0);
+      isNightModeEnabled = savedInstanceState.getBoolean("night_mode_enabled", false);
+    }
+
+    displayId = getIntent().getIntExtra("display_id", Display.DEFAULT_DISPLAY);
+
+    ViewConfiguration vc = ViewConfiguration.get(this);
+    doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout();
+    touchSlop = vc.getScaledTouchSlop();
+
+    if (ShizukuUtils.hasPermission()) {
+      inputManager = ServiceUtils.getInputManager();
+    }
+    DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+    Display targetDisplay = displayManager.getDisplay(displayId);
+    if (targetDisplay == null) {
+      finish();
+      return;
+    }
+
+    halfWidth = targetDisplay.getWidth() / 2.0f;
+    halfHeight = targetDisplay.getHeight() / 2.0f;
+
+    _showMouseCursor(targetDisplay);
+
+    touchpadArea.addOnLayoutChangeListener(
+        (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+            _syncTouchpadOverlay());
+
+    nightModeButton = findViewById(R.id.night_mode_button);
+    _registerNightModeButton((MaterialButton) findViewById(R.id.back_button));
+    _registerNightModeButton((MaterialButton) findViewById(R.id.home_button));
+    _registerNightModeButton(nightModeButton);
+    _registerNightModeButton((MaterialButton) findViewById(R.id.rotate_ccw_button));
+    _registerNightModeButton((MaterialButton) findViewById(R.id.rotate_cw_button));
+    _registerNightModeButton((MaterialButton) findViewById(R.id.switch_mode_button));
+    _registerNightModeButton((MaterialButton) findViewById(R.id.exit_button));
+    nightModeButton.setOnClickListener(v -> _toggleNightMode());
+
+    findViewById(R.id.back_button)
+        .setOnClickListener(
+            v -> {
+              performBackGesture(inputManager, displayId);
+            });
+
+    findViewById(R.id.home_button)
+        .setOnClickListener(
+            v -> {
+              launchLastPackage(this, displayId);
+            });
+
+    if (bottomButtons instanceof android.view.ViewGroup) {
+      MaterialButton floatingKeyboardButton = new MaterialButton(this);
+      floatingKeyboardButton.setText("Floating keyboard");
+      floatingKeyboardButton.setTextSize(12);
+      floatingKeyboardButton.setOnClickListener(
+          v -> {
+            if (!Settings.canDrawOverlays(this)) {
+              Intent overlayIntent =
+                  new Intent(
+                      Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                      Uri.parse("package:" + getPackageName()));
+              startActivity(overlayIntent);
+              Toast.makeText(this, "Allow overlay permission, then tap Floating keyboard again.", Toast.LENGTH_LONG).show();
+              return;
+            }
+            Intent keyboardIntent = new Intent(this, FloatingKeyboardService.class);
+            keyboardIntent.setAction(FloatingKeyboardService.ACTION_SHOW);
+            keyboardIntent.putExtra(FloatingKeyboardService.EXTRA_DISPLAY_ID, displayId);
+            startService(keyboardIntent);
+          });
+      ((android.view.ViewGroup) bottomButtons).addView(floatingKeyboardButton);
+    }
+
+    _setupModeSpinner();
+
+    findViewById(R.id.rotate_ccw_button)
+        .setOnClickListener(
+            v -> {
+              rotation = (rotation + 1) % 4; // ccw
+              cursorX = 0;
+              cursorY = 0;
+              _updateCursorPosition(0, 0);
+              _applyRotation();
+            });
+
+    findViewById(R.id.rotate_cw_button)
+        .setOnClickListener(
+            v -> {
+              rotation = (rotation + 3) % 4; // cw
+              cursorX = 0;
+              cursorY = 0;
+              _updateCursorPosition(0, 0);
+              _applyRotation();
+            });
+
+    _setupScrollStrip();
+    sensitivity = Pref.getTouchpadSensitivity();
+    _applyNightMode();
+
+    findViewById(R.id.exit_button).setOnClickListener(v -> finish());
+
+    findViewById(R.id.switch_mode_button).setOnClickListener(v -> _switchMode());
+  }
+
+  private void _setupTouchListenerForAccessibility() {
+    touchpadOverlay.setOnTouchListener(
+        (v, event) -> {
+          if (_handleDragTouch(event)) {
+            return true;
+          }
+
+          if (gestureState.allMotionEvents.isEmpty()) {
+            gestureState.initialTouchX = event.getX();
+            gestureState.initialTouchY = event.getY();
+          }
+
+          float relativeX = event.getX() - gestureState.initialTouchX;
+          float relativeY = event.getY() - gestureState.initialTouchY;
+
+          float absoluteX = cursorX + halfWidth + relativeX * 2;
+          float absoluteY = cursorY + halfHeight + relativeY * 2;
+          float offsetX = absoluteX - event.getX();
+          float offsetY = absoluteY - event.getY();
+
+          MotionEvent copiedEventWithOffset = _obtainMotionEventWithOffset(event, offsetX, offsetY);
+          gestureState.allMotionEvents.add(copiedEventWithOffset);
+
+          if (event.getAction() == MotionEvent.ACTION_UP
+              || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            Log.d(TAG, "touch ended, isSingleFinger: " + gestureState.isSingleFinger);
+            if (!gestureState.isSingleFinger) {
+              boolean alwaysSingleFinger = true;
+              for (MotionEvent e : gestureState.allMotionEvents) {
+                if (e.getPointerCount() > 1) {
+                  alwaysSingleFinger = false;
+                }
+              }
+              boolean significantMove = Math.abs(relativeX) > 10 || Math.abs(relativeY) > 10;
+              if (_isCleanTap(event, alwaysSingleFinger, significantMove)) {
+                _scheduleTapReplay(event);
+                _recycleGestureEvents();
+                return true;
+              }
+              if (!isCursorLocked && alwaysSingleFinger && significantMove) {
+                // ignore
+              } else {
+                _replayGestureViaAccessibility();
+              }
+            }
+            _recycleGestureEvents();
+            return true;
+          }
+
+          if (!isCursorLocked) {
+            if (gestureState.isSingleFinger
+                || (event.getPointerCount() == 1
+                    && (gestureState.allMotionEvents.size() == 5
+                        || Math.abs(relativeX) > 10
+                        || Math.abs(relativeY) > 10))) {
+              if (gestureState.allMotionEvents.size() == 5
+                  && Math.abs(relativeX) < 1
+                  && Math.abs(relativeY) < 1) {
+                Log.d(TAG, "no movement detected");
+                return true;
+              }
+              gestureState.isSingleFinger = true;
+              if (event.getPointerCount() == 1) {
+                _updateCursorPosition(relativeX * 0.5f, relativeY * 0.5f);
+                gestureState.initialTouchX = event.getX();
+                gestureState.initialTouchY = event.getY();
+              }
+              return true;
+            }
+          }
+          return true;
+        });
+  }
+
+  private void _setupTouchListenerForInputManager() {
+    touchpadOverlay.setOnTouchListener(
+        (v, event) -> {
+          if (_handleDragTouch(event)) {
+            return true;
+          }
+
+          if (gestureState.allMotionEvents.isEmpty()) {
+            gestureState.initialTouchX = event.getX();
+            gestureState.initialTouchY = event.getY();
+          }
+
+          float relativeX = event.getX() - gestureState.initialTouchX;
+          float relativeY = event.getY() - gestureState.initialTouchY;
+
+          float absoluteX = cursorX + halfWidth + relativeX * 2;
+          float absoluteY = cursorY + halfHeight + relativeY * 2;
+          float offsetX = absoluteX - event.getX();
+          float offsetY = absoluteY - event.getY();
+
+          MotionEvent copiedEventWithOffset = _obtainMotionEventWithOffset(event, offsetX, offsetY);
+          gestureState.allMotionEvents.add(copiedEventWithOffset);
+
+          if (event.getAction() == MotionEvent.ACTION_UP
+              || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            Log.d(TAG, "touch ended, isSingleFinger: " + gestureState.isSingleFinger);
+            if (!gestureState.isSingleFinger) {
+              boolean alwaysSingleFinger = gestureState.lastReplayed == 0;
+              boolean significantMove = Math.abs(relativeX) > 10 || Math.abs(relativeY) > 10;
+              if (_isCleanTap(event, alwaysSingleFinger, significantMove)) {
+                _scheduleTapReplay(event);
+                _recycleGestureEvents();
+                return true;
+              }
+              if (!isCursorLocked && alwaysSingleFinger && significantMove) {
+                // ignore
+              } else {
+                _replayBufferedEvents();
+              }
+            }
+            _recycleGestureEvents();
+            return true;
+          }
+
+          if (!isCursorLocked && gestureState.lastReplayed == 0) {
+            if (gestureState.isSingleFinger
+                || (event.getPointerCount() == 1
+                    && (gestureState.allMotionEvents.size() == 5
+                        || Math.abs(relativeX) > 10
+                        || Math.abs(relativeY) > 10))) {
+              if (gestureState.allMotionEvents.size() == 5
+                  && Math.abs(relativeX) < 1
+                  && Math.abs(relativeY) < 1) {
+                Log.d(TAG, "no movement detected");
+                return true;
+              }
+              gestureState.isSingleFinger = true;
+              if (event.getPointerCount() == 1) {
+                _updateCursorPosition(relativeX * 0.5f, relativeY * 0.5f);
+                gestureState.initialTouchX = event.getX();
+                gestureState.initialTouchY = event.getY();
+              }
+              return true;
+            }
+
+            if (event.getPointerCount() == 1) {
+              // buffer it
+              return true;
+            }
+          }
+
+          _replayBufferedEvents();
+          return true;
+        });
+  }
+
+  /**
+   * Shares the existing built-in trackpad cursor with the floating keyboard.
+   * Coordinates are absolute pixels on the requested secondary display.
+   */
+  public static float[] getFloatingTrackpadCursor(int targetDisplayId) {
+    TouchpadActivity activity = activeInstance;
+    if (activity == null || activity.displayId != targetDisplayId || activity.isFinishing()) {
+      return null;
+    }
+    return new float[] {
+      activity.cursorX + activity.halfWidth,
+      activity.cursorY + activity.halfHeight
+    };
+  }
+
+  public static boolean moveFloatingTrackpadCursor(
+      int targetDisplayId, float absoluteX, float absoluteY) {
+    TouchpadActivity activity = activeInstance;
+    if (activity == null || activity.displayId != targetDisplayId || activity.isFinishing()) {
+      return false;
+    }
+    activity.cursorX = Math.max(
+        -activity.halfWidth, Math.min(absoluteX - activity.halfWidth, activity.halfWidth));
+    activity.cursorY = Math.max(
+        -activity.halfHeight, Math.min(absoluteY - activity.halfHeight, activity.halfHeight));
+    activity._updateCursorPosition(0, 0);
+    return activity.cursorView != null || activity.useAccessibilityCursor;
+  }
+
+  public static boolean scrollFloatingTrackpad(int targetDisplayId, float amount) {
+    TouchpadActivity activity = activeInstance;
+    if (activity == null || activity.displayId != targetDisplayId || activity.isFinishing()) {
+      return false;
+    }
+    activity.ipcExecutor.execute(() -> activity._injectScroll(amount));
+    return true;
+  }
+
+  /**
+   * Reuses the built-in trackpad's touch replay path for left-clicks. This avoids
+   * treating cursor movement as a hardware mouse on Android virtual displays.
+   */
+  public static boolean clickFloatingTrackpad(int targetDisplayId, int button) {
+    TouchpadActivity activity = activeInstance;
+    if (activity == null || activity.displayId != targetDisplayId || activity.isFinishing()) {
+      return false;
+    }
+
+    if (button == MotionEvent.BUTTON_SECONDARY) {
+      if (activity.inputManager == null) return false;
+      activity.ipcExecutor.execute(() -> {
+        long now = SystemClock.uptimeMillis();
+        activity._injectMouseEvent(
+            now, now, MotionEvent.ACTION_DOWN, 0, MotionEvent.BUTTON_SECONDARY);
+        activity._injectMouseEvent(
+            now, now, MotionEvent.ACTION_BUTTON_PRESS,
+            MotionEvent.BUTTON_SECONDARY, MotionEvent.BUTTON_SECONDARY);
+        activity._injectMouseEvent(
+            now, now, MotionEvent.ACTION_BUTTON_RELEASE, MotionEvent.BUTTON_SECONDARY, 0);
+        activity._injectMouseEvent(now, now, MotionEvent.ACTION_UP, 0, 0);
+      });
+      return true;
+    }
+
+    if (activity.inputManager == null
+        && (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+            || TouchpadAccessibilityService.getInstance() == null)) {
+      return false;
+    }
+
+    activity._cancelPendingTapReplay();
+    activity._recyclePendingTapEvents();
+    long downTime = SystemClock.uptimeMillis();
+    float x = activity.cursorX + activity.halfWidth;
+    float y = activity.cursorY + activity.halfHeight;
+    MotionEvent.PointerProperties[] properties = {new MotionEvent.PointerProperties()};
+    properties[0].id = 0;
+    properties[0].toolType = MotionEvent.TOOL_TYPE_FINGER;
+    MotionEvent.PointerCoords[] coordinates = {new MotionEvent.PointerCoords()};
+    coordinates[0].x = x;
+    coordinates[0].y = y;
+    coordinates[0].pressure = 1f;
+    coordinates[0].size = 1f;
+
+    MotionEvent down = MotionEvent.obtain(
+        downTime, downTime, MotionEvent.ACTION_DOWN, 1, properties, coordinates,
+        0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
+    MotionEvent.PointerCoords[] upCoordinates = {new MotionEvent.PointerCoords()};
+    upCoordinates[0].x = x;
+    upCoordinates[0].y = y;
+    upCoordinates[0].pressure = 0f;
+    upCoordinates[0].size = 1f;
+    MotionEvent up = MotionEvent.obtain(
+        downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, 1, properties, upCoordinates,
+        0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
+    activity.gestureState.pendingTapEvents.add(down);
+    activity.gestureState.pendingTapEvents.add(up);
+    activity._replayPendingTap();
+    return true;
+  }
+
+  public static void launchLastPackage(Context context, int displayId) {
+    String lastPackageName = Pref.getLastPackageName();
+    if (lastPackageName == null) {
+      return;
+    }
+    ServiceUtils.launchPackage(context, lastPackageName, displayId);
+  }
+
+  private void _updateHelp() {
+    if (isNightModeEnabled) {
+      gestureHint.setVisibility(View.GONE);
+      if (touchpadHintContainer != null) {
+        touchpadHintContainer.setVisibility(View.GONE);
+      }
+      return;
+    }
+    gestureHint.setVisibility(View.VISIBLE);
+    if (touchpadHintContainer != null) {
+      touchpadHintContainer.setVisibility(View.VISIBLE);
+    }
+    int selectedMode = modeSpinner.getSelectedItemPosition();
+    gestureHint.setText(
+        selectedMode == MODE_CURSOR_LOCKED
+            ? getString(R.string.touchpad_help_cursor_locked)
+            : getString(R.string.touchpad_help_normal));
+  }
+
+  private void _bindHintRow(int rowId, int iconRes, int textRes) {
+    View row = findViewById(rowId);
+    ((ImageView) row.findViewById(R.id.hint_icon)).setImageResource(iconRes);
+    ((TextView) row.findViewById(R.id.hint_text)).setText(textRes);
+  }
+
+  private void _recycleGestureEvents() {
+    for (MotionEvent e : gestureState.allMotionEvents) {
+      e.recycle();
+    }
+    gestureState.allMotionEvents.clear();
+    gestureState.lastReplayed = 0;
+    gestureState.isSingleFinger = false;
+  }
+
+  private void _replayBufferedEvents() {
+    if (inputManager == null || gestureState.allMotionEvents.isEmpty()) {
+      return;
+    }
+
+    List<MotionEvent> toReplay = new ArrayList<>();
+    for (int i = gestureState.lastReplayed; i < gestureState.allMotionEvents.size(); i++) {
+      toReplay.add(MotionEvent.obtain(gestureState.allMotionEvents.get(i)));
+    }
+    gestureState.lastReplayed = gestureState.allMotionEvents.size();
+
+    ipcExecutor.execute(
+        () -> {
+          for (MotionEvent event : toReplay) {
+            MotionEventHidden eventHidden = Refine.unsafeCast(event);
+            eventHidden.setDisplayId(displayId);
+            inputManager.injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC);
+            event.recycle();
+          }
+        });
+  }
+
+  private void _replayPendingTap() {
+    if (gestureState.pendingTapEvents.isEmpty()) {
+      return;
+    }
+    if (inputManager != null) {
+      List<MotionEvent> toReplay = new ArrayList<>(gestureState.pendingTapEvents);
+      gestureState.pendingTapEvents.clear();
+      ipcExecutor.execute(
+          () -> {
+            for (MotionEvent event : toReplay) {
+              MotionEventHidden eventHidden = Refine.unsafeCast(event);
+              eventHidden.setDisplayId(displayId);
+              inputManager.injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC);
+              event.recycle();
+            }
+          });
+      return;
+    }
+    _dispatchPendingTapViaAccessibility();
+  }
+
+  private void _dispatchPendingTapViaAccessibility() {
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (service == null
+        || Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+        || gestureState.pendingTapEvents.isEmpty()) {
+      _recyclePendingTapEvents();
+      return;
+    }
+    MotionEvent first = gestureState.pendingTapEvents.get(0);
+    float x = Math.max(0, first.getX());
+    float y = Math.max(0, first.getY());
+
+    Path path = new Path();
+    path.moveTo(x, y);
+    path.lineTo(x + 0.1f, y);
+    GestureDescription.Builder builder = new GestureDescription.Builder();
+    builder.setDisplayId(displayId);
+    builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 40, false));
+    service.setFocus(displayId);
+    service.dispatchGesture(builder.build(), null, null);
+    _recyclePendingTapEvents();
+  }
+
+  private void _recyclePendingTapEvents() {
+    for (MotionEvent e : gestureState.pendingTapEvents) {
+      e.recycle();
+    }
+    gestureState.pendingTapEvents.clear();
+  }
+
+  private void _cancelPendingTapReplay() {
+    if (gestureState.pendingTapReplay != null) {
+      mainHandler.removeCallbacks(gestureState.pendingTapReplay);
+      gestureState.pendingTapReplay = null;
+    }
+  }
+
+  // called on ACTION_UP of a clean tap; defers the tap replay so a followup
+  // ACTION_DOWN within the double-tap window can cancel it and latch drag.
+  private void _scheduleTapReplay(MotionEvent upEventCopy) {
+    _recyclePendingTapEvents();
+    for (MotionEvent e : gestureState.allMotionEvents) {
+      gestureState.pendingTapEvents.add(MotionEvent.obtain(e));
+    }
+    gestureState.lastTapUpTime = upEventCopy.getEventTime();
+    gestureState.lastTapUpX = upEventCopy.getX();
+    gestureState.lastTapUpY = upEventCopy.getY();
+    Runnable r =
+        () -> {
+          gestureState.pendingTapReplay = null;
+          _replayPendingTap();
+        };
+    gestureState.pendingTapReplay = r;
+    mainHandler.postDelayed(r, doubleTapTimeout);
+  }
+
+  // intercept touches consumed by the tap-hold-drag state machine.
+  // returns true if the event was handled and must not flow into the
+  // buffer-and-replay path.
+  private boolean _handleDragTouch(MotionEvent event) {
+    if (!Pref.getTouchpadTapHoldDrag()) {
+      return false;
+    }
+    int action = event.getActionMasked();
+    if (action == MotionEvent.ACTION_DOWN && !isCursorLocked) {
+      if (_tryLatchDrag(event)) {
+        return true;
+      }
+    }
+    if (!gestureState.dragLatched) {
+      return false;
+    }
+    switch (action) {
+      case MotionEvent.ACTION_MOVE:
+        if (event.getPointerCount() == 1) {
+          float relX = event.getX() - gestureState.initialTouchX;
+          float relY = event.getY() - gestureState.initialTouchY;
+          _updateCursorPosition(relX * 0.5f, relY * 0.5f);
+          gestureState.initialTouchX = event.getX();
+          gestureState.initialTouchY = event.getY();
+          _handleDragMove();
+        }
+        return true;
+      case MotionEvent.ACTION_UP:
+      case MotionEvent.ACTION_CANCEL:
+        _endDragMode();
+        return true;
+      default:
+        // additional pointers while dragging: ignore, keep drag active
+        return true;
+    }
+  }
+
+  private boolean _isCleanTap(
+      MotionEvent upEvent, boolean alwaysSingleFinger, boolean significantMove) {
+    return Pref.getTouchpadTapHoldDrag()
+        && !isCursorLocked
+        && alwaysSingleFinger
+        && !significantMove
+        && upEvent.getAction() == MotionEvent.ACTION_UP
+        && (upEvent.getEventTime() - upEvent.getDownTime()) <= TAP_MAX_DURATION_MS;
+  }
+
+  // check if this ACTION_DOWN is the second half of a tap-hold-drag gesture.
+  private boolean _tryLatchDrag(MotionEvent down) {
+    if (gestureState.pendingTapReplay == null) {
+      return false;
+    }
+    long dt = down.getEventTime() - gestureState.lastTapUpTime;
+    if (dt < 0 || dt > doubleTapTimeout) {
+      return false;
+    }
+    float dx = down.getX() - gestureState.lastTapUpX;
+    float dy = down.getY() - gestureState.lastTapUpY;
+    if (dx * dx + dy * dy > touchSlop * touchSlop * 4) {
+      return false;
+    }
+    _cancelPendingTapReplay();
+    _recyclePendingTapEvents();
+    gestureState.initialTouchX = down.getX();
+    gestureState.initialTouchY = down.getY();
+    _armDragMode(down.getDownTime());
+    return true;
+  }
+
+  private void _armDragMode(long ignored) {
+    gestureState.dragLatched = true;
+    if (inputManager != null) {
+      long now = SystemClock.uptimeMillis();
+      gestureState.downTime = now;
+      ipcExecutor.execute(
+          () -> {
+            _injectMouseEvent(now, now, MotionEvent.ACTION_DOWN, 0, MotionEvent.BUTTON_PRIMARY);
+            _injectMouseEvent(
+                now,
+                now,
+                MotionEvent.ACTION_BUTTON_PRESS,
+                MotionEvent.BUTTON_PRIMARY,
+                MotionEvent.BUTTON_PRIMARY);
+          });
+    } else {
+      _startDragStroke();
+    }
+  }
+
+  private void _handleDragMove() {
+    if (inputManager != null) {
+      long down = gestureState.downTime;
+      long now = SystemClock.uptimeMillis();
+      ipcExecutor.execute(
+          () ->
+              _injectMouseEvent(down, now, MotionEvent.ACTION_MOVE, 0, MotionEvent.BUTTON_PRIMARY));
+    } else {
+      _continueDragStroke(false);
+    }
+  }
+
+  private void _endDragMode() {
+    if (!gestureState.dragLatched) {
+      return;
+    }
+    gestureState.dragLatched = false;
+    if (inputManager != null) {
+      long down = gestureState.downTime;
+      long now = SystemClock.uptimeMillis();
+      ipcExecutor.execute(
+          () -> {
+            _injectMouseEvent(
+                down, now, MotionEvent.ACTION_BUTTON_RELEASE, MotionEvent.BUTTON_PRIMARY, 0);
+            _injectMouseEvent(down, now, MotionEvent.ACTION_UP, 0, 0);
+          });
+    } else {
+      _continueDragStroke(true);
+    }
+  }
+
+  private void _injectMouseEvent(
+      long downTime, long eventTime, int action, int actionButton, int buttonState) {
+    MotionEvent.PointerProperties[] props = {new MotionEvent.PointerProperties()};
+    props[0].id = 0;
+    props[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+    MotionEvent.PointerCoords[] coords = {new MotionEvent.PointerCoords()};
+    coords[0].x = cursorX + halfWidth;
+    coords[0].y = cursorY + halfHeight;
+    MotionEvent event =
+        MotionEvent.obtain(
+            downTime,
+            eventTime,
+            action,
+            1,
+            props,
+            coords,
+            0,
+            buttonState,
+            1f,
+            1f,
+            0,
+            0,
+            InputDevice.SOURCE_MOUSE,
+            0);
+    MotionEventHidden hidden = Refine.unsafeCast(event);
+    hidden.setDisplayId(displayId);
+    if (action == MotionEvent.ACTION_BUTTON_PRESS || action == MotionEvent.ACTION_BUTTON_RELEASE) {
+      hidden.setActionButton(actionButton);
+    }
+    inputManager.injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC);
+    event.recycle();
+  }
+
+  private final AccessibilityService.GestureResultCallback dragStrokeCallback =
+      new AccessibilityService.GestureResultCallback() {
+        @Override
+        public void onCompleted(GestureDescription gestureDescription) {
+          mainHandler.post(TouchpadActivity.this::_onDragStrokeFinished);
+        }
+
+        @Override
+        public void onCancelled(GestureDescription gestureDescription) {
+          mainHandler.post(TouchpadActivity.this::_onDragStrokeFinished);
+        }
+      };
+
+  private void _startDragStroke() {
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (service == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+      return;
+    }
+    float x = Math.max(0, cursorX + halfWidth);
+    float y = Math.max(0, cursorY + halfHeight);
+    Path p = new Path();
+    p.moveTo(x, y);
+    p.lineTo(x + 0.1f, y);
+    gestureState.lastStrokeX = x + 0.1f;
+    gestureState.lastStrokeY = y;
+    gestureState.dragStroke =
+        new GestureDescription.StrokeDescription(p, 0, DRAG_SEGMENT_DURATION_MS, true);
+    GestureDescription.Builder b = new GestureDescription.Builder();
+    b.setDisplayId(displayId);
+    b.addStroke(gestureState.dragStroke);
+    service.setFocus(displayId);
+    gestureState.dragStrokeInFlight = true;
+    service.dispatchGesture(b.build(), dragStrokeCallback, mainHandler);
+  }
+
+  private void _continueDragStroke(boolean finalSegment) {
+    if (gestureState.dragStroke == null) {
+      return;
+    }
+    float toX = Math.max(0, cursorX + halfWidth);
+    float toY = Math.max(0, cursorY + halfHeight);
+    if (gestureState.dragStrokeInFlight) {
+      gestureState.pendingDragX = toX;
+      gestureState.pendingDragY = toY;
+      if (finalSegment) {
+        gestureState.dragEndPending = true;
+      }
+      return;
+    }
+    _dispatchDragSegment(toX, toY, !finalSegment);
+  }
+
+  @SuppressLint("NewApi")
+  private void _dispatchDragSegment(float toX, float toY, boolean willContinue) {
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (service == null || gestureState.dragStroke == null) {
+      return;
+    }
+    float fromX = gestureState.lastStrokeX;
+    float fromY = gestureState.lastStrokeY;
+    if (toX == fromX && toY == fromY) {
+      toX = fromX + 0.1f;
+    }
+    Path p = new Path();
+    p.moveTo(fromX, fromY);
+    p.lineTo(toX, toY);
+    GestureDescription.StrokeDescription next =
+        gestureState.dragStroke.continueStroke(p, 0, DRAG_SEGMENT_DURATION_MS, willContinue);
+    gestureState.lastStrokeX = toX;
+    gestureState.lastStrokeY = toY;
+    gestureState.dragStroke = willContinue ? next : null;
+    GestureDescription.Builder b = new GestureDescription.Builder();
+    b.setDisplayId(displayId);
+    b.addStroke(next);
+    gestureState.dragStrokeInFlight = true;
+    service.dispatchGesture(b.build(), willContinue ? dragStrokeCallback : null, mainHandler);
+  }
+
+  private void _onDragStrokeFinished() {
+    gestureState.dragStrokeInFlight = false;
+    if (gestureState.dragEndPending) {
+      gestureState.dragEndPending = false;
+      _dispatchDragSegment(gestureState.pendingDragX, gestureState.pendingDragY, false);
+      return;
+    }
+    if (gestureState.dragLatched) {
+      // keepalive: system drops the continuation if no follow-up arrives
+      _dispatchDragSegment(cursorX + halfWidth, cursorY + halfHeight, true);
+    }
+  }
+
+  private static void _injectKeyEvent(
+      IInputManager inputManager,
+      int displayId,
+      int action,
+      int keyCode,
+      int repeat,
+      int metaState,
+      int injectMode) {
+    setFocus(inputManager, displayId);
+    long now = SystemClock.uptimeMillis();
+    KeyEvent event =
+        new KeyEvent(
+            now,
+            now,
+            action,
+            keyCode,
+            repeat,
+            metaState,
+            KeyCharacterMap.VIRTUAL_KEYBOARD,
+            0,
+            0,
+            InputDevice.SOURCE_KEYBOARD);
+    KeyEventHidden eventHidden = Refine.unsafeCast(event);
+    eventHidden.setDisplayId(displayId);
+    inputManager.injectInputEvent(event, injectMode);
+  }
+
+  /**
+   * creates or repositions the transparent touchpad overlay.
+   *
+   * <p>the overlay is a TYPE_APPLICATION_OVERLAY with FLAG_NOT_FOCUSABLE, positioned exactly over
+   * the touchpadArea TextView; because it's FLAG_NOT_FOCUSABLE, touching the overlay never steals
+   * input focus from the virtual display - this prevents the IME on the virtual display from being
+   * dismissed when the user swipes.
+   *
+   * <p>called from touchpadArea's OnLayoutChangeListener, so it fires once when the layout is first
+   * measured (creating the overlay) and again on rotation/resize.
+   */
+  private void _syncTouchpadOverlay() {
+    int width = touchpadArea.getWidth();
+    int height = touchpadArea.getHeight();
+    if (width == 0 || height == 0) return;
+
+    int[] loc = new int[2];
+    touchpadArea.getLocationOnScreen(loc);
+
+    if (touchpadOverlay == null) {
+      // opt-in a11y-overlay path (see _showMouseCursor); must pair with the cursor
+      // path: app overlays on display 0 are hidden globally while settings is
+      // focused, which would freeze touch delivery and strand the a11y cursor.
+      if (Pref.getTouchpadAccessibilityOverlay()) {
+        TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+        if (service != null) {
+          View overlay =
+              service.addTouchOverlay(Display.DEFAULT_DISPLAY, loc[0], loc[1], width, height);
+          if (overlay != null) {
+            touchpadOverlay = overlay;
+            useAccessibilityTouchOverlay = true;
+            if (inputManager == null) {
+              _setupTouchListenerForAccessibility();
+            } else {
+              _setupTouchListenerForInputManager();
+            }
+            return;
+          }
+        }
+      }
+
+      touchpadOverlay = new View(this);
+      // FLAG_ALT_FOCUSABLE_IM: touchpad overlay (on display 0) claiming IME-focusable lets the IME
+      // layer go above it on the phone, which allows the phone-side keyboard appear for inputs on
+      // the cast display
+      WindowManager.LayoutParams params =
+          new WindowManager.LayoutParams(
+              width,
+              height,
+              WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+              WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                  | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+                  // screen coords to match getLocationOnScreen, else offset by status bar
+                  | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+              PixelFormat.TRANSLUCENT);
+      params.gravity = Gravity.TOP | Gravity.START;
+      params.x = loc[0];
+      params.y = loc[1];
+
+      WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+      wm.addView(touchpadOverlay, params);
+
+      if (inputManager == null) {
+        _setupTouchListenerForAccessibility();
+      } else {
+        _setupTouchListenerForInputManager();
+      }
+      return;
+    }
+
+    if (useAccessibilityTouchOverlay) {
+      TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+      if (service != null) {
+        service.updateTouchOverlayBounds(loc[0], loc[1], width, height);
+      }
+      return;
+    }
+
+    WindowManager.LayoutParams params =
+        (WindowManager.LayoutParams) touchpadOverlay.getLayoutParams();
+    if (params.x == loc[0]
+        && params.y == loc[1]
+        && params.width == width
+        && params.height == height) {
+      return;
+    }
+    params.x = loc[0];
+    params.y = loc[1];
+    params.width = width;
+    params.height = height;
+    WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+    wm.updateViewLayout(touchpadOverlay, params);
+  }
+
+  private void _showMouseCursor(Display targetDisplay) {
+    // opt-in TYPE_ACCESSIBILITY_OVERLAY path: app overlays are hidden over system
+    // settings and other secure screens, but accessibility overlays stay visible.
+    // off by default because routing touches through the a11y input filter makes
+    // multi-touch gestures slightly less responsive.
+    if (Pref.getTouchpadAccessibilityOverlay()) {
+      TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+      if (service != null && service.showCursor(displayId, R.drawable.mouse_cursor)) {
+        useAccessibilityCursor = true;
+        return;
+      }
+    }
+
+    cursorParams =
+        new WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT);
+
+    cursorParams.x = 0;
+    cursorParams.y = 0;
+
+    cursorView = new ImageView(this);
+    cursorView.setImageResource(R.drawable.mouse_cursor);
+
+    Context displayContext = createDisplayContext(targetDisplay);
+    WindowManager windowManager =
+        (WindowManager) displayContext.getSystemService(Context.WINDOW_SERVICE);
+
+    try {
+      windowManager.addView(cursorView, cursorParams);
+    } catch (Exception e) {
+      Toast.makeText(this, getString(R.string.show_cursor_failed), Toast.LENGTH_SHORT).show();
+      Log.e(TAG, "failed to show cursor: " + e.getMessage());
+    }
+  }
+
+  private void _updateCursorPosition(float deltaX, float deltaY) {
+    cursorX += deltaX * sensitivity;
+    cursorY += deltaY * sensitivity;
+
+    if (cursorX < -halfWidth
+        || cursorX > halfWidth
+        || cursorY < -halfHeight
+        || cursorY > halfHeight) {
+      Log.w(TAG, "cursor out of bounds - position: (" + cursorX + ", " + cursorY + ")");
+    }
+
+    cursorX = Math.max(-halfWidth, Math.min(cursorX, halfWidth));
+    cursorY = Math.max(-halfHeight, Math.min(cursorY, halfHeight));
+
+    if (useAccessibilityCursor) {
+      TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+      if (service != null) {
+        service.updateCursorPosition((int) cursorX, (int) cursorY);
+      }
+      return;
+    }
+
+    if (cursorView != null && cursorParams != null) {
+      cursorParams.x = (int) cursorX;
+      cursorParams.y = (int) cursorY;
+      WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+      try {
+        windowManager.updateViewLayout(cursorView, cursorParams);
+      } catch (Exception e) {
+        Log.e(TAG, "failed to update cursor: " + e.getMessage());
+      }
+    }
+  }
+
+  private void _setCursorVisible(boolean visible) {
+    if (useAccessibilityCursor) {
+      TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+      if (service != null) {
+        service.setCursorVisible(visible);
+      }
+      return;
+    }
+    if (cursorView != null) {
+      cursorView.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+  }
+
+  public static void performBackGesture(IInputManager inputManager, int displayId) {
+    new Thread(() -> _performBackGestureSync(inputManager, displayId)).start();
+  }
+
+  private static void _performBackGestureSync(IInputManager inputManager, int displayId) {
+    TouchpadAccessibilityService accessibilityService = TouchpadAccessibilityService.getInstance();
+    if (inputManager != null && _trySetTaskFocus(displayId)) {
+      _injectKeyEvent(
+          inputManager,
+          displayId,
+          KeyEvent.ACTION_DOWN,
+          KeyEvent.KEYCODE_BACK,
+          0,
+          0,
+          INJECT_INPUT_EVENT_MODE_ASYNC);
+      _injectKeyEvent(
+          inputManager,
+          displayId,
+          KeyEvent.ACTION_UP,
+          KeyEvent.KEYCODE_BACK,
+          0,
+          0,
+          INJECT_INPUT_EVENT_MODE_ASYNC);
+      return;
+    }
+    if (accessibilityService != null) {
+      accessibilityService.performBackGesture(displayId);
+    } else if (inputManager != null) {
+      _injectKeyEvent(
+          inputManager,
+          displayId,
+          KeyEvent.ACTION_DOWN,
+          KeyEvent.KEYCODE_BACK,
+          0,
+          0,
+          INJECT_INPUT_EVENT_MODE_ASYNC);
+      _injectKeyEvent(
+          inputManager,
+          displayId,
+          KeyEvent.ACTION_UP,
+          KeyEvent.KEYCODE_BACK,
+          0,
+          0,
+          INJECT_INPUT_EVENT_MODE_ASYNC);
+    }
+  }
+
+  private void _toggleNightMode() {
+    isNightModeEnabled = !isNightModeEnabled;
+    _applyNightMode();
+  }
+
+  private void _applyNightMode() {
+    _applyNightModeSurface(touchpadRoot, defaultRootBackground);
+    _applyNightModeSurface(topBar, defaultTopBarBackground);
+    _applyNightModeSurface(bottomButtons, defaultBottomButtonsBackground);
+    if (touchpadArea != null) {
+      touchpadArea.setBackgroundResource(
+          isNightModeEnabled
+              ? R.drawable.touchpad_background_night
+              : R.drawable.touchpad_background);
+    }
+    if (scrollStrip != null) {
+      scrollStrip.setBackgroundResource(
+          isNightModeEnabled
+              ? R.drawable.scroll_track_background_night
+              : R.drawable.scroll_track_background);
+    }
+    _applyStatusBarVisibility();
+    if (isNightModeEnabled) {
+      int nightColor = getColor(R.color.touchpad_night_button);
+      ColorStateList nightTint = ColorStateList.valueOf(nightColor);
+      ColorStateList nightIconTint =
+          ColorStateList.valueOf(getColor(R.color.touchpad_night_button_icon));
+      for (MaterialButton button : nightModeButtonTints.keySet()) {
+        if (button.getIcon() == null) {
+          button.setBackground(new ColorDrawable(nightColor));
+        } else {
+          button.setBackgroundTintList(nightTint);
+          button.setIconTint(nightIconTint);
+        }
+      }
+    } else {
+      for (Map.Entry<MaterialButton, ColorStateList> entry : nightModeButtonTints.entrySet()) {
+        MaterialButton button = entry.getKey();
+        if (button.getIcon() == null) {
+          button.setBackground(nightModeTextButtonBackgrounds.get(button));
+        } else {
+          button.setBackgroundTintList(entry.getValue());
+          button.setIconTint(nightModeButtonIconTints.get(button));
+        }
+      }
+    }
+    _updateHelp();
+  }
+
+  private void _applyStatusBarVisibility() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      WindowInsetsController controller = getWindow().getInsetsController();
+      if (controller == null) {
+        return;
+      }
+      if (isNightModeEnabled) {
+        controller.hide(WindowInsets.Type.statusBars());
+        controller.setSystemBarsBehavior(
+            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+      } else {
+        controller.show(WindowInsets.Type.statusBars());
+      }
+    } else {
+      View decorView = getWindow().getDecorView();
+      int systemUiFlags = decorView.getSystemUiVisibility();
+      if (isNightModeEnabled) {
+        systemUiFlags |= View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+      } else {
+        systemUiFlags &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
+        systemUiFlags &= ~View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+      }
+      decorView.setSystemUiVisibility(systemUiFlags);
+    }
+  }
+
+  private void _registerNightModeButton(MaterialButton button) {
+    if (button != null) {
+      nightModeButtonTints.put(button, button.getBackgroundTintList());
+      nightModeButtonIconTints.put(button, button.getIconTint());
+      if (button.getIcon() == null) {
+        nightModeTextButtonBackgrounds.put(button, button.getBackground());
+      }
+    }
+  }
+
+  private void _applyNightModeSurface(View target, Drawable defaultBackground) {
+    if (target == null) {
+      return;
+    }
+    if (isNightModeEnabled) {
+      target.setBackgroundColor(getColor(R.color.touchpad_night_surface));
+    } else {
+      target.setBackground(defaultBackground);
+    }
+  }
+
+  private void _setupScrollStrip() {
+    scrollStrip = findViewById(R.id.scroll_strip);
+    final float[] lastY = {0};
+    scrollStrip.setOnTouchListener(
+        (v, event) -> {
+          switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+              lastY[0] = event.getY();
+              ipcExecutor.execute(() -> setFocus(inputManager, displayId));
+              return true;
+            case MotionEvent.ACTION_MOVE:
+              float delta = event.getY() - lastY[0];
+              if (Math.abs(delta) > 5) {
+                float scroll = -delta / 50f;
+                ipcExecutor.execute(() -> _injectScroll(scroll));
+                lastY[0] = event.getY();
+              }
+              return true;
+          }
+          return false;
+        });
+  }
+
+  private void _injectScroll(float scrollAmount) {
+    if (inputManager != null) {
+      long now = SystemClock.uptimeMillis();
+      MotionEvent.PointerProperties[] props = {new MotionEvent.PointerProperties()};
+      props[0].id = 0;
+      props[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+      MotionEvent.PointerCoords[] coords = {new MotionEvent.PointerCoords()};
+      coords[0].x = cursorX + halfWidth;
+      coords[0].y = cursorY + halfHeight;
+      coords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, scrollAmount);
+      MotionEvent event =
+          MotionEvent.obtain(
+              now,
+              now,
+              MotionEvent.ACTION_SCROLL,
+              1,
+              props,
+              coords,
+              0,
+              0,
+              1f,
+              1f,
+              0,
+              0,
+              InputDevice.SOURCE_MOUSE,
+              0);
+      MotionEventHidden eventHidden = Refine.unsafeCast(event);
+      eventHidden.setDisplayId(displayId);
+      inputManager.injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC);
+      event.recycle();
+      return;
+    }
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (service != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      GestureDescription.Builder builder = new GestureDescription.Builder();
+      builder.setDisplayId(displayId);
+      float startY = halfHeight - scrollAmount * 100;
+      float endY = halfHeight + scrollAmount * 100;
+      Path path = new Path();
+      path.moveTo(halfWidth, Math.max(0, startY));
+      path.lineTo(halfWidth, Math.max(0, endY));
+      builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 200));
+      service.setFocus(displayId);
+      service.dispatchGesture(builder.build(), null, null);
+    }
+  }
+
+  private static boolean _trySetTaskFocus(int displayId) {
+    try {
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        ServiceUtils.getActivityTaskManager().focusTopTask(displayId);
+        return true;
+      }
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        List<ActivityTaskManager.RootTaskInfo> taskInfos =
+            ServiceUtils.getActivityTaskManager().getAllRootTaskInfosOnDisplay(displayId);
+        for (ActivityTaskManager.RootTaskInfo taskInfo : taskInfos) {
+          ServiceUtils.getActivityTaskManager().setFocusedRootTask(taskInfo.taskId);
+          return true;
+        }
+        return false;
+      }
+      List<Object> stackInfos =
+          ServiceUtils.getActivityTaskManager().getAllStackInfosOnDisplay(displayId);
+      if (!stackInfos.isEmpty()) {
+        Object stackInfo = stackInfos.get(0);
+        Field stackIdField = stackInfo.getClass().getDeclaredField("stackId");
+        stackIdField.setAccessible(true);
+        int stackId = stackIdField.getInt(stackInfo);
+        ServiceUtils.getActivityTaskManager().setFocusedStack(stackId);
+        return true;
+      }
+    } catch (Throwable e) {
+      Log.e(TAG, "failed to set task focus", e);
+    }
+    return false;
+  }
+
+  public static boolean setFocus(IInputManager inputManager, int displayId) {
+    if (inputManager != null && _trySetTaskFocus(displayId)) {
+      return true;
+    }
+    try {
+      TouchpadAccessibilityService accessibilityService =
+          TouchpadAccessibilityService.getInstance();
+      if (accessibilityService != null) {
+        return accessibilityService.setFocus(displayId);
+      }
+    } catch (Throwable e) {
+      Log.e(TAG, "failed to set focus", e);
+    }
+    return false;
+  }
+
+  @Override
+  protected void onDestroy() {
+    if (activeInstance == this) activeInstance = null;
+    super.onDestroy();
+    _cancelPendingTapReplay();
+    _recyclePendingTapEvents();
+    if (gestureState.dragLatched) {
+      _endDragMode();
+    }
+    ipcExecutor.shutdown();
+    WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (useAccessibilityTouchOverlay) {
+      if (service != null) {
+        service.removeTouchOverlay();
+      }
+    } else if (touchpadOverlay != null && touchpadOverlay.getWindowToken() != null) {
+      wm.removeView(touchpadOverlay);
+    }
+    if (useAccessibilityCursor) {
+      if (service != null) {
+        service.hideCursor();
+      }
+    } else if (cursorView != null && cursorView.getWindowToken() != null) {
+      wm.removeView(cursorView);
+    }
+  }
+
+  private MotionEvent _obtainMotionEventWithOffset(
+      MotionEvent source, float offsetX, float offsetY) {
+    int pointerCount = source.getPointerCount();
+
+    MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[pointerCount];
+    MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[pointerCount];
+
+    for (int i = 0; i < pointerCount; i++) {
+      properties[i] = new MotionEvent.PointerProperties();
+      source.getPointerProperties(i, properties[i]);
+
+      coords[i] = new MotionEvent.PointerCoords();
+      source.getPointerCoords(i, coords[i]);
+      coords[i].x += offsetX;
+      coords[i].y += offsetY;
+    }
+
+    return MotionEvent.obtain(
+        source.getDownTime(),
+        source.getEventTime(),
+        source.getAction(),
+        pointerCount,
+        properties,
+        coords,
+        source.getMetaState(),
+        source.getButtonState(),
+        source.getXPrecision(),
+        source.getYPrecision(),
+        0,
+        source.getEdgeFlags(),
+        source.getSource(),
+        source.getFlags());
+  }
+
+  private void _setupModeSpinner() {
+    ArrayAdapter<String> adapter =
+        new ArrayAdapter<>(
+            this,
+            android.R.layout.simple_spinner_item,
+            new String[] {getString(R.string.mode_normal), getString(R.string.mode_cursor_locked)});
+    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+    modeSpinner.setAdapter(adapter);
+
+    modeSpinner.setOnItemSelectedListener(
+        new AdapterView.OnItemSelectedListener() {
+          @Override
+          public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            switch (position) {
+              case MODE_NORMAL:
+                isCursorLocked = false;
+                _setCursorVisible(true);
+                break;
+              case MODE_CURSOR_LOCKED:
+                isCursorLocked = true;
+                _setCursorVisible(false);
+                break;
+            }
+            _updateHelp();
+          }
+
+          @Override
+          public void onNothingSelected(AdapterView<?> parent) {
+            // no-op
+          }
+        });
+  }
+
+  @Override
+  protected void onPause() {
+    super.onPause();
+    // hide only; do not remove from WindowManager. The overlay carries
+    // FLAG_ALT_FOCUSABLE_IM, which is what gives the phone an IME layering
+    // surface for inputs on the cast display; removing it on pause kills
+    // cross-display IME until the activity is resumed.
+    if (touchpadOverlay != null) touchpadOverlay.setVisibility(View.GONE);
+    _setCursorVisible(false);
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    if (touchpadOverlay != null) touchpadOverlay.setVisibility(View.VISIBLE);
+    if (!isCursorLocked) _setCursorVisible(true);
+  }
+
+  private static final int[] ORIENTATIONS = {
+    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+    ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT,
+    ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+  };
+
+  private void _applyRotation() {
+    setRequestedOrientation(ORIENTATIONS[rotation]);
+  }
+
+  @Override
+  protected void onSaveInstanceState(Bundle outState) {
+    super.onSaveInstanceState(outState);
+    outState.putInt("rotation", rotation);
+    outState.putBoolean("night_mode_enabled", isNightModeEnabled);
+  }
+
+  private void _switchMode() {
+    int currentMode = modeSpinner.getSelectedItemPosition();
+    int nextMode = (currentMode + 1) % modeSpinner.getCount();
+    modeSpinner.setSelection(nextMode);
+  }
+
+  private void _replayGestureViaAccessibility() {
+    TouchpadAccessibilityService service = TouchpadAccessibilityService.getInstance();
+    if (service == null
+        || gestureState.allMotionEvents.isEmpty()
+        || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+      return;
+    }
+
+    SparseArray<StrokePoint> startPoints = new SparseArray<>();
+    SparseArray<StrokePoint> endPoints = new SparseArray<>();
+    long baseTime = gestureState.allMotionEvents.get(0).getDownTime();
+
+    for (MotionEvent event : gestureState.allMotionEvents) {
+      int action = event.getActionMasked();
+      int pointerIndex = event.getActionIndex();
+
+      switch (action) {
+        case MotionEvent.ACTION_DOWN:
+        case MotionEvent.ACTION_POINTER_DOWN:
+          int pointerId = event.getPointerId(pointerIndex);
+          startPoints.put(
+              pointerId,
+              new StrokePoint(
+                  Math.max(0, event.getX(pointerIndex)),
+                  Math.max(0, event.getY(pointerIndex)),
+                  event.getEventTime() - baseTime));
+          break;
+
+        case MotionEvent.ACTION_UP:
+        case MotionEvent.ACTION_POINTER_UP:
+          pointerId = event.getPointerId(pointerIndex);
+          endPoints.put(
+              pointerId,
+              new StrokePoint(
+                  Math.max(0, event.getX(pointerIndex)),
+                  Math.max(0, event.getY(pointerIndex)),
+                  event.getEventTime() - baseTime));
+          break;
+
+        case MotionEvent.ACTION_MOVE:
+          for (int i = 0; i < event.getPointerCount(); i++) {
+            pointerId = event.getPointerId(i);
+            endPoints.put(
+                pointerId,
+                new StrokePoint(
+                    Math.max(0, event.getX(i)),
+                    Math.max(0, event.getY(i)),
+                    event.getEventTime() - baseTime));
+          }
+          break;
+      }
+    }
+
+    GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
+    gestureBuilder.setDisplayId(displayId);
+
+    for (int i = 0; i < startPoints.size(); i++) {
+      int pointerId = startPoints.keyAt(i);
+      StrokePoint start = startPoints.get(pointerId);
+      StrokePoint end = endPoints.get(pointerId);
+
+      if (end == null) {
+        end = start;
+      }
+
+      Path strokePath = new Path();
+      strokePath.moveTo(start.x, start.y);
+      strokePath.lineTo(end.x, end.y);
+
+      long duration = end.time - start.time;
+      if (duration <= 0) duration = 100;
+
+      gestureBuilder.addStroke(
+          new GestureDescription.StrokeDescription(strokePath, start.time, duration, false));
+    }
+
+    if (startPoints.size() > 0) {
+      GestureDescription gestureDescription = gestureBuilder.build();
+      service.setFocus(displayId);
+      service.dispatchGesture(gestureDescription, null, null);
+    }
+  }
+}

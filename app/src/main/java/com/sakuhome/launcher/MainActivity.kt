@@ -864,6 +864,7 @@ class MainActivity : Activity() {
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
+            "▣  Display Extend · Virtual Display",
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -898,6 +899,13 @@ class MainActivity : Activity() {
                     17 -> {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
                         buildScreen()
+                    }
+                    18 -> {
+                        try {
+                            startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Display Extend belum bisa dibuka: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }.setNegativeButton("Selesai", null).show()
