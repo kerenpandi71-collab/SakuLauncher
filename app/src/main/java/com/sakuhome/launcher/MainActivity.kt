@@ -365,7 +365,7 @@ class MainActivity : Activity() {
         val occupied = mutableListOf<Pair<Int, Int>>()
 
         pageApps.forEachIndexed { index, app ->
-            val cell = pinnedAdapter.getView(index.coerceAtMost(allApps.lastIndex), null, canvas)
+            val cell = pinnedAdapter.getViewForApp(app, canvas)
             cell.visibility = View.VISIBLE
             cell.alpha = 1f
             cell.isEnabled = true
@@ -3194,6 +3194,36 @@ class MainActivity : Activity() {
         override fun getItem(position: Int): LaunchableApp = items[position]
         override fun getItemId(position: Int): Long = items[position].packageName.hashCode().toLong()
         fun getItemOrNull(position: Int): LaunchableApp? = items.getOrNull(position)
+
+        fun getViewForApp(app: LaunchableApp, parent: ViewGroup): View {
+            val index = items.indexOfFirst { it.packageName == app.packageName }
+            return if (index >= 0) getView(index, null, parent) else createHomeFallbackCell(app, parent)
+        }
+
+        private fun createHomeFallbackCell(app: LaunchableApp, parent: ViewGroup): View {
+            val cell = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(4), dp(6), dp(4), dp(6))
+                background = ColorDrawable(Color.TRANSPARENT)
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (hideLabels) iconSizeDp + 14 else iconSizeDp + 36))
+                addView(ImageView(context).apply {
+                    setImageDrawable(app.icon)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }, LinearLayout.LayoutParams(dp(iconSizeDp), dp(iconSizeDp)))
+                if (!hideLabels) addView(TextView(context).apply {
+                    text = app.label
+                    textSize = 10.5f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(primaryText)
+                }, LinearLayout.LayoutParams(-1, -2))
+            }
+            cell.setOnClickListener { launch(app) }
+            cell.setOnLongClickListener { showAppMenu(app); true }
+            return cell
+        }
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
