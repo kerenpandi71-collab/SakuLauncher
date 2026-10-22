@@ -1552,9 +1552,50 @@ class MainActivity : Activity() {
             "SakuTube · YouTube di dalam aplikasi",
             "Baca log error untuk analisis"
         )
-        AlertDialog.Builder(this).setTitle("Saku Launcher")
-            .setItems(options) { _, which ->
-                when (which) {
+        val dialogView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            background = rounded(backgroundTop, 24)
+        }
+        dialogView.addView(TextView(this).apply {
+            text = "Personalisasi launcher"; textSize = 21f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText); setPadding(dp(4), dp(4), dp(4), dp(2))
+        })
+        dialogView.addView(TextView(this).apply {
+            text = "Tampilan iOS · Dock · Ikon · Wallpaper"; textSize = 12f
+            setTextColor(secondaryText); setPadding(dp(4), 0, dp(4), dp(12))
+        })
+        val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val glyphs = listOf("◐","▦","▱","▤","◌","◍","✦","▣","▰","↻","⇥","▧","⌫","⌂","◉","●","↕","⏻","◉","ⓘ","▶","≡")
+        options.forEachIndexed { index, label ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(10), dp(10), dp(10)); background = rounded(cardSurface, 17)
+                isClickable = true; isFocusable = true
+                setOnClickListener { performSettingsAction(index) }
+            }
+            row.addView(TextView(this).apply {
+                text = glyphs[index]; textSize = 19f; gravity = Gravity.CENTER; setTextColor(accent)
+                background = rounded(dockSurface, 12)
+            }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            row.addView(TextView(this).apply {
+                text = label; textSize = 13.5f; setTextColor(primaryText); gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(4), 0); maxLines = 2
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(this).apply { text = "›"; textSize = 23f; setTextColor(secondaryText) })
+            rows.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        }
+        scroll.addView(rows)
+        dialogView.addView(scroll, LinearLayout.LayoutParams(-1, dp(440)))
+        val settingsDialog = AlertDialog.Builder(this).setView(dialogView).setNegativeButton("Tutup", null).create()
+        settingsDialog.show()
+        settingsDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+    }
+
+    private fun performSettingsAction(which: Int) {
+        when (which) {
                     0 -> toggleTheme()
                     1 -> { val v = preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false); preferences.edit().putBoolean(KEY_APP_DRAWER_ENABLED, !v).apply(); buildScreen() }
                     2 -> { val v = preferences.getBoolean(KEY_HOME_DOCK_VISIBLE, true); preferences.edit().putBoolean(KEY_HOME_DOCK_VISIBLE, !v).apply(); buildScreen() }
@@ -1606,8 +1647,8 @@ class MainActivity : Activity() {
                     19 -> showPermissionInfo()
                     20 -> openYouTubeWeb()
                     21 -> showDiagnosticLog()
-                }
-            }.setNegativeButton("Tutup", null).show()
+        }
+    }
     }
 
     private fun openYouTubeWeb() {
