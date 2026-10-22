@@ -1497,9 +1497,14 @@ class MainActivity : Activity() {
         }
         if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         val dock = buildDock().apply { tag = "saku_home_dock" }
-        rootFrame.addView(dock, FrameLayout.LayoutParams(
+        val dockParams = FrameLayout.LayoutParams(
             dp(currentDockWidth()), dp(dockHeightDp), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        ).apply { bottomMargin = dp(18) })
+        ).apply { bottomMargin = dp(18) }
+        // Keep the dock above the desktop shell but below the app drawer.
+        val drawerIndex = if (::startPanel.isInitialized && startPanel.parent === rootFrame) {
+            rootFrame.indexOfChild(startPanel)
+        } else rootFrame.childCount
+        rootFrame.addView(dock, drawerIndex, dockParams)
     }
 
     private fun rebuildPinnedViews() {
