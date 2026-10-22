@@ -343,7 +343,8 @@ class MainActivity : Activity() {
         val actualColumns = minOf(columns, maxOf(1, availableWidth / cellWidth))
         val rowsPerPage = maxOf(1, availableHeight / cellHeight)
         val pageCapacity = actualColumns * rowsPerPage
-        val requiredPages = maxOf(1, kotlin.math.ceil(allApps.size.toDouble() / pageCapacity).toInt())
+        val drawerEnabled = preferences.getBoolean(KEY_APP_DRAWER_ENABLED, false)
+        val requiredPages = if (drawerEnabled) homePageCount() else maxOf(1, kotlin.math.ceil(allApps.size.toDouble() / pageCapacity).toInt())
 
         // Grow the home-page count when the installed app list needs more pages.
         // Existing pages are never removed, so user-created pages and shortcuts remain intact.
@@ -358,7 +359,7 @@ class MainActivity : Activity() {
         homePage = homePage.coerceIn(0, homePageCount() - 1)
         homePageLabel?.text = "${homePage + 1} / ${homePageCount()}"
 
-        val pageApps = allApps.drop(homePage * pageCapacity).take(pageCapacity)
+        val pageApps = if (drawerEnabled) allApps else allApps.drop(homePage * pageCapacity).take(pageCapacity)
         val positions = homeIconPositions()
         val maxLeft = (availableWidth - cellWidth).coerceAtLeast(0)
         val maxTop = (availableHeight - cellHeight).coerceAtLeast(0)
