@@ -5,6 +5,7 @@ on:
       - work/integrate-display-extend
     paths:
       - ".github/workflows/integrate-display-extend.yml"
+      - "tools/integrate_display_extend.sh"
   workflow_dispatch:
 permissions:
   contents: write
