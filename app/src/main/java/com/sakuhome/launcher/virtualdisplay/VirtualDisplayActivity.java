@@ -304,12 +304,12 @@ public class VirtualDisplayActivity extends Activity {
 
         // Reliable fallback: Android reports overlay IDs in DisplayViewport on this ROM.
         java.util.regex.Matcher viewport = java.util.regex.Pattern
-            .compile("DisplayViewport\\\\{([^}]*)\\\\}").matcher(dump);
+            .compile("DisplayViewport\\{([^}]*)\\}").matcher(dump);
         while (viewport.find()) {
             String block = viewport.group(1);
             if (!block.contains("uniqueId='overlay:") && !block.contains("type=VIRTUAL")) continue;
             java.util.regex.Matcher id = java.util.regex.Pattern
-                .compile("(?i)\\\\bdisplayId\\\\s*=\\\\s*(\\\\d+)").matcher(block);
+                .compile("(?i)\\bdisplayId\\s*=\\s*(\\d+)").matcher(block);
             if (id.find()) {
                 try { return Integer.parseInt(id.group(1)); }
                 catch (NumberFormatException ignored) { }
