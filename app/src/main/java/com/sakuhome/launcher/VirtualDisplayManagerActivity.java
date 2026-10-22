@@ -3,6 +3,7 @@ package com.sakuhome.launcher;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -27,11 +28,16 @@ public class VirtualDisplayManagerActivity extends Activity {
         width=field("Lebar (px)","900"); height=field("Tinggi (px)","900"); dpi=field("DPI","240");
         root.addView(width); root.addView(height); root.addView(dpi);
         LinearLayout presets=new LinearLayout(this); presets.setOrientation(0);
-        presets.addView(button("800×800",v->setPreset(800,800,240)),new LinearLayout.LayoutParams(0,-2,1));
-        presets.addView(button("900×900",v->setPreset(900,900,240)),new LinearLayout.LayoutParams(0,-2,1));
+        presets.addView(button("1280×720",v->setPreset(1280,720,240)),new LinearLayout.LayoutParams(0,-2,1));
+        presets.addView(button("1600×900",v->setPreset(1600,900,240)),new LinearLayout.LayoutParams(0,-2,1));
         presets.addView(button("1920×1080",v->setPreset(1920,1080,240)),new LinearLayout.LayoutParams(0,-2,1)); root.addView(presets);
+        LinearLayout squarePresets=new LinearLayout(this); squarePresets.setOrientation(0);
+        squarePresets.addView(button("800×800",v->setPreset(800,800,240)),new LinearLayout.LayoutParams(0,-2,1));
+        squarePresets.addView(button("900×900",v->setPreset(900,900,240)),new LinearLayout.LayoutParams(0,-2,1));
+        root.addView(squarePresets);
         root.addView(button("Terapkan overlay",v->applyOverlay()));
         root.addView(button("Baca status display",v->runAsync("settings get global overlay_display_devices; dumpsys display")));
+        root.addView(button("Buka Trackpad Virtual Display",v->openTrackpad()));
         root.addView(button("Pulihkan konfigurasi sebelumnya",v->restoreOverlay()));
         root.addView(button("Hapus overlay display",v->confirmRemove()));
         status=new TextView(this); status.setTextColor(0xffe4ebf5); status.setTextIsSelectable(true); status.setPadding(0,dp(12),0,0); root.addView(status,new LinearLayout.LayoutParams(-1,-2));
@@ -52,6 +58,16 @@ public class VirtualDisplayManagerActivity extends Activity {
             Result result=exec("settings put global overlay_display_devices "+quote(w+"x"+h+"/"+d)+" && settings get global overlay_display_devices");
             showStatus(result.code==0?"Setting overlay diterapkan: "+result.out:"Gagal menerapkan (kode "+result.code+"): "+result.out);
           },"apply-overlay").start()).show();
+    }
+    private void openTrackpad(){
+        try {
+            Intent intent = new Intent();
+            intent.setClassName(getPackageName(), "com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity");
+            intent.putExtra("displayId", -999);
+            startActivity(intent);
+        } catch (Exception e) {
+            error("Trackpad belum dapat dibuka: "+e.getMessage());
+        }
     }
     private void restoreOverlay(){
         if(!prefs.getBoolean(SAVED,false)){error("Belum ada konfigurasi sebelumnya yang dicadangkan.");return;}
