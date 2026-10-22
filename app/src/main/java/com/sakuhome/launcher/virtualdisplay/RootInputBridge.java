@@ -8,6 +8,8 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.lang.reflect.Method;
 
 /**
@@ -21,6 +23,11 @@ public final class RootInputBridge {
     private static Method setDisplayId;
     private static Method setButtonState;
     private static long dragDownTime;
+    private static final LinkedHashMap<Integer, TouchPoint> activeTouches = new LinkedHashMap<>();
+    private static final class TouchPoint {
+        float x, y;
+        TouchPoint(float x, float y) { this.x=x; this.y=y; }
+    }
 
     private RootInputBridge() { }
 
@@ -92,6 +99,14 @@ public final class RootInputBridge {
         if (parts.length < 2) throw new IllegalArgumentException("format perintah tidak lengkap");
         String action = parts[0];
         int displayId = Integer.parseInt(parts[1]);
+        if ("TOUCH".equals(action)) {
+            if (parts.length < 6) throw new IllegalArgumentException("format TOUCH display pointerId DOWN|MOVE|UP x y");
+            int pointerId = Integer.parseInt(parts[2]);
+            String phase = parts[3].toUpperCase(java.util.Locale.ROOT);
+            float tx = Float.parseFloat(parts[4]), ty = Float.parseFloat(parts[5]);
+            injectTouch(displayId, pointerId, phase, tx, ty);
+            return;
+        }
         if ("KEY".equals(action)) {
             if (parts.length < 3) throw new IllegalArgumentException("format KEY display HOME|BACK");
             injectKey(displayId, "HOME".equalsIgnoreCase(parts[2]) ? KeyEvent.KEYCODE_HOME : KeyEvent.KEYCODE_BACK);
@@ -133,6 +148,49 @@ public final class RootInputBridge {
         } else {
             throw new IllegalArgumentException("aksi tidak dikenal: " + action);
         }
+    }
+
+
+    /** Injects a multi-pointer touchscreen stream to a specific display. */
+    private static void injectTouch(int displayId, int pointerId, String phase, float x, float y) throws Exception {
+        if (pointerId < 0 || pointerId > 31 || !Float.isFinite(x) || !Float.isFinite(y))
+            throw new IllegalArgumentException("pointer/coordinates invalid");
+        boolean exists = activeTouches.containsKey(pointerId);
+        if ("DOWN".equals(phase)) {
+            if (exists) throw new IllegalStateException("pointer already down: " + pointerId);
+            activeTouches.put(pointerId, new TouchPoint(x, y));
+        } else {
+            if (!exists) throw new IllegalStateException("pointer not down: " + pointerId);
+            activeTouches.get(pointerId).x=x; activeTouches.get(pointerId).y=y;
+        }
+        int index=0, targetIndex=-1;
+        MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[activeTouches.size()];
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[activeTouches.size()];
+        for (Map.Entry<Integer,TouchPoint> entry : activeTouches.entrySet()) {
+            MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+            pp.id=entry.getKey(); pp.toolType=MotionEvent.TOOL_TYPE_FINGER; properties[index]=pp;
+            MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+            pc.x=entry.getValue().x; pc.y=entry.getValue().y; pc.pressure=1f; pc.size=1f; coords[index]=pc;
+            if (entry.getKey()==pointerId) targetIndex=index;
+            index++;
+        }
+        int action;
+        if ("DOWN".equals(phase)) action = activeTouches.size()==1 ? MotionEvent.ACTION_DOWN :
+            MotionEvent.ACTION_POINTER_DOWN | (targetIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+        else if ("MOVE".equals(phase)) action=MotionEvent.ACTION_MOVE;
+        else if ("UP".equals(phase)) action=activeTouches.size()==1 ? MotionEvent.ACTION_UP :
+            MotionEvent.ACTION_POINTER_UP | (targetIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+        else throw new IllegalArgumentException("phase harus DOWN/MOVE/UP");
+        long now=SystemClock.uptimeMillis();
+        MotionEvent event=MotionEvent.obtain(now,now,action,properties.length,properties,coords,
+            0,0,1f,1f,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
+        try {
+            setDisplayId.invoke(event,displayId);
+            Object result=injectInputEvent.invoke(inputManager,event,INJECT_ASYNC);
+            if (!(result instanceof Boolean) || !((Boolean)result))
+                throw new IllegalStateException("IInputManager menolak TOUCH display="+displayId+" action="+action);
+        } finally { event.recycle(); }
+        if ("UP".equals(phase)) activeTouches.remove(pointerId);
     }
 
     private static void injectKey(int displayId, int keyCode) throws Exception {
