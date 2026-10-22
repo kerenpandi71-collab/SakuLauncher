@@ -21,6 +21,10 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 import java.util.Locale;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 
 /** Persistent configurable gamepad overlay. Mapping is saved per orientation. */
 public final class GamePadOverlayService extends Service {
@@ -35,6 +39,11 @@ public final class GamePadOverlayService extends Service {
     private final String[] labels = {"MOVE","ATTACK","SKILL 1","SKILL 2","SKILL 3","ULT","SPELL","RECALL","REGEN","SHOP","TARGET","EXTRA"};
     private final float[][] defaults = {{.14f,.72f},{.88f,.78f},{.76f,.55f},{.83f,.43f},{.90f,.34f},{.94f,.23f},{.69f,.78f},{.58f,.90f},{.68f,.90f},{.08f,.20f},{.94f,.62f},{.50f,.50f}};
     private float[] xs = new float[12], ys = new float[12];
+    private volatile Process bridgeProcess;
+    private volatile BufferedWriter bridgeWriter;
+    private volatile boolean bridgeReady;
+    private int targetDisplayId = 0;
+    private int screenWidth = 1, screenHeight = 1;
     private String profile() { return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait"; }
     private String key(String suffix) { return profile()+"."+suffix; }
     private int dp(float n) { return (int)(n*getResources().getDisplayMetrics().density+.5f); }
@@ -53,6 +62,11 @@ public final class GamePadOverlayService extends Service {
             startForeground(731,n);
         }
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        targetDisplayId = getIntentDisplayId();
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(metrics);
+        screenWidth = metrics.widthPixels; screenHeight = metrics.heightPixels;
+        startRootBridge();
         pad=new PadView(this);
         int type=Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE;
         params=new WindowManager.LayoutParams(-1,-1,type,
@@ -60,6 +74,39 @@ public final class GamePadOverlayService extends Service {
                 |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;
         try { wm.addView(pad,params); } catch(Throwable e) { stopSelf(); }
+    }
+    private int getIntentDisplayId() {
+        // The launch activity is normally on the display containing the game.
+        return getSharedPreferences("gamepad_runtime", MODE_PRIVATE).getInt("display_id", 0);
+    }
+    private void startRootBridge() {
+        try {
+            String shell = "APK=$(pm path " + getPackageName() + " | head -n 1 | cut -d: -f2); "
+                + "if [ -z \\"$APK\\" ]; then echo NO_APK_PATH; exit 20; fi; "
+                + "CLASSPATH=\\"$APK\\" app_process /system/bin com.sakuhome.launcher.virtualdisplay.RootInputBridge";
+            Process process = new ProcessBuilder("su","-c",shell).redirectErrorStream(true).start();
+            bridgeProcess=process;
+            bridgeWriter=new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            Thread reader=new Thread(() -> {
+                try(BufferedReader br=new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line; while((line=br.readLine())!=null) {
+                        if("READY".equals(line)) bridgeReady=true;
+                        else if(line.startsWith("BRIDGE_ERROR")) bridgeReady=false;
+                        android.util.Log.d("SakuGamePadBridge",line);
+                    }
+                } catch(Exception e) { android.util.Log.e("SakuGamePadBridge","reader",e); }
+                finally { bridgeReady=false; }
+            },"saku-gamepad-bridge-reader");
+            reader.setDaemon(true); reader.start();
+        } catch(Throwable e) { android.util.Log.e("SakuGamePadBridge","Cannot start root bridge",e); }
+    }
+    private boolean sendTouch(int pointerId,String phase,float nx,float ny) {
+        BufferedWriter writer=bridgeWriter;
+        if(!bridgeReady || writer==null) return false;
+        float x=Math.max(0,Math.min(screenWidth-1,nx*screenWidth));
+        float y=Math.max(0,Math.min(screenHeight-1,ny*screenHeight));
+        try { synchronized(writer) { writer.write("TOUCH "+targetDisplayId+" "+pointerId+" "+phase+" "+x+" "+y);writer.newLine();writer.flush(); } return true; }
+        catch(Exception e) { android.util.Log.e("SakuGamePadBridge","send touch",e);return false; }
     }
     private void loadLayout() {
         for(int i=0;i<labels.length;i++){xs[i]=prefs.getFloat(key("x"+i),defaults[i][0]);ys[i]=prefs.getFloat(key("y"+i),defaults[i][1]);}
@@ -72,7 +119,7 @@ public final class GamePadOverlayService extends Service {
     private void reset() { for(int i=0;i<labels.length;i++){xs[i]=defaults[i][0];ys[i]=defaults[i][1];}scale=1f;alpha=185;saveLayout();pad.invalidate(); }
     @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
     @Override public void onConfigurationChanged(Configuration c){super.onConfigurationChanged(c);loadLayout();if(pad!=null)pad.invalidate();}
-    @Override public void onDestroy(){if(wm!=null&&pad!=null)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
+    @Override public void onDestroy(){bridgeReady=false;if(bridgeProcess!=null)bridgeProcess.destroy();if(wm!=null&&pad!=null)try{wm.removeView(pad);}catch(Throwable ignored){};super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 
     private final class PadView extends View {
@@ -102,8 +149,8 @@ public final class GamePadOverlayService extends Service {
             float x=e.getX(),y=e.getY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
-                selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
+                selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}\n            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){sendTouch(0,"MOVE",clamp(x/getWidth()),clamp(y/getHeight()));return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0)trigger(selected);return true;}return true;
         }
         private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
