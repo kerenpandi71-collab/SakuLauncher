@@ -8,6 +8,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.widget.SeekBar
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
