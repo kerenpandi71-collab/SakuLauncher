@@ -175,8 +175,7 @@ class MainActivity : Activity() {
             "－  Kurangi layar utama",
             "↕  Posisi ikon: ${homeIconPositionLabel()}",
             if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
-            "Hapus layar ini",
-            if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "🔓  Buka kunci tata letak" else "🔒  Kunci tata letak"
+            "Hapus layar ini"
         )
         AlertDialog.Builder(this).setTitle("Tata letak layar utama").setItems(options) { _, which ->
             when (which) {
@@ -196,11 +195,6 @@ class MainActivity : Activity() {
                     .setNegativeButton("Batal", null)
                     .setPositiveButton("Hapus") { _, _ -> removeCurrentHomePage(); buildScreen() }
                     .show()
-                5 -> {
-                    val locked = !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)
-                    preferences.edit().putBoolean(KEY_HOME_LAYOUT_LOCKED, locked).apply()
-                    Toast.makeText(this, if (locked) "Tata letak dikunci" else "Tata letak dibuka — tahan ikon untuk memindahkan", Toast.LENGTH_SHORT).show()
-                }
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -663,8 +657,8 @@ class MainActivity : Activity() {
             contentDescription = "Hapus layar utama ini"
             setOnClickListener { showHomeLayoutOptions() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
-        pageControls.addView(chipButton(if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "🔒" else "⋯", cardSurface, primaryText, 12).apply {
-            contentDescription = if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) "Tata letak terkunci; buka opsi untuk membuka kunci" else "Opsi tata letak layar utama"
+        pageControls.addView(chipButton("⋯", cardSurface, primaryText, 12).apply {
+            contentDescription = "Opsi tata letak layar utama"
             setOnClickListener { showHomeLayoutOptions() }
         }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(5) })
         if (landscapeLayout) pageControls.visibility = View.GONE
@@ -688,12 +682,11 @@ class MainActivity : Activity() {
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.setOnDragListener { canvas, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.92f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
                     canvas.alpha = 1f
-                    if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val sourcePackage = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
                     if (sourcePackage != null && homePackages().contains(sourcePackage)) placeHomeIcon(sourcePackage, event.x, event.y)
                     true
@@ -3211,10 +3204,7 @@ class MainActivity : Activity() {
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
-                if (!isStartMenu && homePackages().contains(app.packageName) && preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) {
-                    Toast.makeText(this@MainActivity, "Tata letak terkunci. Buka kunci dari opsi tata letak layar utama.", Toast.LENGTH_SHORT).show()
-                    true
-                } else if (!isStartMenu && homePackages().contains(app.packageName)) {
+                if (!isStartMenu && homePackages().contains(app.packageName)) {
                     val clip = android.content.ClipData.newPlainText("saku-app", app.packageName)
                     val shadow = View.DragShadowBuilder(cell)
                     if (android.os.Build.VERSION.SDK_INT >= 24) cell.startDragAndDrop(clip, shadow, app.packageName, 0)
