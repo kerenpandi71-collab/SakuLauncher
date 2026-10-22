@@ -31,21 +31,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- Activities are exported for explicit shell-UID launches on selected displays.
-             They have no intent filters and expose no data provider. -->
-        <activity
-            android:name=".virtualdisplay.TrackpadActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:resizeableActivity="true" />
-        <activity
-            android:name=".virtualdisplay.DesktopActivity"
-            android:exported="true"
-            android:resizeableActivity="true" />
-        <activity
-            android:name=".virtualdisplay.VirtualDisplayActivity"
-            android:exported="true"
-            android:resizeableActivity="true" />
         <service
             android:name=".FloatingDockService"
             android:exported="false"
