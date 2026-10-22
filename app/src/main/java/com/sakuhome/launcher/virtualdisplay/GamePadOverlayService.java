@@ -150,7 +150,7 @@ public final class GamePadOverlayService extends Service {
             if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
                 selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}\n            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){sendTouch(0,"MOVE",clamp(x/getWidth()),clamp(y/getHeight()));return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}\n            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(44)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0)trigger(selected);return true;}return true;
         }
         private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
