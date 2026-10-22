@@ -80,7 +80,8 @@ class MainActivity : Activity() {
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
-    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(40, 96)
+    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(24, 512)
+    private val dockIconSizeDp: Int get() = preferences.getInt(KEY_DOCK_ICON_SIZE, 48).coerceIn(24, 512)
     private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 360)
     private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 100)
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
@@ -470,7 +471,7 @@ class MainActivity : Activity() {
             clipToPadding = false
             clipChildren = false
             // Fixed compact layout: no configurable vertical icon-position mode.
-            setPadding(dp(2), dp(54), dp(2), dp(12))
+            setPadding(dp(2), dp(84), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -516,19 +517,8 @@ class MainActivity : Activity() {
                         hideStartPanel()
                         true
                     } else if (kotlin.math.abs(dx) > dp(72)) {
-                        val direction = if (dx < 0) -1f else 1f
-                        desktopGrid.animate().cancel()
-                        desktopGrid.animate().alpha(0f).translationX(-direction * dp(30).toFloat())
-                            .setDuration(115L)
-                            .setInterpolator(android.view.animation.AccelerateInterpolator())
-                            .withEndAction {
-                                showHomePage(homePage + if (dx < 0) 1 else -1)
-                                desktopGrid.translationX = direction * dp(30).toFloat()
-                                desktopGrid.animate().alpha(1f).translationX(0f)
-                                    .setDuration(235L)
-                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                    .start()
-                            }.start()
+                        // Pindah halaman langsung tanpa animasi geser/fade.
+                        showHomePage(homePage + if (dx < 0) 1 else -1)
                         true
                     } else false
                 }
@@ -1021,7 +1011,7 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index).apply {
                 background = ColorDrawable(Color.TRANSPARENT)
                 setPadding(dp(3), dp(4), dp(3), dp(4))
-            }, LinearLayout.LayoutParams(dp((iconSizeDp).coerceAtMost(effectiveHeight - 14).coerceAtLeast(24) + 2), -1).apply {
+            }, LinearLayout.LayoutParams(dp(dockIconSizeDp + 2), -1).apply {
                 marginStart = dp(2)
                 marginEnd = dp(2)
             })
@@ -2282,19 +2272,30 @@ class MainActivity : Activity() {
     private fun chooseIconCustomization() {
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
         val sizeLabel = TextView(this).apply { text = "Ukuran ikon: ${iconSizeDp} dp"; setTextColor(primaryText); textSize = 14f }
-        val sizes = intArrayOf(32, 36, 42, 48, 54, 60, 68)
-        val sizeSlider = SeekBar(this).apply {
-            max = sizes.lastIndex; progress = sizes.indexOf(iconSizeDp).takeIf { it >= 0 } ?: 3
+        val sizeInput = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(iconSizeDp.toString()); hint = "Ukuran ikon layar utama (dp)"
+            setTextColor(primaryText); setHintTextColor(secondaryText); background = rounded(cardSurface, 12)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val dockSizeLabel = TextView(this).apply { text = "Ukuran ikon dock: ${dockIconSizeDp} dp"; setTextColor(primaryText); setPadding(0, dp(12), 0, dp(4)) }
+        val dockSizeSlider = SeekBar(this).apply {
+            max = 488; progress = dockIconSizeDp - 24
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { sizeLabel.text = "Ukuran ikon: ${sizes[progress]} dp" }
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { dockSizeLabel.text = "Ukuran ikon dock: ${progress + 24} dp" }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
             })
         }
-        layout.addView(sizeLabel); layout.addView(sizeSlider)
+        layout.addView(sizeLabel); layout.addView(sizeInput, LinearLayout.LayoutParams(-1, dp(48)))
+        layout.addView(dockSizeLabel); layout.addView(dockSizeSlider)
         AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
             .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
-            .setPositiveButton("Terapkan ukuran") { _, _ -> preferences.edit().putInt(KEY_ICON_SIZE, sizes[sizeSlider.progress]).apply(); apps = loadApps(); buildScreen(); refreshFloatingDock() }
+            .setPositiveButton("Terapkan ukuran") { _, _ ->
+                val homeSize = sizeInput.text.toString().toIntOrNull()?.coerceIn(24, 512) ?: iconSizeDp
+                preferences.edit().putInt(KEY_ICON_SIZE, homeSize).putInt(KEY_DOCK_ICON_SIZE, dockSizeSlider.progress + 24).apply()
+                apps = loadApps(); buildScreen(); refreshFloatingDock()
+            }
             .setNegativeButton("Tutup", null).show()
     }
 
@@ -2343,8 +2344,8 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val widthSlider = SeekBar(this).apply {
-            max = 200
-            progress = dockWidthDp - 160
+            max = 1840
+            progress = (dockWidthDp - 160).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { widthLabel.text = "Lebar dock: ${progress + 160} dp" }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
@@ -2357,8 +2358,8 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val heightSlider = SeekBar(this).apply {
-            max = 52
-            progress = dockHeightDp - 48
+            max = 452
+            progress = (dockHeightDp - 48).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { heightLabel.text = "Tinggi dock: ${progress + 48} dp" }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
@@ -2751,7 +2752,7 @@ class MainActivity : Activity() {
                 background = ColorDrawable(Color.TRANSPARENT)
                 elevation = 0f
                 stateListAnimator = null
-                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else 92))
+                layoutParams = AbsListView.LayoutParams(-1, dp(if (listLayout) 64 else if (landscapeDrawer) 100 else if (isStartMenu) 90 else maxOf(iconSizeDp + if (hideLabels) 12 else 28, 92)))
                 val startIconSize = if (landscapeDrawer) preferences.getInt(KEY_LANDSCAPE_DRAWER_ICON_SIZE, 40).coerceIn(28, 56) else (iconSizeDp - 6).coerceAtLeast(28)
                 addView(ImageView(context).apply {
                     id = android.R.id.icon
@@ -2814,6 +2815,7 @@ class MainActivity : Activity() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_DOCK_WIDTH = "dock_width_dp"
         private const val KEY_DOCK_HEIGHT = "dock_height_dp"
+        private const val KEY_DOCK_ICON_SIZE = "dock_icon_size_dp"
         private const val KEY_LOCAL_ICON_FOLDER = "local_icon_folder_uri"
         private const val KEY_LANDSCAPE_DRAWER_WIDTH = "landscape_drawer_width_dp"
         private const val KEY_LANDSCAPE_DRAWER_COLUMNS = "landscape_drawer_columns"
