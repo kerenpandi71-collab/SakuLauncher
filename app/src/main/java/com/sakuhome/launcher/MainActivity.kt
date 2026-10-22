@@ -1018,9 +1018,7 @@ class MainActivity : Activity() {
 
         // Give the desktop canvas the space between the system panel and taskbar.
         // The canvas is a shell child so panels cannot cover newly added shortcuts.
-        shell.addView(desktopGrid, 0, LinearLayout.LayoutParams(-1, 0, 1f).apply {
-            // Insert above the taskbar; widgetStrip and topPanel remain above the canvas.
-        })
+        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val drawerWidth = dp(preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460))
