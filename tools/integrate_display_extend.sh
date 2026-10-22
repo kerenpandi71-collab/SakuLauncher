@@ -57,6 +57,8 @@ if incoming.exists():
 manifest=Path("app/src/main/AndroidManifest.xml")
 dst=ET.parse(manifest); dr=dst.getroot()
 ext=ET.parse(src/"app/src/main/AndroidManifest.xml").getroot()
+A="{http://schemas.android.com/apk/res/android}name"
+NS="{http://schemas.android.com/apk/res/android}"
 # Earlier builds accidentally registered Extend classes as Saku-relative components.
 # Remove those invalid duplicates; the actual implementation stays under its original package.
 da=dr.find("application")
@@ -71,8 +73,6 @@ for node in list(da):
         da.remove(node)
 # Register the application-wide diagnostics hook.
 da.set(NS+"name", "com.sakuhome.launcher.SakuApplication")
-A="{http://schemas.android.com/apk/res/android}name"
-NS="{http://schemas.android.com/apk/res/android}"
 existing_perms={e.attrib.get(A) for e in dr.findall("uses-permission")}
 for e in ext.findall("uses-permission"):
     if e.attrib.get(A) not in existing_perms: dr.insert(0,e)
