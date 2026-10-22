@@ -148,10 +148,7 @@ public class MainActivity extends AppCompatActivity {
     Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
     Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
     Shizuku.addBinderDeadListener(binderDeadListener);
-    if (ShizukuUtils.hasPermission() && State.userService == null) {
-      Shizuku.peekUserService(State.userServiceArgs, State.userServiceConnection);
-      Shizuku.bindUserService(State.userServiceArgs, State.userServiceConnection);
-    }
+    // The sticky binder listener handles both an already-running and a newly-started server.
 
     setContentView(R.layout.activity_main);
     TvFocus.attach(getWindow());
