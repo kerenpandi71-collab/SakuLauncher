@@ -135,11 +135,12 @@ public final class GamePadOverlayService extends Service {
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(1.5f));p.setColor(editing?Color.YELLOW:0xBBDAE9F8);c.drawRoundRect(new RectF(dp(3),dp(3),w-dp(3),h-dp(3)),dp(14),dp(14),p);
             p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(dp(9));p.setColor(Color.WHITE);
             c.drawText(left?"ANALOG":"GAME PAD",w/2,dp(17),p);
-            float top=dp(26), cell=Math.max(dp(25),(w-dp(12))/4f);
-            drawChip(c,dp(6),top,cell-dp(2),dp(22),"W-");
-            drawChip(c,dp(6)+cell,top,cell-dp(2),dp(22),"W+");
-            drawChip(c,dp(6)+2*cell,top,cell-dp(2),dp(22),"H-");
-            drawChip(c,dp(6)+3*cell,top,Math.max(dp(22),w-dp(6)-(dp(6)+3*cell)),dp(22),"H+");
+            float top=dp(26), cell=Math.max(dp(20),(w-dp(12))/5f);
+            drawChip(c,dp(6),top,cell-dp(2),dp(22),editing?"DONE":"EDIT");
+            drawChip(c,dp(6)+cell,top,cell-dp(2),dp(22),"W-");
+            drawChip(c,dp(6)+2*cell,top,cell-dp(2),dp(22),"W+");
+            drawChip(c,dp(6)+3*cell,top,cell-dp(2),dp(22),"H-");
+            drawChip(c,dp(6)+4*cell,top,Math.max(dp(18),w-dp(6)-(dp(6)+4*cell)),dp(22),"H+");
             if(left){
                 float cx=analogX*w,cy=analogY*h,r=Math.min(w*.30f,h*.20f);
                 p.setColor(0x8845B9D5);c.drawCircle(cx,cy,r,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(2));p.setColor(0xFFECF7FF);c.drawCircle(cx,cy,r,p);
@@ -156,12 +157,13 @@ public final class GamePadOverlayService extends Service {
             if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;selected=-1;drag=false;
                 if(y<dp(52)){
-                    float cell=(w-dp(12))/4f;int ix=Math.min(3,Math.max(0,(int)((x-dp(6))/Math.max(1,cell))));
-                    if(ix==0){if(left)leftWidth=Math.max(.14f,leftWidth-.03f);else rightWidth=Math.max(.14f,rightWidth-.03f);}
-                    if(ix==1){if(left)leftWidth=Math.min(.36f,leftWidth+.03f);else rightWidth=Math.min(.38f,rightWidth+.03f);}
-                    if(ix==2){if(left)leftHeight=Math.max(.35f,leftHeight-.08f);else rightHeight=Math.max(.35f,rightHeight-.08f);}
-                    if(ix==3){if(left)leftHeight=Math.min(.95f,leftHeight+.08f);else rightHeight=Math.min(.95f,rightHeight+.08f);}
-                    save();updatePanels();return true;
+                    float cell=(w-dp(12))/5f;int ix=Math.min(4,Math.max(0,(int)((x-dp(6))/Math.max(1,cell))));
+                    if(ix==0){editing=!editing;leftPanel.invalidate();rightPanel.invalidate();Toast.makeText(GamePadOverlayService.this,editing?"Mode edit aktif":"Mode edit selesai",Toast.LENGTH_SHORT).show();return true;}
+                    if(ix==1){if(left)leftWidth=Math.max(.14f,leftWidth-.03f);else rightWidth=Math.max(.14f,rightWidth-.03f);}
+                    if(ix==2){if(left)leftWidth=Math.min(.36f,leftWidth+.03f);else rightWidth=Math.min(.38f,rightWidth+.03f);}
+                    if(ix==3){if(left)leftHeight=Math.max(.35f,leftHeight-.08f);else rightHeight=Math.max(.35f,rightHeight-.08f);}
+                    if(ix==4){if(left)leftHeight=Math.min(.95f,leftHeight+.08f);else rightHeight=Math.min(.95f,rightHeight+.08f);}
+                    save();post(()->updatePanels());return true;
                 }
                 if(left){float dx=x-analogX*w,dy=y-analogY*h;float r=Math.min(w*.34f,h*.24f);if(dx*dx+dy*dy<=r*r||editing){selected=0;drag=editing;if(!editing)sendTouch(0,"DOWN",panelNormX(true,x,w),panelNormY(y,h));return true;}}
                 else{float r=Math.max(dp(13),Math.min(w*.20f,h*.065f));for(int i=0;i<actions.length;i++){float dx=x-rightPoints[i][0]*w,dy=y-rightPoints[i][1]*h;if(dx*dx+dy*dy<=r*r||editing&&Math.abs(dx)<r*1.4f&&Math.abs(dy)<r*1.4f){selected=i;drag=editing;if(!editing)sendTouch(i+1,"DOWN",panelNormX(false,x,w),panelNormY(y,h));return true;}}}
@@ -171,7 +173,7 @@ public final class GamePadOverlayService extends Service {
             if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&selected>=0&&drag){
                 if(left){analogX=clamp(x/w,.15f,.85f);analogY=clamp(y/h,.20f,.85f);}else{rightPoints[selected][0]=clamp(x/w,.15f,.85f);rightPoints[selected][1]=clamp(y/h,.16f,.90f);}invalidate();return true;
             }
-            if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&selected==0&&!editing){float dx=(x-downX)/w,dy=(y-downY)/h;sendTouch(0,"MOVE",clamp(analogX+dx,.01f,.99f),clamp(analogY+dy,.01f,.99f));return true;}
+            if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&selected>=0&&!editing){sendTouch(left?0:selected+1,"MOVE",panelNormX(left,x,w),panelNormY(y,h));return true;}
             if(e.getActionMasked()==MotionEvent.ACTION_UP&&selected>=0){
                 if(drag){save();invalidate();}else sendTouch(left?0:selected+1,"UP",panelNormX(left,x,w),panelNormY(y,h));
                 selected=-1;return true;
