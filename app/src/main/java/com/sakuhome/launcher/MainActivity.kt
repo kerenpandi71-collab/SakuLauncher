@@ -1102,7 +1102,17 @@ class MainActivity : Activity() {
             textSize = 11f
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
-            contentDescription = "Ikon cuaca tanpa informasi suhu"
+            contentDescription = if (englishUi) "Open weather forecast" else "Buka prakiraan cuaca"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val query = if (englishUi) "weather near me" else "cuaca hari ini"
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))))
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, if (englishUi) "No browser available" else "Browser tidak tersedia", Toast.LENGTH_SHORT).show()
+                }
+            }
         }, LinearLayout.LayoutParams(0, -1, 1f))
         strip.addView(TextView(this).apply {
             text = "▰  ${percent?.let { "$it%" } ?: "--%"}"
@@ -1821,7 +1831,7 @@ class MainActivity : Activity() {
             "Label ikon · ${if (hideLabels) "Disembunyikan" else "Ditampilkan"}",
             "Tambahkan widget ke layar utama",
             "Posisi ikon layar utama · ${homeIconPositionLabel()}",
-            "Bahasa · English"
+            "Bahasa · Indonesia"
         )
 
         val dialog = AlertDialog.Builder(this).create()
