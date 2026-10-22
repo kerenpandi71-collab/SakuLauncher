@@ -312,6 +312,9 @@ class MainActivity : Activity() {
         canvas.alpha = 1f
         canvas.translationX = 0f
         canvas.translationY = 0f
+        // Refresh the shortcut adapter from the exact page being rendered.
+        // Do not rely on a possibly stale adapter snapshot after preferences change.
+        pinnedAdapter.refreshHomeItems()
         val currentApps = homeApps()
         val positions = homeIconPositions()
         val contentWidth = (canvas.width - canvas.paddingLeft - canvas.paddingRight).coerceAtLeast(dp(1))
@@ -3151,6 +3154,10 @@ class MainActivity : Activity() {
 
         private fun refreshItems() {
             items = if (isStartMenu) visibleApps(true) else homeApps()
+        }
+
+        fun refreshHomeItems() {
+            if (!isStartMenu) items = homeApps()
         }
 
         override fun notifyDataSetChanged() {
