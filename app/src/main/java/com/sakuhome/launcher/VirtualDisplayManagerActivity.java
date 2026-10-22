@@ -83,7 +83,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         final int id;
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
-            Result result=exec("am start --display "+id+" -n com.katsuyamaki.DroidOSFOSSKeyboardTrackpad/.MainActivity --ei displayId "+id+" --ez show_trackpad true");
+            Result result=exec("am start --display "+id+" -n com.sakuhome.launcher/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id+" --ez show_trackpad true");
             showStatus(result.code==0 ? "Permintaan membuka trackpad fullscreen pada display "+id+": "+result.out :
                 "Trackpad gagal dibuka pada display "+id+". Pastikan layanan aksesibilitas aktif dan ID display benar. "+result.out);
         },"launch-trackpad-on-display").start();
