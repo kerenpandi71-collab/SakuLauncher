@@ -40,7 +40,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         root.addView(button("Baca status display",v->runAsync("settings get global overlay_display_devices; dumpsys display")));
         root.addView(button("Aktifkan Aksesibilitas Trackpad",v->openAccessibilitySettings()));
         root.addView(button("Buka Saku Launcher di Display Virtual",v->openLauncherOnVirtualDisplay()));
-        root.addView(button("Buka Trackpad Fullscreen di Display Virtual",v->openTrackpad()));
+        root.addView(button("Buka Trackpad Fullscreen di Layar HP",v->openTrackpad()));
         root.addView(button("Pulihkan konfigurasi sebelumnya",v->restoreOverlay()));
         root.addView(button("Hapus overlay display",v->confirmRemove()));
         status=new TextView(this); status.setTextColor(0xffe4ebf5); status.setTextIsSelectable(true); status.setPadding(0,dp(12),0,0); root.addView(status,new LinearLayout.LayoutParams(-1,-2));
@@ -75,7 +75,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
             // Match the working Taskbar implementation: use the root path for --display.
-            Result result=exec("am start --display "+id+" --windowingMode 1 -f 0x10008000 -n "
+            Result result=execAsShell("am start --display "+id+" --windowingMode 1 -f 0x10008000 -n "
                 +getPackageName()+"/.MainActivity --ez saku_virtual_display_mode true");
             showStatus(result.code==0 && !result.out.contains("Permission Denial") && !result.out.contains("Error:")
                 ? "Saku Launcher diminta terbuka pada display "+id+": "+result.out
@@ -87,7 +87,7 @@ public class VirtualDisplayManagerActivity extends Activity {
         try { id=selectedDisplayId(); } catch(Exception e){ error(e.getMessage()); return; }
         new Thread(() -> {
             // Trackpad UI stays fullscreen on the phone; only its input target is the virtual display.
-            Result result=exec("am start --display 0 --windowingMode 1 -f 0x10008000 -n "
+            Result result=execAsShell("am start --display 0 --windowingMode 1 -f 0x10008000 -n "
                 +getPackageName()+"/com.katsuyamaki.DroidOSFOSSKeyboardTrackpad.MainActivity --ei displayId "+id
                 +" --ez show_trackpad true");
             showStatus(result.code==0 && !result.out.contains("Permission Denial") && !result.out.contains("Error:")
@@ -107,6 +107,15 @@ public class VirtualDisplayManagerActivity extends Activity {
         .setNegativeButton("Batal",null).setPositiveButton("Hapus",(dialog,which)->runAsync("settings delete global overlay_display_devices && settings get global overlay_display_devices")).show();}
     private void runAsync(String command){showStatus("Memeriksa status…");new Thread(()->{Result result=exec(command);showStatus(result.code==0?result.out:"Perintah gagal (kode "+result.code+"): "+result.out);},"display-status").start();}
     private static final class Result{final String out;final int code;Result(String output,int exit){out=output;code=exit;}}
+    // Android checks the caller UID for launchDisplayId. Root UID is not the
+    // shell UID, so use UID 2000 for Activity launches targeting another display.
+    private Result execAsShell(String command){StringBuilder output=new StringBuilder();Process process=null;try{
+        process=new ProcessBuilder("su","2000","-c",command).redirectErrorStream(true).start();
+        try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()))){String line;while((line=reader.readLine())!=null&&output.length()<8000)output.append(line).append('\n');}
+        if(!process.waitFor(10,TimeUnit.SECONDS)){process.destroyForcibly();return new Result("Perintah shell timeout",124);}
+        return new Result(output.toString().trim(),process.exitValue());
+      }catch(Exception e){return new Result(e.getClass().getSimpleName()+": "+e.getMessage(),1);}finally{if(process!=null)process.destroy();}
+    }
     private Result exec(String command){StringBuilder output=new StringBuilder();Process process=null;try{
         process=new ProcessBuilder("su","-c",command).redirectErrorStream(true).start();
         try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()))){String line;while((line=reader.readLine())!=null&&output.length()<8000)output.append(line).append('\n');}
