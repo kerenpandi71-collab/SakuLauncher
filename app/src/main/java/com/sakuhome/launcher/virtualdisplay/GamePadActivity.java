@@ -17,9 +17,9 @@ public final class GamePadActivity extends Activity {
                 Uri.parse("package:" + getPackageName())), 731);
         } else startOverlay();
     }
-    private void startOverlay() {
+    private int getDisplayIdCompat() {\n        if (android.os.Build.VERSION.SDK_INT >= 30 && getDisplay() != null) return getDisplay().getDisplayId();\n        return 0;\n    }\n    private void startOverlay() {
         try {
-            Intent service = new Intent(this, GamePadOverlayService.class);
+            Intent service = new Intent(this, GamePadOverlayService.class).putExtra("display_id", getDisplayIdCompat());
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
             else startService(service);
             Toast.makeText(this, "Saku Game Pad diaktifkan", Toast.LENGTH_SHORT).show();
