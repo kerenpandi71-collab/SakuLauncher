@@ -82,8 +82,8 @@ public final class GamePadOverlayService extends Service {
     private void startRootBridge() {
         try {
             String shell = "APK=$(pm path " + getPackageName() + " | head -n 1 | cut -d: -f2); "
-                + "if [ -z \\"$APK\\" ]; then echo NO_APK_PATH; exit 20; fi; "
-                + "CLASSPATH=\\"$APK\\" app_process /system/bin com.sakuhome.launcher.virtualdisplay.RootInputBridge";
+                + "if [ -z \"$APK\" ]; then echo NO_APK_PATH; exit 20; fi; "
+                + "CLASSPATH=\"$APK\" app_process /system/bin com.sakuhome.launcher.virtualdisplay.RootInputBridge";
             Process process = new ProcessBuilder("su","-c",shell).redirectErrorStream(true).start();
             bridgeProcess=process;
             bridgeWriter=new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
@@ -150,7 +150,8 @@ public final class GamePadOverlayService extends Service {
             if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;moving=false;
                 if(toolbar&&y<dp(84)){int action=toolbarAction(x);if(action>=0){performToolbar(action);return true;}}
                 selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}\n            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(44)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(44)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0)trigger(selected);return true;}return true;
         }
         private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
@@ -160,9 +161,5 @@ public final class GamePadOverlayService extends Service {
         }
         private int nearest(float x,float y){int best=0;float dist=Float.MAX_VALUE;for(int i=0;i<labels.length;i++){float dx=x-xs[i]*getWidth(),dy=y-ys[i]*getHeight(),d=dx*dx+dy*dy;if(d<dist){dist=d;best=i;}}return best;}
         private float clamp(float v){return Math.max(.03f,Math.min(.97f,v));}
-        private void trigger(int i){
-            // UI is intentionally honest: input injection is not yet wired to the target game.
-            Toast.makeText(GamePadOverlayService.this,labels[i]+" dipilih — jalur input game belum tersambung",Toast.LENGTH_SHORT).show();
-        }
     }
 }
