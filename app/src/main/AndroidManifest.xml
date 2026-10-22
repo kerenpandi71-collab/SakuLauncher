@@ -34,20 +34,6 @@
         <!-- Activities are exported for explicit shell-UID launches on selected displays.
              They have no intent filters and expose no data provider. -->
         <activity
-            android:name=".virtualdisplay.GamePadActivity"
-            android:exported="true"
-            android:excludeFromRecents="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity
-            android:name=".virtualdisplay.TrackpadActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:resizeableActivity="true" />
-        <activity
             android:name=".virtualdisplay.DesktopActivity"
             android:exported="true"
             android:resizeableActivity="true" />
@@ -55,12 +41,6 @@
             android:name=".virtualdisplay.VirtualDisplayActivity"
             android:exported="true"
             android:resizeableActivity="true" />
-        <service
-            android:name=".virtualdisplay.GamePadOverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Overlay game pad Saku yang diaktifkan pengguna" />
-        </service>
         <service
             android:name=".FloatingDockService"
             android:exported="false"
