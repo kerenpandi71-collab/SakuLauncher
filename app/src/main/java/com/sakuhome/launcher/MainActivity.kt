@@ -733,14 +733,12 @@ class MainActivity : Activity() {
                 else -> false
             }
         }
-        // The full-screen shortcut layer is attached directly to rootFrame below.
+        // Keep shortcuts inside the vertical shell's remaining workspace area.
+        // This prevents the header/widgets from being drawn over newly added icons.
+        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        // The portrait dock is anchored to the bottom of the root, not inserted
-        // into the vertical header column (which previously pushed it up the screen).
-        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1).apply {
-            topMargin = dp(126)
-            bottomMargin = dp(dockHeightDp + 38)
-        })
+        // The portrait dock stays anchored to the bottom of the root, independently
+        // of the workspace layout.
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         attachHomeDock()
         startPanel = buildStartPanel()
@@ -937,7 +935,7 @@ class MainActivity : Activity() {
                 else -> true
             }
         }
-        // The full-screen shortcut layer is attached directly to rootFrame below.
+        // The workspace canvas is inserted into the shell above the bottom taskbar.
 
         // Permanent bottom panel replaces the floating dock in landscape mode.
         val bottomPanel = LinearLayout(this).apply {
@@ -1018,7 +1016,11 @@ class MainActivity : Activity() {
             topMargin = dp(8)
         })
 
-        rootFrame.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
+        // Give the desktop canvas the space between the system panel and taskbar.
+        // The canvas is a shell child so panels cannot cover newly added shortcuts.
+        shell.addView(desktopGrid, 0, LinearLayout.LayoutParams(-1, 0, 1f).apply {
+            // Insert above the taskbar; widgetStrip and topPanel remain above the canvas.
+        })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         startPanel = buildStartPanel()
         val drawerWidth = dp(preferences.getInt(KEY_LANDSCAPE_DRAWER_WIDTH, 340).coerceIn(280, 460))
