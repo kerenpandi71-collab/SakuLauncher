@@ -80,10 +80,10 @@ class MainActivity : Activity() {
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
     private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
-    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(24, 512)
-    private val dockIconSizeDp: Int get() = preferences.getInt(KEY_DOCK_ICON_SIZE, 48).coerceIn(24, 512)
-    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 2000)
-    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 500)
+    private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 80).coerceIn(24, 2048)
+    private val dockIconSizeDp: Int get() = preferences.getInt(KEY_DOCK_ICON_SIZE, 48).coerceIn(24, 2048)
+    private val dockWidthDp: Int get() = preferences.getInt(KEY_DOCK_WIDTH, 240).coerceIn(160, 4096)
+    private val dockHeightDp: Int get() = preferences.getInt(KEY_DOCK_HEIGHT, 64).coerceIn(48, 2048)
     private val blurRadius: Float get() = preferences.getInt(KEY_BLUR_RADIUS, 0).toFloat()
     private val transparencyPercent: Int get() = preferences.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
     private val iconPackPackage: String get() = preferences.getString(KEY_ICON_PACK, "").orEmpty()
@@ -470,8 +470,22 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             clipToPadding = false
             clipChildren = false
-            // Fixed compact layout: no configurable vertical icon-position mode.
-            setPadding(dp(2), dp(84), dp(2), dp(12))
+            // iOS-like icon placement: top, middle, or bottom; bottom aligns short pages
+            // toward the dock while keeping long app lists scrollable.
+            val columns = numColumns.coerceAtLeast(1)
+            val itemCount = homeApps().size
+            val rows = (itemCount + columns - 1) / columns
+            val rowHeightDp = maxOf(iconSizeDp + if (hideLabels) 12 else 28, 92) + 10
+            val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
+            val fixedChromeDp = if (landscapeLayout) 150 else 255
+            val availableGridDp = (screenHeightDp - fixedChromeDp - dockHeightDp).coerceAtLeast(0)
+            val bottomAlignPadding = (availableGridDp - rows * rowHeightDp).coerceIn(8, 320)
+            val topPadding = when (preferences.getString(KEY_HOME_ICON_POSITION, "bottom")) {
+                "top" -> 8
+                "middle" -> 84
+                else -> bottomAlignPadding
+            }
+            setPadding(dp(2), dp(topPadding), dp(2), dp(12))
         }
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.adapter = pinnedAdapter
@@ -1649,7 +1663,6 @@ class MainActivity : Activity() {
                     21 -> showDiagnosticLog()
         }
     }
-    }
 
     private fun openYouTubeWeb() {
         try {
@@ -2003,7 +2016,7 @@ class MainActivity : Activity() {
     private fun chooseHomeIconPosition() {
         val labels = arrayOf("Atas", "Tengah", "Bawah")
         val values = arrayOf("top", "middle", "bottom")
-        val current = preferences.getString(KEY_HOME_ICON_POSITION, "middle")
+        val current = preferences.getString(KEY_HOME_ICON_POSITION, "bottom")
         AlertDialog.Builder(this).setTitle("Posisi ikon layar utama")
             .setMessage("Pilih area penempatan ikon aplikasi. Pengaturan ini mengubah ruang kosong di atas grid.")
             .setSingleChoiceItems(labels, values.indexOf(current).coerceAtLeast(0)) { dialog, which ->
@@ -2311,31 +2324,45 @@ class MainActivity : Activity() {
     }
 
     private fun chooseIconCustomization() {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
-        val sizeLabel = TextView(this).apply { text = "Ukuran ikon: ${iconSizeDp} dp"; setTextColor(primaryText); textSize = 14f }
-        val sizeInput = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            setText(iconSizeDp.toString()); hint = "Ukuran ikon layar utama (dp)"
-            setTextColor(primaryText); setHintTextColor(secondaryText); background = rounded(cardSurface, 12)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
         }
-        val dockSizeLabel = TextView(this).apply { text = "Ukuran ikon dock: ${dockIconSizeDp} dp"; setTextColor(primaryText); setPadding(0, dp(12), 0, dp(4)) }
-        val dockSizeSlider = SeekBar(this).apply {
-            max = 488; progress = dockIconSizeDp - 24
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { dockSizeLabel.text = "Ukuran ikon dock: ${progress + 24} dp" }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        fun numericInput(label: String, value: Int): EditText {
+            layout.addView(TextView(this).apply {
+                text = "$label: $value dp"
+                setTextColor(primaryText)
+                textSize = 14f
+                setPadding(0, dp(10), 0, dp(5))
             })
+            return EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                setText(value.toString())
+                hint = "Ukuran dalam dp (24–2048)"
+                setTextColor(primaryText)
+                setHintTextColor(secondaryText)
+                background = rounded(cardSurface, 12)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setSingleLine(true)
+            }.also { layout.addView(it, LinearLayout.LayoutParams(-1, dp(48))) }
         }
-        layout.addView(sizeLabel); layout.addView(sizeInput, LinearLayout.LayoutParams(-1, dp(48)))
-        layout.addView(dockSizeLabel); layout.addView(dockSizeSlider)
-        AlertDialog.Builder(this).setTitle("Ikon & icon pack").setView(layout)
+        val homeSizeInput = numericInput("Ukuran ikon layar utama", iconSizeDp)
+        val dockSizeInput = numericInput("Ukuran ikon dock", dockIconSizeDp)
+        layout.addView(TextView(this).apply {
+            text = "Ukuran sangat besar dapat melewati area layar. Dock dibatasi lebar fisik layar dan dapat digulir."
+            textSize = 12f
+            setTextColor(secondaryText)
+            setPadding(0, dp(10), 0, dp(2))
+        })
+        AlertDialog.Builder(this).setTitle("Ukuran ikon & icon pack").setView(layout)
             .setNeutralButton("Pilih icon pack") { _, _ -> chooseIconPack() }
             .setPositiveButton("Terapkan ukuran") { _, _ ->
-                val homeSize = sizeInput.text.toString().toIntOrNull()?.coerceIn(24, 512) ?: iconSizeDp
-                preferences.edit().putInt(KEY_ICON_SIZE, homeSize).putInt(KEY_DOCK_ICON_SIZE, dockSizeSlider.progress + 24).apply()
-                apps = loadApps(); buildScreen(); refreshFloatingDock()
+                val homeSize = homeSizeInput.text.toString().toIntOrNull()?.coerceIn(24, 2048) ?: iconSizeDp
+                val dockSize = dockSizeInput.text.toString().toIntOrNull()?.coerceIn(24, 2048) ?: dockIconSizeDp
+                preferences.edit().putInt(KEY_ICON_SIZE, homeSize).putInt(KEY_DOCK_ICON_SIZE, dockSize).apply()
+                apps = loadApps()
+                buildScreen()
+                refreshFloatingDock()
             }
             .setNegativeButton("Tutup", null).show()
     }
@@ -2385,7 +2412,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val widthSlider = SeekBar(this).apply {
-            max = 1840
+            max = 3936
             progress = (dockWidthDp - 160).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { widthLabel.text = "Lebar dock: ${progress + 160} dp" }
@@ -2399,7 +2426,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }
         val heightSlider = SeekBar(this).apply {
-            max = 452
+            max = 2000
             progress = (dockHeightDp - 48).coerceIn(0, max)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { heightLabel.text = "Tinggi dock: ${progress + 48} dp" }
