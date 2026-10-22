@@ -16,7 +16,7 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
-    <application android:allowBackup="true" android:label="Saku Launcher" android:supportsRtl="true" android:theme="@style/AppTheme">
+    <application android:allowBackup="true" android:label="Saku Launcher" android:supportsRtl="true" android:theme="@style/AppTheme" android:name="com.sakuhome.launcher.SakuApplication">
         <activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -31,30 +31,10 @@
         <service android:name=".FloatingDockService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Menjaga dock Saku yang diaktifkan pengguna tetap terlihat di atas aplikasi lain" />
         </service>
-        <activity android:name=".OverlayDisplayActivity" android:exported="false" android:theme="@style/AppTheme" />
-        <activity android:name=".LauncherActivity" android:launchMode="singleTask" android:excludeFromRecents="true" android:exported="false" />
-        <activity android:name=".TouchpadActivity" android:launchMode="singleTask" android:exported="false" android:theme="@style/AppTheme" />
-        <activity android:name=".PureBlackActivity" android:launchMode="singleTask" android:exported="false" android:theme="@style/AppTheme" />
-        <activity android:name=".AccessibilityConsentActivity" android:launchMode="singleTask" android:excludeFromRecents="true" android:exported="false" android:theme="@style/AppTheme.Transparent" />
-        <activity android:name=".ManagedVirtualDisplayActivity" android:launchMode="singleTask" android:exported="false" android:theme="@style/AppTheme" />
-        <service android:name=".FloatingKeyboardService" android:enabled="true" android:exported="false" />
-        <service android:name=".MediaProjectionService" android:foregroundServiceType="mediaProjection" android:exported="false" />
-        <service android:name=".TouchpadAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
-        </service>
-        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="com.sakuhome.launcher.displayextend.shizuku" android:multiprocess="false" android:enabled="true" android:exported="true" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="com.sakuhome.launcher.shizuku" android:multiprocess="false" android:enabled="true" android:exported="true" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.provider" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
-        <service android:name=".FloatingButtonService" android:enabled="true" android:exported="false" />
-        <receiver android:name=".PureBlackActivity$ExitReceiver" android:exported="true">
-            <intent-filter>
-                <action android:name="io.github.jqssun.displayextend.EXIT_PURE_BLACK" />
-            </intent-filter>
-        </receiver>
         <activity android:name="io.github.jqssun.displayextend.MainActivity" android:exported="true" android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />

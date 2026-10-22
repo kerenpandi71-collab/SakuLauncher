@@ -66,25 +66,21 @@ public class TouchpadAccessibilityService extends AccessibilityService {
           Settings.Secure.getString(
               context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
 
-      // ComponentName uses the installed application ID plus the embedded class's real name.
-      // This avoids registering a stale service under the old standalone package name.
-      String newService = new ComponentName(context, TouchpadAccessibilityService.class).flattenToString();
-      java.util.LinkedHashSet<String> enabled = new java.util.LinkedHashSet<>();
-      if (existingServices != null && !existingServices.isEmpty()) {
-        for (String item : existingServices.split(":")) {
-          if (item != null && !item.trim().isEmpty()) enabled.add(item.trim());
-        }
-      }
-      enabled.add(newService);
-      String finalServices = android.text.TextUtils.join(":", enabled);
+      String newService = "io.github.jqssun.displayextend/.TouchpadAccessibilityService";
+      String finalServices;
 
-      boolean saved = Settings.Secure.putString(
+      if (existingServices != null && !existingServices.isEmpty()) {
+        finalServices = existingServices + ":" + newService;
+      } else {
+        finalServices = newService;
+      }
+
+      Settings.Secure.putString(
           context.getContentResolver(),
           Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
           finalServices);
       Settings.Secure.putString(
           context.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-      State.log("accessibility service list updated=" + saved + " component=" + newService);
       _startLocalService(context);
     }
   }
