@@ -12,6 +12,8 @@ mkdir -p app/src/main/java/io/github/jqssun/displayextend app/src/main/aidl app/
 cp -R "$EXTEND_SOURCE/app/src/main/java/io/github/jqssun/displayextend/." app/src/main/java/io/github/jqssun/displayextend/
 [ ! -d "$EXTEND_SOURCE/app/src/main/aidl" ] || cp -R "$EXTEND_SOURCE/app/src/main/aidl/." app/src/main/aidl/
 cp -Rn "$EXTEND_SOURCE/app/src/main/res/." app/src/main/res/
+# Remove a stale resource file from an earlier integration attempt; the source project has no values/styles.xml, and it duplicates Saku\x27s AppTheme in values/themes.xml.
+rm -f app/src/main/res/values/styles.xml
 mkdir -p hidden-api-stub
 cp -R "$EXTEND_SOURCE/hidden-api-stub/." hidden-api-stub/
 
