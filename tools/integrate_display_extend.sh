@@ -53,31 +53,45 @@ if incoming.exists():
     ET.indent(root, space="    ")
     ET.ElementTree(root).write(target, encoding="utf-8", xml_declaration=True)
 
-# Add Extend permissions/features and components; skip its conflicting .MainActivity.
+# Add Extend permissions/features and components while keeping Saku's HOME activity.
 manifest=Path("app/src/main/AndroidManifest.xml")
 dst=ET.parse(manifest); dr=dst.getroot()
 ext=ET.parse(src/"app/src/main/AndroidManifest.xml").getroot()
 A="{http://schemas.android.com/apk/res/android}name"
+NS="{http://schemas.android.com/apk/res/android}"
 existing_perms={e.attrib.get(A) for e in dr.findall("uses-permission")}
 for e in ext.findall("uses-permission"):
     if e.attrib.get(A) not in existing_perms: dr.insert(0,e)
-existing_features={(e.attrib.get(A),e.attrib.get("{http://schemas.android.com/apk/res/android}required")) for e in dr.findall("uses-feature")}
+existing_features={(e.attrib.get(A),e.attrib.get(NS+"required")) for e in dr.findall("uses-feature")}
 for e in ext.findall("uses-feature"):
-    key=(e.attrib.get(A),e.attrib.get("{http://schemas.android.com/apk/res/android}required"))
+    key=(e.attrib.get(A),e.attrib.get(NS+"required"))
     if key not in existing_features: dr.insert(0,e)
 da=dr.find("application"); ea=ext.find("application")
-existing_components={(e.tag,e.attrib.get(A)) for e in da if e.tag in ("activity","service","provider","receiver")}
+# Fully qualify source-project components: manifest-relative names would resolve to
+# com.sakuhome.launcher and launch the wrong classes after embedding.
 for e in ea:
     if e.tag not in ("activity","service","provider","receiver"): continue
     name=e.attrib.get(A,"")
-    if name == ".MainActivity": continue
+    if name.startswith("."):
+        name="io.github.jqssun.displayextend"+name
+        e.set(A,name)
+    # The embedded MainActivity is a settings destination, not a second launcher.
+    if name=="io.github.jqssun.displayextend.MainActivity":
+        for intent_filter in list(e.findall("intent-filter")):
+            actions={x.attrib.get(A) for x in intent_filter.findall("action")}
+            categories={x.attrib.get(A) for x in intent_filter.findall("category")}
+            if "android.intent.action.MAIN" in actions and (
+                "android.intent.category.LAUNCHER" in categories or
+                "android.intent.category.LEANBACK_LAUNCHER" in categories):
+                e.remove(intent_filter)
     key=(e.tag,name)
+    existing_components={(x.tag,x.attrib.get(A)) for x in da if x.tag in ("activity","service","provider","receiver")}
     if key not in existing_components:
         da.append(e)
-# Ensure provider authorities unique to the embedded implementation.
+# Ensure Shizuku provider authority is unique within the combined application.
 for p in da.findall("provider"):
-    if p.attrib.get(A)=="io.github.jqssun.displayextend.ShizukuProvider":
-        p.set("{http://schemas.android.com/apk/res/android}authorities","com.sakuhome.launcher.displayextend.shizuku")
+    if p.attrib.get(A)=="rikka.shizuku.ShizukuProvider":
+        p.set(NS+"authorities","com.sakuhome.launcher.displayextend.shizuku")
 ET.indent(dr, space="    ")
 dst.write(manifest, encoding="utf-8", xml_declaration=True)
 PY
