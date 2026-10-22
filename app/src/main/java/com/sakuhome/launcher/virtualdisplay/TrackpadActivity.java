@@ -72,12 +72,13 @@ public class TrackpadActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        targetDisplayId = getIntent().getIntExtra("display_id", 40);
+        targetDisplayId = getIntent().getIntExtra("display_id", -1);
         buildUi();
-        displayInput.setText(Integer.toString(targetDisplayId));
+        displayInput.setText(targetDisplayId >= 0 ? Integer.toString(targetDisplayId) : "");
         widthInput.setText(Integer.toString(targetWidth));
         heightInput.setText(Integer.toString(targetHeight));
         updateCoordinates();
+        detectAndAutoConnect();
     }
 
     private void buildUi() {
@@ -155,12 +156,67 @@ public class TrackpadActivity extends Activity {
     private Button button(String label, View.OnClickListener listener) {
         Button b = button(label); b.setOnClickListener(listener); return b;
     }
+    private void detectAndAutoConnect() {
+        connectionStatus.setText("Mendeteksi virtual display otomatis…");
+        connectionStatus.setTextColor(0xFFFFD27D);
+        inputQueue.execute(() -> {
+            String dump = runRoot("dumpsys display");
+            int detectedId = findOverlayDisplayId(dump);
+            int[] size = detectedId >= 0 ? findDisplaySize(dump, detectedId) : null;
+            runOnUiThread(() -> {
+                if (detectedId < 0) {
+                    connectionStatus.setText("Virtual display belum ditemukan. Aktifkan overlay lalu tekan Sambungkan.");
+                    connectionStatus.setTextColor(0xFFFF9A9A);
+                    addLog("WARN", "Auto-detect tidak menemukan overlay display aktif");
+                    return;
+                }
+                targetDisplayId = detectedId;
+                if (size != null) { targetWidth = size[0]; targetHeight = size[1]; }
+                displayInput.setText(Integer.toString(targetDisplayId));
+                widthInput.setText(Integer.toString(targetWidth));
+                heightInput.setText(Integer.toString(targetHeight));
+                addLog("INFO", "Auto-detect menemukan display " + targetDisplayId + " (" + targetWidth + "x" + targetHeight + ")");
+                connectTarget();
+            });
+        });
+    }
+
+    private int findOverlayDisplayId(String dump) {
+        if (dump == null) return -1;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("DisplayViewport\\\\{([^}]*)\\\\}").matcher(dump);
+        while (m.find()) {
+            String block = m.group(1);
+            if (!block.contains("uniqueId='overlay:") && !block.contains("type=VIRTUAL")) continue;
+            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\\\bdisplayId=(\\\\d+)").matcher(block);
+            if (id.find()) {
+                try { return Integer.parseInt(id.group(1)); } catch (NumberFormatException ignored) { }
+            }
+        }
+        java.util.regex.Matcher info = java.util.regex.Pattern.compile("(?s)DisplayInfo\\\\{([^}]*)\\\\}").matcher(dump);
+        while (info.find()) {
+            String block = info.group(1);
+            if (!block.contains("uniqueId='overlay:") && !block.contains("uniqueId=\\"overlay:")) continue;
+            java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\\\bdisplayId=(\\\\d+)").matcher(block);
+            if (id.find()) {
+                try { return Integer.parseInt(id.group(1)); } catch (NumberFormatException ignored) { }
+            }
+        }
+        return -1;
+    }
+
     private void connectTarget() {
         addLog("INFO", "Tombol sambungkan ditekan");
         try {
-            int id = Integer.parseInt(displayInput.getText().toString().trim());
-            int w = Integer.parseInt(widthInput.getText().toString().trim());
-            int h = Integer.parseInt(heightInput.getText().toString().trim());
+            String idText = displayInput.getText().toString().trim();
+            String widthText = widthInput.getText().toString().trim();
+            String heightText = heightInput.getText().toString().trim();
+            if (idText.isEmpty() || widthText.isEmpty() || heightText.isEmpty()) {
+                detectAndAutoConnect();
+                return;
+            }
+            int id = Integer.parseInt(idText);
+            int w = Integer.parseInt(widthText);
+            int h = Integer.parseInt(heightText);
             if (id < 0 || w < 320 || w > 3840 || h < 320 || h > 2160) throw new NumberFormatException();
             targetDisplayId = id; targetWidth = w; targetHeight = h;
             addLog("INFO", "Target display=" + id + ", ukuran input=" + w + "x" + h);
