@@ -2012,7 +2012,7 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
             setupTrackpad(accessContext)
             if (shellService != null) initCustomKeyboard()
             menuManager = TrackpadMenuManager(displayContext, windowManager!!, this)
-            setupBubble(accessContext)
+            // Floating bubble is intentionally disabled in fullscreen trackpad mode.
             setupCursor(accessContext)
 
 
@@ -2152,76 +2152,146 @@ class OverlayService : AccessibilityService(), DisplayManager.DisplayListener, I
     }
     
     private fun setupTrackpad(context: Context) {
+        // Simple fullscreen trackpad surface. The existing handleTrackpadTouch() remains
+        // the input engine; only the old draggable floating window chrome is replaced.
         trackpadLayout = FrameLayout(context)
-        val bg = GradientDrawable(); bg.cornerRadius = 30f; bg.setColor(Color.TRANSPARENT); trackpadLayout?.background = bg
-        val handleColor = 0x15FFFFFF.toInt(); handleContainers.clear(); handleVisuals.clear()
-        addHandle(context, Gravity.TOP or Gravity.RIGHT, handleColor) { _, e -> moveWindow(e) }
-        addHandle(context, Gravity.BOTTOM or Gravity.RIGHT, handleColor) { _, e -> resizeWindow(e) }
-        addHandle(context, Gravity.TOP or Gravity.LEFT, handleColor) { _, e -> keyboardHandle(e) }
-        addHandle(context, Gravity.BOTTOM or Gravity.LEFT, handleColor) { _, e -> openMenuHandle(e) }
-        addScrollBars(context)
-        debugTextView = TextView(context); debugTextView?.text = "DEBUG"; debugTextView?.setTextColor(Color.YELLOW); debugTextView?.setBackgroundColor(0xAA000000.toInt()); debugTextView?.textSize = 9f; debugTextView?.visibility = View.GONE; val debugParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT); debugParams.gravity = Gravity.CENTER; trackpadLayout?.addView(debugTextView, debugParams)
-        
+        trackpadLayout?.setBackgroundColor(Color.BLACK)
+        handleContainers.clear(); handleVisuals.clear()
+
+        val root = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+        }
+        val header = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+        }
+        val modeLabel = TextView(context).apply {
+            text = "Mode"
+            setTextColor(0xffd4baff.toInt())
+            textSize = 15f
+            setPadding(dp(4), 0, dp(8), 0)
+        }
+        header.addView(modeLabel, android.widget.LinearLayout.LayoutParams(-2, -2))
+        val mode = android.widget.Spinner(context)
+        val modeAdapter = android.widget.ArrayAdapter(context, android.R.layout.simple_spinner_item, arrayOf("Normal", "Scroll"))
+        modeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        mode.adapter = modeAdapter
+        header.addView(mode, android.widget.LinearLayout.LayoutParams(0, dp(42), 1f))
+        val exit = android.widget.TextView(context).apply {
+            text = "Keluar"
+            setTextColor(0xffd4baff.toInt())
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), 0, dp(4), 0)
+            setOnClickListener { setTrackpadVisibility(false) }
+        }
+        header.addView(exit, android.widget.LinearLayout.LayoutParams(-2, dp(42)))
+        root.addView(header, android.widget.LinearLayout.LayoutParams(-1, dp(48)))
+
+        val touchArea = FrameLayout(context).apply {
+            setBackgroundColor(Color.BLACK)
+            background = GradientDrawable().apply {
+                setColor(Color.BLACK)
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), 0xff303030.toInt())
+            }
+        }
+        root.addView(touchArea, android.widget.LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val footer = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(6), dp(8), dp(6), dp(8))
+        }
+        fun control(label: String, action: () -> Unit) {
+            val button = android.widget.TextView(context).apply {
+                text = label
+                gravity = Gravity.CENTER
+                textSize = 17f
+                setTextColor(Color.WHITE)
+                setBackground(GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(0xff111111.toInt())
+                })
+                setOnClickListener { action() }
+            }
+            val lp = android.widget.LinearLayout.LayoutParams(dp(42), dp(42))
+            lp.setMargins(dp(5), 0, dp(5), 0)
+            footer.addView(button, lp)
+        }
+        control("‹") { performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
+        control("⌂") { performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) }
+        control("⚙") {
+            try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { showToast("Pengaturan tidak bisa dibuka") }
+        }
+        control("⟳") { rotateTrackpadMode() }
+        control("↻") { menuManager?.toggle() }
+        val keyboardButton = android.widget.TextView(context).apply {
+            text = "Floating keyboard"
+            gravity = Gravity.CENTER
+            textSize = 14f
+            setTextColor(0xff291b49.toInt())
+            setPadding(dp(14), 0, dp(14), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(24).toFloat()
+                setColor(0xffd4baff.toInt())
+            }
+            setOnClickListener { toggleCustomKeyboard() }
+        }
+        footer.addView(keyboardButton, android.widget.LinearLayout.LayoutParams(-2, dp(42)))
+        root.addView(footer, android.widget.LinearLayout.LayoutParams(-1, dp(58)))
+        trackpadLayout?.addView(root, FrameLayout.LayoutParams(-1, -1))
+
         trackpadParams = WindowManager.LayoutParams(
-            400, 300, 
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, 
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or 
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH, 
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-             trackpadParams.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            trackpadParams.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-
-        trackpadParams.gravity = Gravity.TOP or Gravity.LEFT; loadLayout()
-        val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() { 
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean { return false }
+        trackpadParams.gravity = Gravity.TOP or Gravity.LEFT
+        loadLayout()
+        val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
         })
-        
-        // =================================================================================
-        // TRACKPAD TOUCH LISTENER
-        // SUMMARY: Handles all touch events on the trackpad area. Filters for finger-only
-        //          input, passes to gesture detector, and calls handleTrackpadTouch for
-        //          cursor movement. Also checks for spacebar extended mode exit.
-        // =================================================================================
         trackpadLayout?.setOnTouchListener { _, event ->
-            val devId = event.deviceId
             val tool = event.getToolType(0)
-            
-            // Only accept finger touches (not mouse, stylus, etc.)
             if (tool != MotionEvent.TOOL_TYPE_FINGER) return@setOnTouchListener false
-            
-            // Track active finger to prevent ghost touches
+            val devId = event.deviceId
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> activeFingerDeviceId = devId
                 MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
-                    if (activeFingerDeviceId > 0 && devId != activeFingerDeviceId) {
-                        return@setOnTouchListener false
-                    }
+                    if (activeFingerDeviceId > 0 && devId != activeFingerDeviceId) return@setOnTouchListener false
                 }
             }
-            
-            // Check for spacebar mouse extended mode exit (on tap outside keyboard)
             handleSpacebarExtendedModeCheck(event.rawX, event.rawY, event.action)
-            
-            // Pass to gesture detector for tap detection
             gestureDetector.onTouchEvent(event)
-            
-            // CRITICAL: Handle trackpad touch for cursor movement
             handleTrackpadTouch(event)
-            
             true
         }
-        // =================================================================================
-        // END BLOCK: TRACKPAD TOUCH LISTENER
-        // =================================================================================
         trackpadLayout?.visibility = if (isTrackpadVisible) View.VISIBLE else View.GONE
         windowManager?.addView(trackpadLayout, trackpadParams)
         updateBorderColor(currentBorderColor)
     }
-    
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun rotateTrackpadMode() {
+        // Kept as a simple UI control; actual cursor/input routing remains in the existing service.
+        prefs.prefVPosLeft = !prefs.prefVPosLeft
+        savePrefs()
+        showToast("Posisi zona scroll diperbarui")
+    }
+
     private fun setupCursor(context: Context) {
         cursorLayout = FrameLayout(context); cursorView = ImageView(context); cursorView?.setImageResource(R.drawable.ic_cursor); val size = if (prefs.prefCursorSize > 0) prefs.prefCursorSize else 50; cursorLayout?.addView(cursorView, FrameLayout.LayoutParams(size, size))
         cursorParams = WindowManager.LayoutParams(
