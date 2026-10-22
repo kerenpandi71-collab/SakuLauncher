@@ -1616,7 +1616,15 @@ class MainActivity : Activity() {
 
     private fun openYouTubeWeb() {
         try {
-            startActivity(Intent(this, YouTubeActivity::class.java))
+            // SakuTube is shipped as a separate application; do not reference the
+            // removed in-process YouTubeActivity from the pre-integration launcher.
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.sakuhome.sakutube")
+            if (launchIntent == null) {
+                Toast.makeText(this, "SakuTube belum terpasang. Pasang APK SakuTube terlebih dahulu.", Toast.LENGTH_LONG).show()
+                return
+            }
+            launchIntent.putExtra("sakutube_url", "resource://android/assets/sakutube-home.html")
+            startActivity(launchIntent)
         } catch (e: Exception) {
             Toast.makeText(this, "SakuTube gagal dibuka: ${e.message ?: "kesalahan tidak diketahui"}", Toast.LENGTH_LONG).show()
         }
