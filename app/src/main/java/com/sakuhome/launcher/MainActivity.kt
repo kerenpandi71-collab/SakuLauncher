@@ -173,7 +173,6 @@ class MainActivity : Activity() {
         val options = arrayOf(
             "＋  Tambah layar utama",
             "－  Kurangi layar utama",
-            "↕  Posisi ikon: ${homeIconPositionLabel()}",
             if (preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)) "Tampilkan kontrol layar" else "Sembunyikan kontrol layar",
             "Hapus layar ini"
         )
@@ -184,12 +183,11 @@ class MainActivity : Activity() {
                     if (homePageCount() <= 1) Toast.makeText(this, "Minimal satu layar utama", Toast.LENGTH_SHORT).show()
                     else { removeCurrentHomePage(); buildScreen() }
                 }
-                2 -> chooseHomeIconPosition()
-                3 -> {
+                2 -> {
                     preferences.edit().putBoolean(KEY_HIDE_PAGE_CONTROLS, !preferences.getBoolean(KEY_HIDE_PAGE_CONTROLS, false)).apply()
                     buildScreen()
                 }
-                4 -> AlertDialog.Builder(this)
+                3 -> AlertDialog.Builder(this)
                     .setTitle("Hapus layar ${homePage + 1}?")
                     .setMessage("Ikon di layar ini akan dipindahkan ke layar sebelumnya atau layar terdekat agar tidak hilang.")
                     .setNegativeButton("Batal", null)
@@ -917,12 +915,11 @@ class MainActivity : Activity() {
         pinnedAdapter = AppGridAdapter(isStartMenu = false)
         desktopGrid.setOnDragListener { canvas, event ->
             when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> !preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false) && event.clipDescription?.hasMimeType("text/plain") == true
+                android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.92f; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
                 android.view.DragEvent.ACTION_DROP -> {
                     canvas.alpha = 1f
-                    if (preferences.getBoolean(KEY_HOME_LAYOUT_LOCKED, false)) return@setOnDragListener true
                     val source = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
                     if (source != null && homePackages().contains(source)) placeHomeIcon(source, event.x, event.y)
                     true
@@ -2004,7 +2001,7 @@ class MainActivity : Activity() {
                 }, Toast.LENGTH_SHORT).show()
             }
             21 -> showWidgetInfo()
-            22 -> chooseHomeIconPosition()
+            22 -> { /* Home icon placement options removed. */ }
         }
     }
 
@@ -3225,7 +3222,6 @@ class MainActivity : Activity() {
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_HOME_ICON_POSITION = "home_icon_position"
-        private const val KEY_HOME_LAYOUT_LOCKED = "home_layout_locked"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_BUBBLE_SIZE = "assistive_bubble_size_dp"
         private const val KEY_DOCK_POSITION = "dock_navigation_position"
