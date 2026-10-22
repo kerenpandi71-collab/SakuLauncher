@@ -238,7 +238,7 @@ public class VirtualDisplayActivity extends Activity {
             String component = getPackageName() + "/com.sakuhome.launcher.virtualdisplay.DesktopActivity";
             String command = "am start --display " + displayId + " --windowingMode 1 -f 0x10008000 -n " + component
                 + " --ei display_id " + displayId;
-            RootResult launch = runRootDetailed(command);
+            RootResult launch = runAsShellDetailed(command);
             String output = launch.output;
             boolean failed = launch.timedOut || launch.exitCode != 0
                 || output.contains("Error:") || output.contains("Exception")
@@ -263,18 +263,40 @@ public class VirtualDisplayActivity extends Activity {
 
     private int findOverlayDisplayId(String dump) {
         if (dump == null || dump.isEmpty()) return -1;
-        java.util.regex.Matcher viewportMatcher = java.util.regex.Pattern
-            .compile("DisplayViewport\\{([^}]*)\\}").matcher(dump);
-        while (viewportMatcher.find()) {
-            String viewport = viewportMatcher.group(1);
-            if (!viewport.contains("uniqueId='overlay:")
-                && !viewport.contains("uniqueId=\"overlay:")) continue;
+        // Virtual displays are logical displays and commonly do not have a DisplayViewport.
+        // Parse each logical-display block and match its overlay name/unique ID instead.
+        java.util.regex.Matcher headers = java.util.regex.Pattern
+            .compile("(?m)^\\s*Display\\s+(\\d+)\\s*:").matcher(dump);
+        java.util.ArrayList<Integer> starts = new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> ids = new java.util.ArrayList<>();
+        while (headers.find()) {
+            try {
+                ids.add(Integer.parseInt(headers.group(1)));
+                starts.add(headers.start());
+            } catch (NumberFormatException ignored) { }
+        }
+        for (int i = 0; i < starts.size(); i++) {
+            int end = i + 1 < starts.size() ? starts.get(i + 1) : dump.length();
+            String block = dump.substring(starts.get(i), end);
+            String lower = block.toLowerCase(java.util.Locale.ROOT);
+            if (!lower.contains("overlay:") && !lower.contains("overlay #")
+                && !lower.contains("overlay display")) continue;
             java.util.regex.Matcher idMatcher = java.util.regex.Pattern
-                .compile("\\bdisplayId=(\\d+)").matcher(viewport);
+                .compile("(?i)\\bmDisplayId\\s*=\\s*(\\d+)").matcher(block);
             if (idMatcher.find()) {
                 try { return Integer.parseInt(idMatcher.group(1)); }
-                catch (NumberFormatException ignored) { return -1; }
+                catch (NumberFormatException ignored) { }
             }
+            return ids.get(i);
+        }
+
+        // Fallback for ROMs that print a single-line DisplayInfo record.
+        java.util.regex.Matcher info = java.util.regex.Pattern
+            .compile("(?i)DisplayInfo\\{[^}]*overlay[^}]*displayId\\s*[=: ]\\s*(\\d+)[^}]*\\}")
+            .matcher(dump);
+        if (info.find()) {
+            try { return Integer.parseInt(info.group(1)); }
+            catch (NumberFormatException ignored) { }
         }
         return -1;
     }
@@ -363,6 +385,31 @@ public class VirtualDisplayActivity extends Activity {
     private String runRoot(String command) {
         RootResult result = runRootDetailed(command);
         return result.timedOut || result.exitCode != 0 ? null : result.output;
+    }
+
+    private RootResult runAsShellDetailed(String command) {
+        Process process = null;
+        StringBuilder output = new StringBuilder();
+        try {
+            // --display launches must run as Android shell UID, not UID 0.
+            process = new ProcessBuilder("su", "2000", "-c", command).redirectErrorStream(true).start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null && output.length() < 12000) {
+                    output.append(line).append('\n');
+                }
+            }
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return new RootResult(output.toString().trim(), -1, true);
+            }
+            return new RootResult(output.toString().trim(), process.exitValue(), false);
+        } catch (Exception e) {
+            output.append(e.getClass().getSimpleName()).append(": ").append(e.getMessage());
+            return new RootResult(output.toString().trim(), -1, false);
+        } finally {
+            if (process != null) process.destroy();
+        }
     }
 
     private RootResult runRootDetailed(String command) {
