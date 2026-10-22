@@ -81,7 +81,6 @@ public class TrackpadActivity extends Activity {
         detectAndAutoConnect();
     }
 
-    private void buildUi() {
     private void openGamePadOverlay() {
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "Aktifkan izin Tampil di atas aplikasi untuk SakuLauncher", Toast.LENGTH_LONG).show();
@@ -101,7 +100,7 @@ public class TrackpadActivity extends Activity {
         }
     }
 
-
+    private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(16), dp(18), dp(14));
