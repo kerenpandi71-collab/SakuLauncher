@@ -70,8 +70,14 @@ if 'include(":hidden-api-stub")' not in s: s += '\ninclude(":hidden-api-stub")\n
 p.write_text(s)
 p=Path("build.gradle.kts")
 s=p.read_text()
-if 'dev.rikka.tools.refine' not in s:
-    s += '\nplugins { id("dev.rikka.tools.refine") version "4.1.0" apply false }\n'
+refine='    id("dev.rikka.tools.refine") version "4.1.0" apply false'
+if 'id("dev.rikka.tools.refine") version "4.1.0" apply false' not in s:
+    # Add the plugin to the existing plugins block; Gradle Kotlin scripts permit only one plugins block.
+    start=s.find("plugins {")
+    end=s.find("}", start)
+    if start < 0 or end < 0:
+        raise SystemExit("Could not find root plugins block in build.gradle.kts")
+    s=s[:end] + refine + "\\n" + s[end:]
 p.write_text(s)
 p=Path("app/build.gradle.kts")
 s=p.read_text()
