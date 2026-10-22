@@ -57,6 +57,20 @@ if incoming.exists():
 manifest=Path("app/src/main/AndroidManifest.xml")
 dst=ET.parse(manifest); dr=dst.getroot()
 ext=ET.parse(src/"app/src/main/AndroidManifest.xml").getroot()
+# Earlier builds accidentally registered Extend classes as Saku-relative components.
+# Remove those invalid duplicates; the actual implementation stays under its original package.
+da=dr.find("application")
+stale_names={
+    ".OverlayDisplayActivity", ".LauncherActivity", ".TouchpadActivity",
+    ".PureBlackActivity", ".AccessibilityConsentActivity", ".ManagedVirtualDisplayActivity",
+    ".FloatingKeyboardService", ".MediaProjectionService", ".TouchpadAccessibilityService",
+    ".FloatingButtonService", ".PureBlackActivity$ExitReceiver"
+}
+for node in list(da):
+    if node.tag in ("activity","service","receiver") and node.attrib.get(A) in stale_names:
+        da.remove(node)
+# Register the application-wide diagnostics hook.
+da.set(NS+"name", "com.sakuhome.launcher.SakuApplication")
 A="{http://schemas.android.com/apk/res/android}name"
 NS="{http://schemas.android.com/apk/res/android}"
 existing_perms={e.attrib.get(A) for e in dr.findall("uses-permission")}
@@ -91,7 +105,7 @@ for e in ea:
 # Ensure Shizuku provider authority is unique within the combined application.
 for p in da.findall("provider"):
     if p.attrib.get(A)=="rikka.shizuku.ShizukuProvider":
-        p.set(NS+"authorities","com.sakuhome.launcher.displayextend.shizuku")
+        p.set(NS+"authorities","com.sakuhome.launcher.shizuku")
 ET.indent(dr, space="    ")
 dst.write(manifest, encoding="utf-8", xml_declaration=True)
 PY
