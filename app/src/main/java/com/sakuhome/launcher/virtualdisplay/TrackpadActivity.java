@@ -47,6 +47,7 @@ public class TrackpadActivity extends Activity {
     private EditText displayInput, widthInput, heightInput;
     private TextView connectionStatus, coordinateStatus;
     private Button gamePadVisibilityButton;
+    private boolean gamePadRequestedVisible = false;
     private TrackpadSurface pad;
     private final ExecutorService inputQueue = Executors.newSingleThreadExecutor();
     private volatile int targetDisplayId = -1;
@@ -103,11 +104,16 @@ public class TrackpadActivity extends Activity {
 
     private void toggleGamePadVisibility() {
         int displayId = targetDisplayId >= 0 ? targetDisplayId : 0;
+        // Explicit SHOW/HIDE avoids hiding panels when this starts a new service.
+        gamePadRequestedVisible = !gamePadRequestedVisible;
+        String action = gamePadRequestedVisible ? "SHOW" : "HIDE";
         android.content.Intent service = new android.content.Intent(this, GamePadOverlayService.class)
-            .setAction("TOGGLE_VISIBILITY").putExtra("display_id", displayId);
+            .setAction(action).putExtra("display_id", displayId);
         try {
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(service); else startService(service);
-            Toast.makeText(this, "Perintah tampil/sembunyi Game Pad dikirim", Toast.LENGTH_SHORT).show();
+            if (gamePadVisibilityButton != null) gamePadVisibilityButton.setText(
+                gamePadRequestedVisible ? "GAME PAD: SEMBUNYIKAN" : "GAME PAD: TAMPILKAN");
+            Toast.makeText(this, gamePadRequestedVisible ? "Game Pad ditampilkan saat landscape" : "Game Pad disembunyikan", Toast.LENGTH_SHORT).show();
         } catch (Throwable error) {
             Toast.makeText(this, "Game Pad: " + error.getMessage(), Toast.LENGTH_LONG).show();
         }
