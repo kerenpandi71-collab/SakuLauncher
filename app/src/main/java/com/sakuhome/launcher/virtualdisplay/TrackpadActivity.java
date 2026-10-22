@@ -82,6 +82,26 @@ public class TrackpadActivity extends Activity {
     }
 
     private void buildUi() {
+    private void openGamePadOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Aktifkan izin Tampil di atas aplikasi untuk SakuLauncher", Toast.LENGTH_LONG).show();
+            try { startActivity(new android.content.Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:" + getPackageName()))); } catch (Throwable ignored) { }
+            return;
+        }
+        int displayId = targetDisplayId >= 0 ? targetDisplayId : 0;
+        getSharedPreferences("gamepad_runtime", MODE_PRIVATE).edit().putInt("display_id", displayId).apply();
+        android.content.Intent service = new android.content.Intent(this, GamePadOverlayService.class)
+            .putExtra("display_id", displayId);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(service); else startService(service);
+            Toast.makeText(this, "Pintasan Game Pad dikirim • putar layar ke landscape", Toast.LENGTH_SHORT).show();
+        } catch (Throwable error) {
+            Toast.makeText(this, "Game Pad gagal dibuka: " + error.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(16), dp(18), dp(14));
@@ -137,6 +157,14 @@ public class TrackpadActivity extends Activity {
         LinearLayout.LayoutParams navp = new LinearLayout.LayoutParams(-1, -2);
         navp.topMargin = dp(4);
         root.addView(nav, navp);
+        LinearLayout gamePadShortcutRow = new LinearLayout(this);
+        Button gamePadShortcut = button("🎮 BUKA GAME PAD");
+        gamePadShortcut.setOnClickListener(v -> openGamePadOverlay());
+        gamePadShortcutRow.addView(gamePadShortcut, new LinearLayout.LayoutParams(-1, dp(44)));
+        LinearLayout.LayoutParams gamePadShortcutParams = new LinearLayout.LayoutParams(-1, -2);
+        gamePadShortcutParams.topMargin = dp(5);
+        root.addView(gamePadShortcutRow, gamePadShortcutParams);
+
         TextView help = text("1 jari: kursor • ketuk: klik • tahan/seret: drag • 2 jari: scroll", 11, 0xFFB7C7D9);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
