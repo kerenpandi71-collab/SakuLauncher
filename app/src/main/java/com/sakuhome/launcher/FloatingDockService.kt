@@ -102,13 +102,13 @@ class FloatingDockService : Service() {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(7), dp(5), dp(7), dp(5))
+            setPadding(dp(8), dp(5), dp(8), dp(5))
             background = GradientDrawable().apply {
                 setColor(Color.argb(transparency * 255 / 100, if (darkTheme) 31 else 247, if (darkTheme) 37 else 249, if (darkTheme) 52 else 253))
-                setStroke(dp(1), Color.argb(150, 255, 255, 255))
-                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), Color.argb(170, 255, 255, 255))
+                cornerRadius = dp(23).toFloat()
             }
-            elevation = dp(12).toFloat()
+            elevation = dp(14).toFloat()
         }
         val startButton = TextView(this).apply {
             text = "▦"
@@ -125,14 +125,26 @@ class FloatingDockService : Service() {
                 startActivity(open)
             }
         }
-        dock.addView(startButton, LinearLayout.LayoutParams(dp(45), dp(48)))
-        pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEach { app ->
+        dock.addView(startButton, LinearLayout.LayoutParams(dp(43), dp(46)))
+        dock.addView(View(this).apply {
+            setBackgroundColor(Color.argb(95, 255, 255, 255))
+        }, LinearLayout.LayoutParams(dp(1), dp(32)).apply {
+            marginStart = dp(6)
+            marginEnd = dp(4)
+        })
+        pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEachIndexed { index, app ->
             val icon = ImageView(this).apply {
                 setImageDrawable(app.icon)
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(7), dp(7), dp(7), dp(7))
+                setPadding(dp(5), dp(5), dp(5), dp(5))
                 contentDescription = app.label
                 setOnClickListener {
+                    animate().cancel()
+                    scaleX = 0.86f
+                    scaleY = 0.86f
+                    animate().scaleX(1.08f).scaleY(1.08f).setDuration(120).withEndAction {
+                        animate().scaleX(1f).scaleY(1f).setDuration(140).start()
+                    }.start()
                     val launch = packageManager.getLaunchIntentForPackage(app.packageName)
                     if (launch != null) {
                         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
