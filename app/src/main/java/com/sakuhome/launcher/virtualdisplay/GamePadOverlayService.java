@@ -152,7 +152,7 @@ public final class GamePadOverlayService extends Service {
                 selected=nearest(x,y);moving=editing;if(moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();}else if(selected==0){sendTouch(0,"DOWN",xs[selected],ys[selected]);}else{sendTouch(selected+1,"DOWN",xs[selected],ys[selected]);}return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE&&moving){xs[selected]=clamp(x/getWidth());ys[selected]=clamp(y/getHeight());invalidate();return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE && selected==0 && !editing){float radius=dp(44)*scale;float dx=Math.max(-radius,Math.min(radius,x-downX));float dy=Math.max(-radius,Math.min(radius,y-downY));sendTouch(0,"MOVE",clamp(xs[0]+dx/getWidth()),clamp(ys[0]+dy/getHeight()));return true;}
-            if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0)trigger(selected);return true;}return true;
+            if(e.getAction()==MotionEvent.ACTION_UP){if(moving){saveLayout();invalidate();}else if(selected>=0){if(selected==0)sendTouch(0,"UP",xs[0],ys[0]);else sendTouch(selected+1,"UP",xs[selected],ys[selected]);}return true;}return true;
         }
         private int toolbarAction(float x){float cell=(getWidth()-dp(10))/8f;int i=(int)((x-dp(5))/cell);return i>=0&&i<8?i:-1;}
         private void performToolbar(int a){
