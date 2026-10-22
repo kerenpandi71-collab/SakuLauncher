@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.widget.SeekBar
+import android.widget.ScrollView
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
@@ -479,7 +480,7 @@ class MainActivity : Activity() {
             val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
             val fixedChromeDp = if (landscapeLayout) 150 else 255
             val availableGridDp = (screenHeightDp - fixedChromeDp - dockHeightDp).coerceAtLeast(0)
-            val bottomAlignPadding = (availableGridDp - rows * rowHeightDp).coerceIn(8, 320)
+            val bottomAlignPadding = maxOf(84, (availableGridDp - rows * rowHeightDp).coerceIn(8, 320))
             val topPadding = when (preferences.getString(KEY_HOME_ICON_POSITION, "bottom")) {
                 "top" -> 8
                 "middle" -> 84
@@ -1962,7 +1963,7 @@ class MainActivity : Activity() {
             }.setNegativeButton("Batal", null).show()
     }
 
-    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "middle")) {
+    private fun homeIconPositionLabel(): String = when (preferences.getString(KEY_HOME_ICON_POSITION, "bottom")) {
         "top" -> "Atas"
         "bottom" -> "Bawah"
         else -> "Tengah"
