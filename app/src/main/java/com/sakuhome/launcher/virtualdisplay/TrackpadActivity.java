@@ -195,7 +195,7 @@ public class TrackpadActivity extends Activity {
         java.util.regex.Matcher info = java.util.regex.Pattern.compile("(?s)DisplayInfo\\{([^}]*)\\}").matcher(dump);
         while (info.find()) {
             String block = info.group(1);
-            if (!block.contains("uniqueId='overlay:") && !block.contains("uniqueId=\\"overlay:")) continue;
+            if (!block.contains("uniqueId='overlay:")) continue;
             java.util.regex.Matcher id = java.util.regex.Pattern.compile("\\bdisplayId=(\\d+)").matcher(block);
             if (id.find()) {
                 try { return Integer.parseInt(id.group(1)); } catch (NumberFormatException ignored) { }
