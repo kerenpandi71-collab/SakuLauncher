@@ -69,15 +69,6 @@ public class DesktopActivity extends Activity {
 
         root.addView(header);
 
-        TextView trackpad = text("Trackpad + Mouse + Log Diagnostik", 14, 0xFFF4F7FC);
-        trackpad.setGravity(Gravity.CENTER_VERTICAL);
-        trackpad.setPadding(dp(14), dp(12), dp(14), dp(12));
-        trackpad.setBackgroundColor(0xFF24344D);
-        trackpad.setOnClickListener(v -> openTrackpadOnPhone());
-        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
-        tp.topMargin = dp(10);
-        root.addView(trackpad, tp);
-
         TextView settings = text("Virtual Display • Resolusi / DPI / Pemulihan", 14, 0xFFF4F7FC);
         settings.setGravity(Gravity.CENTER_VERTICAL);
         settings.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -145,22 +136,6 @@ public class DesktopActivity extends Activity {
                 }
             });
         }, "open-mini-desktop-settings").start();
-    }
-
-    private void openTrackpadOnPhone() {
-        // DesktopActivity runs on the virtual display. A normal startActivity() inherits
-        // that display and can put the trackpad UI on the desktop instead of the phone.
-        final String command = "am start --display 0 --windowingMode 1 -n " + getPackageName()
-                + "/com.sakuhome.launcher.virtualdisplay.TrackpadActivity --ei display_id " + displayId;
-        new Thread(() -> {
-            String result = runRoot(command);
-            runOnUiThread(() -> {
-                if (result == null || result.contains("Error:") || result.contains("Exception")) {
-                    Toast.makeText(this, "Gagal membuka trackpad di layar HP: " + result,
-                            Toast.LENGTH_LONG).show();
-                }
-            });
-        }, "open-phone-trackpad").start();
     }
 
     private void loadApps(String query) {
