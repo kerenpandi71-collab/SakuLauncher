@@ -77,7 +77,7 @@ if 'id("dev.rikka.tools.refine") version "4.1.0" apply false' not in s:
     end=s.find("}", start)
     if start < 0 or end < 0:
         raise SystemExit("Could not find root plugins block in build.gradle.kts")
-    s=s[:end] + refine + "\\n" + s[end:]
+    s=s[:end] + refine + "\n" + s[end:]
 p.write_text(s)
 p=Path("app/build.gradle.kts")
 s=p.read_text()
