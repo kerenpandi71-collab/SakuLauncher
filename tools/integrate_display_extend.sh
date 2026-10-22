@@ -10,6 +10,20 @@ export EXTEND_SOURCE="$TMP/extend"
 # Copy implementation while preserving the source package and AIDL layout.
 mkdir -p app/src/main/java/io/github/jqssun/displayextend app/src/main/aidl app/src/main/res
 cp -R "$EXTEND_SOURCE/app/src/main/java/io/github/jqssun/displayextend/." app/src/main/java/io/github/jqssun/displayextend/
+# The embedded classes keep their original package, but Android generates R/BuildConfig
+# from SakuLauncher's app namespace. Rewrite resource/config imports accordingly.
+python3 - <<'PY'
+from pathlib import Path
+import re
+root=Path("app/src/main/java/io/github/jqssun/displayextend")
+for p in root.rglob("*.java"):
+    s=p.read_text()
+    s=s.replace("import io.github.jqssun.displayextend.R;", "import com.sakuhome.launcher.R;")
+    s=s.replace("import io.github.jqssun.displayextend.BuildConfig;", "import com.sakuhome.launcher.BuildConfig;")
+    if re.search(r"\\bR\\.", s) and not re.search(r"import [\\w.]+\\.R;", s):
+        s=re.sub(r"(package [^;]+;)", r"\\1\\n\\nimport com.sakuhome.launcher.R;", s, count=1)
+    p.write_text(s)
+PY
 [ ! -d "$EXTEND_SOURCE/app/src/main/aidl" ] || cp -R "$EXTEND_SOURCE/app/src/main/aidl/." app/src/main/aidl/
 cp -Rn "$EXTEND_SOURCE/app/src/main/res/." app/src/main/res/
 # Remove a stale resource file from an earlier integration attempt; the source project has no values/styles.xml, and it duplicates Saku\x27s AppTheme in values/themes.xml.
