@@ -65,15 +65,18 @@ public class VirtualDisplayActivity extends Activity {
         root.addView(dpiInput);
         LinearLayout presets = new LinearLayout(this);
         presets.setOrientation(LinearLayout.HORIZONTAL);
-        presets.addView(button("1280×720", v -> setValues(1280, 720, 240)), weight());
-        presets.addView(button("1600×900", v -> setValues(1600, 900, 240)), weight());
-        presets.addView(button("1920×1080", v -> setValues(1920, 1080, 240)), weight());
+        presets.addView(button("900×900", v -> setValues(900, 900, 240)), weight());
+        presets.addView(button("800×800", v -> setValues(800, 800, 240)), weight());
+        presets.addView(button("Custom", v -> {
+            widthInput.requestFocus();
+            Toast.makeText(this, "Atur lebar, tinggi, dan DPI secara manual.", Toast.LENGTH_SHORT).show();
+        }), weight());
         LinearLayout.LayoutParams presetParams = new LinearLayout.LayoutParams(-1, -2);
         presetParams.topMargin = dp(12);
         root.addView(presets, presetParams);
         root.addView(button("TERAPKAN KONFIGURASI", v -> applyDisplay()));
         root.addView(button("BACA STATUS KONFIGURASI", v -> refreshStatus()));
-        root.addView(button("BUKA DESKTOP DI DISPLAY VIRTUAL", v -> openDesktopOnOverlay()));
+        root.addView(button("BUKA SAKU DESKTOP LAUNCHER", v -> openDesktopOnOverlay()));
         root.addView(button("BUKA TRACKPAD UNTUK DISPLAY VIRTUAL", v -> openTrackpad()));
         root.addView(button("PULIHKAN KONFIGURASI SEBELUMNYA", v -> restorePrevious()));
         root.addView(button("HAPUS OVERLAY DISPLAY VIRTUAL", v -> removeOverlayDisplay()));
