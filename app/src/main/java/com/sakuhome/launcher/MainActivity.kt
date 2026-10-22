@@ -275,36 +275,58 @@ class MainActivity : Activity() {
         }
         shellView = shell
 
+        // Compact macOS-inspired menu bar: app identity on the left, status/time on the right.
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(4), dp(3), dp(5))
+            setPadding(dp(12), dp(5), dp(7), dp(5))
+            background = if (liquidGlass) glassSurface(17) else rounded(dockSurface, 17)
+            elevation = dp(3).toFloat()
         }
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(TextView(this).apply {
-            text = "SAKU"
-            textSize = 10f
-            letterSpacing = 0.22f
-            setTextColor(accent)
-        })
-        clockText = TextView(this).apply {
-            textSize = 32f
-            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        topBar.addView(TextView(this).apply {
+            text = ""
+            textSize = 21f
+            gravity = Gravity.CENTER
             setTextColor(primaryText)
+            contentDescription = "Saku menu"
+            setOnClickListener { showSettings() }
+        }, LinearLayout.LayoutParams(dp(30), dp(32)))
+        topBar.addView(TextView(this).apply {
+            text = "Saku"
+            textSize = 13f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD))
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener { showSettings() }
+        }, LinearLayout.LayoutParams(-2, dp(32)).apply { marginStart = dp(3) })
+        val statusSpacer = View(this)
+        topBar.addView(statusSpacer, LinearLayout.LayoutParams(0, 1, 1f))
+        dateText = TextView(this).apply {
+            textSize = 10.5f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+        }
+        clockText = TextView(this).apply {
+            textSize = 11f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER_VERTICAL
             includeFontPadding = false
         }
-        dateText = TextView(this).apply {
-            textSize = 12f
+        topBar.addView(TextView(this).apply {
+            text = "◉"
+            textSize = 11f
+            gravity = Gravity.CENTER
             setTextColor(secondaryText)
-        }
-        brand.addView(clockText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(3) })
-        brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
-        topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
-
-        topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
-            contentDescription = "Pengaturan Saku Dock"
+            contentDescription = "Status koneksi"
+        }, LinearLayout.LayoutParams(dp(22), dp(30)))
+        topBar.addView(dateText, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(8) })
+        topBar.addView(clockText, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(8) })
+        topBar.addView(chipButton("⚙", cardSurface, primaryText, 12).apply {
+            contentDescription = "Pengaturan Saku"
             setOnClickListener { showSettings() }
-        }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        }, LinearLayout.LayoutParams(dp(32), dp(32)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
 
         val pageControls = LinearLayout(this).apply {
@@ -435,11 +457,15 @@ class MainActivity : Activity() {
             background = if (liquidGlass) glassSurface(25) else rounded(dockSurface, 25)
             elevation = dp(14).toFloat()
         }
-        dock.addView(chipButton("▦", accent, Color.WHITE, 17).apply {
+        dock.addView(chipButton("⌘", accent, Color.WHITE, 15).apply {
             textSize = 20f
-            contentDescription = "Buka menu Start"
+            contentDescription = "Buka App Library"
             setOnClickListener { toggleStartPanel() }
-        }, LinearLayout.LayoutParams(dp(49), -1))
+        }, LinearLayout.LayoutParams(dp(44), -1))
+
+        dock.addView(View(this).apply {
+            setBackgroundColor(Color.argb(if (isDarkTheme) 100 else 65, primaryText shr 16 and 0xff, primaryText shr 8 and 0xff, primaryText and 0xff))
+        }, LinearLayout.LayoutParams(dp(1), dp(34)).apply { marginStart = dp(7); marginEnd = dp(5) })
 
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -461,11 +487,19 @@ class MainActivity : Activity() {
     private fun dockIcon(app: LaunchableApp, index: Int): View = ImageView(this).apply {
         setImageDrawable(app.icon)
         scaleType = ImageView.ScaleType.FIT_CENTER
-        setPadding(dp(8), dp(7), dp(8), dp(7))
+        setPadding(dp(5), dp(5), dp(5), dp(5))
         contentDescription = app.label
         isClickable = true
         isFocusable = true
-        setOnClickListener { launch(app) }
+        setOnClickListener {
+            animate().cancel()
+            scaleX = 0.86f
+            scaleY = 0.86f
+            animate().scaleX(1.08f).scaleY(1.08f).setDuration(120).withEndAction {
+                animate().scaleX(1f).scaleY(1f).setDuration(140).start()
+            }.start()
+            launch(app)
+        }
         setOnLongClickListener {
             showDockItemMenu(app, index)
             true
@@ -1499,7 +1533,7 @@ class MainActivity : Activity() {
         if (!::clockText.isInitialized) return
         val now = Date()
         clockText.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
-        dateText.text = SimpleDateFormat("EEEE, d MMMM", Locale("id", "ID")).format(now)
+        dateText.text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
     }
 
     private fun chipButton(label: String, bgColor: Int, fgColor: Int, radius: Int): TextView = TextView(this).apply {
