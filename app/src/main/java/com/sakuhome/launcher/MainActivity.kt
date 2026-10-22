@@ -305,6 +305,10 @@ class MainActivity : Activity() {
             contentDescription = "Buka Trackpad"
             setOnClickListener { openTrackpad() }
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(7) })
+        topBar.addView(chipButton("🎮", cardSurface, accent, 18).apply {
+            contentDescription = "Tampilkan Game Pad"
+            setOnClickListener { openGamePad() }
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(7) })
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
             contentDescription = "Pengaturan Saku Dock"
             setOnClickListener { showSettings() }
@@ -917,6 +921,15 @@ class MainActivity : Activity() {
             startActivity(Intent(this, com.sakuhome.launcher.virtualdisplay.VirtualDisplayActivity::class.java))
         } catch (e: Exception) {
             Toast.makeText(this, "Virtual Display gagal dibuka: ${e.localizedMessage ?: "aktivitas tidak tersedia"}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+
+    private fun openGamePad() {
+        try {
+            startActivity(Intent(this, com.sakuhome.launcher.virtualdisplay.GamePadActivity::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Game Pad gagal dibuka: ${e.localizedMessage ?: "aktivitas tidak tersedia"}", Toast.LENGTH_LONG).show()
         }
     }
 
