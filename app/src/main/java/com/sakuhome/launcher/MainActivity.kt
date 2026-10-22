@@ -201,11 +201,8 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android; retained for broad device compatibility")
     override fun onBackPressed() {
-        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) {
-            hideStartPanel()
-        }
-        // Keep the desktop shell alive on virtual displays. Letting Activity.finish()
-        // run here leaves the virtual display black after the Back key is injected.
+        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+        else super.onBackPressed()
     }
 
     @Deprecated("Deprecated in Android; retained for broad document-provider compatibility")
@@ -303,15 +300,6 @@ class MainActivity : Activity() {
         brand.addView(dateText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
         topBar.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
 
-        topBar.addView(chipButton("▱", accent, Color.WHITE, 16).apply {
-            textSize = 20f
-            contentDescription = "Buka Trackpad"
-            setOnClickListener { openTrackpad() }
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(7) })
-        topBar.addView(chipButton("🎮", cardSurface, accent, 18).apply {
-            contentDescription = "Tampilkan Game Pad"
-            setOnClickListener { openGamePad() }
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(7) })
         topBar.addView(chipButton("⚙", cardSurface, primaryText, 19).apply {
             contentDescription = "Pengaturan Saku Dock"
             setOnClickListener { showSettings() }
@@ -876,7 +864,6 @@ class MainActivity : Activity() {
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
-            "▱  Buka Trackpad",
             "▣  Virtual Display & Saku Desktop"
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
@@ -913,8 +900,7 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
                         buildScreen()
                     }
-                    18 -> openTrackpad()
-                    19 -> openVirtualDisplayManager()
+                    18 -> openVirtualDisplayManager()
                 }
             }.setNegativeButton("Selesai", null).show()
     }
@@ -927,22 +913,6 @@ class MainActivity : Activity() {
         }
     }
 
-
-    private fun openGamePad() {
-        try {
-            startActivity(Intent(this, com.sakuhome.launcher.virtualdisplay.GamePadActivity::class.java))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Game Pad gagal dibuka: ${e.localizedMessage ?: "aktivitas tidak tersedia"}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun openTrackpad() {
-        try {
-            startActivity(Intent(this, com.sakuhome.launcher.virtualdisplay.TrackpadActivity::class.java))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Trackpad gagal dibuka: ${e.localizedMessage ?: "aktivitas tidak tersedia"}", Toast.LENGTH_LONG).show()
-        }
-    }
 
     private fun toggleOverlay() {
         val enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false)
