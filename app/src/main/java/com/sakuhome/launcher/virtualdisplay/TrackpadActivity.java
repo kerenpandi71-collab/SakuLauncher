@@ -217,7 +217,7 @@ public class TrackpadActivity extends Activity {
         String component = getPackageName() + "/com.sakuhome.launcher.virtualdisplay.DesktopActivity";
         String command = "am start --display " + displayId + " --windowingMode 1 -f 0x10008000 -n "
             + component + " --ei display_id " + displayId;
-        String output = runRoot(command);
+        String output = runAsShell(command);
         if (output == null || output.contains("Error:") || output.contains("Exception")
                 || output.contains("Permission Denial") || output.contains("does not exist")) {
             addLog("ERROR", "Desktop fullscreen gagal diluncurkan pada display " + displayId
@@ -257,9 +257,10 @@ public class TrackpadActivity extends Activity {
 
     private boolean containsExactDisplayId(String dump, int id) {
         if (dump == null) return false;
-        java.util.regex.Matcher m = java.util.regex.Pattern
-            .compile("\\bdisplayId=" + id + "\\b").matcher(dump);
-        return m.find();
+        String value = Integer.toString(id);
+        return java.util.regex.Pattern.compile("(?i)\\bmDisplayId\\s*=\\s*" + value + "\\b").matcher(dump).find()
+            || java.util.regex.Pattern.compile("(?i)\\bdisplayId\\s*[=: ]\\s*" + value + "\\b").matcher(dump).find()
+            || java.util.regex.Pattern.compile("(?i)\\bDisplay\\s+" + value + "\\s*:").matcher(dump).find();
     }
 
     private int[] findDisplaySize(String dump, int id) {
@@ -269,21 +270,66 @@ public class TrackpadActivity extends Activity {
         while (blocks.find()) {
             String block = blocks.group(1);
             java.util.regex.Matcher idMatcher = java.util.regex.Pattern
-                .compile("\\bdisplayId=(\\d+)").matcher(block);
+                .compile("(?i)\\bdisplayId\\s*[=: ]\\s*(\\d+)").matcher(block);
             if (!idMatcher.find() || Integer.parseInt(idMatcher.group(1)) != id) continue;
-            java.util.regex.Matcher w = java.util.regex.Pattern
-                .compile("\\bdeviceWidth=(\\d+)").matcher(block);
-            java.util.regex.Matcher h = java.util.regex.Pattern
-                .compile("\\bdeviceHeight=(\\d+)").matcher(block);
+            java.util.regex.Matcher w = java.util.regex.Pattern.compile("\\bdeviceWidth=(\\d+)").matcher(block);
+            java.util.regex.Matcher h = java.util.regex.Pattern.compile("\\bdeviceHeight=(\\d+)").matcher(block);
             if (w.find() && h.find()) {
-                int width = Integer.parseInt(w.group(1));
-                int height = Integer.parseInt(h.group(1));
-                if (width >= 320 && width <= 3840 && height >= 320 && height <= 2160) {
-                    return new int[] { width, height };
-                }
+                int[] size = validatedSize(w.group(1), h.group(1));
+                if (size != null) return size;
+            }
+        }
+
+        // Overlay displays usually have no touch DisplayViewport; use their DisplayInfo block.
+        java.util.regex.Matcher infos = java.util.regex.Pattern
+            .compile("DisplayInfo\\{([^}]*)\\}").matcher(dump);
+        while (infos.find()) {
+            String block = infos.group(1);
+            java.util.regex.Matcher idMatcher = java.util.regex.Pattern
+                .compile("(?i)\\bdisplayId\\s*[=: ]\\s*" + id + "\\b").matcher(block);
+            if (!idMatcher.find()) continue;
+            java.util.regex.Matcher size = java.util.regex.Pattern
+                .compile("(?i)\\b(?:real|logical)\\s+(\\d+)\\s*x\\s*(\\d+)").matcher(block);
+            if (size.find()) {
+                int[] result = validatedSize(size.group(1), size.group(2));
+                if (result != null) return result;
             }
         }
         return null;
+    }
+
+    private int[] validatedSize(String widthText, String heightText) {
+        try {
+            int width = Integer.parseInt(widthText);
+            int height = Integer.parseInt(heightText);
+            if (width >= 320 && width <= 3840 && height >= 320 && height <= 2160) {
+                return new int[] { width, height };
+            }
+        } catch (NumberFormatException ignored) { }
+        return null;
+    }
+
+    private String runAsShell(String command) {
+        Process process = null;
+        try {
+            process = new ProcessBuilder("su", "2000", "-c", command).redirectErrorStream(true).start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null && output.length() < 6000) {
+                    output.append(line).append('\n');
+                }
+            }
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return "Perintah shell timeout";
+            }
+            return output.toString().trim();
+        } catch (Exception e) {
+            return e.getClass().getSimpleName() + ": " + e.getMessage();
+        } finally {
+            if (process != null) process.destroy();
+        }
     }
 
     private void startInputBridge() {
