@@ -38,6 +38,7 @@ class FloatingDockService : Service() {
     private var startOverlayParams: WindowManager.LayoutParams? = null
     private var startOverlayListMode = false
     private var navigationOverlayView: View? = null
+    private var settingsOverlayView: View? = null
     private var isForeground = false
 
     override fun onCreate() {
@@ -208,14 +209,62 @@ class FloatingDockService : Service() {
     }
 
     private fun openSettingsShortcuts() {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+        showSettingsOverlay()
+    }
+
+    private fun showSettingsOverlay() {
+        removeSettingsOverlay()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dark = prefs.getBoolean(KEY_DARK_THEME, true)
+        val fg = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val bg = if (dark) Color.rgb(27, 34, 49) else Color.rgb(250, 251, 255)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = GradientDrawable().apply { setColor(bg); cornerRadius = dp(22).toFloat(); setStroke(dp(1), Color.argb(70, fg)) }
+            elevation = dp(20).toFloat()
         }
-        try { startActivity(intent) } catch (e: Exception) {
-            Toast.makeText(this, "Tidak bisa membuka pintasan pengaturan Saku", Toast.LENGTH_SHORT).show()
-            android.util.Log.w("SakuDock", "Settings shortcut failed", e)
+        panel.addView(TextView(this).apply {
+            text = "Pengaturan SakuLauncher"; textSize = 17f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD; setTextColor(fg)
+        }, LinearLayout.LayoutParams(-1, dp(34)))
+        panel.addView(TextView(this).apply {
+            text = "Pintasan cepat"; textSize = 12f
+            setTextColor(if (dark) Color.LTGRAY else Color.DKGRAY)
+        }, LinearLayout.LayoutParams(-1, dp(26)))
+        fun shortcut(label: String, subtitle: String, action: () -> Unit) {
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(5), dp(12), dp(5))
+                background = GradientDrawable().apply {
+                    setColor(if (dark) Color.rgb(41, 50, 69) else Color.rgb(238, 242, 250))
+                    cornerRadius = dp(13).toFloat()
+                }
+                isClickable = true; isFocusable = true
+                setOnClickListener { action() }
+            }
+            item.addView(TextView(this).apply { text = label; textSize = 14f; setTextColor(fg) })
+            item.addView(TextView(this).apply { text = subtitle; textSize = 11f; setTextColor(if (dark) Color.LTGRAY else Color.DKGRAY) })
+            panel.addView(item, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(7) })
         }
+        shortcut("Tutup menu", "Kembali ke aplikasi sebelumnya", { removeSettingsOverlay() })
+        shortcut("Panel aplikasi", "Buka panel aplikasi mengambang", {
+            removeSettingsOverlay()
+            toggleStartOverlay()
+        })
+        val p = WindowManager.LayoutParams(
+            dp(280), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER; x = 0; y = 0 }
+        try { windowManager.addView(panel, p); settingsOverlayView = panel }
+        catch (e: Exception) { android.util.Log.e("SakuDock", "Settings overlay failed", e) }
+    }
+
+    private fun removeSettingsOverlay() {
+        settingsOverlayView?.let { try { windowManager.removeView(it) } catch (_: Exception) {} }
+        settingsOverlayView = null
     }
 
     private fun showNavigationOverlay() {
@@ -242,9 +291,10 @@ class FloatingDockService : Service() {
                 removeNavigationOverlay()
             }
         }
-        panel.addView(navButton("⌂", "Home", 3), LinearLayout.LayoutParams(dp(58), dp(48)).apply { marginEnd = dp(8) })
-        panel.addView(navButton("‹", "Kembali", 4), LinearLayout.LayoutParams(dp(58), dp(48)))
-        val p = WindowManager.LayoutParams(dp(142), dp(64), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        panel.orientation = LinearLayout.VERTICAL
+        panel.addView(navButton("⌂  Home", "Home", 3), LinearLayout.LayoutParams(dp(112), dp(44)).apply { bottomMargin = dp(6) })
+        panel.addView(navButton("‹  Kembali", "Kembali", 4), LinearLayout.LayoutParams(dp(112), dp(44)))
+        val p = WindowManager.LayoutParams(dp(128), dp(104), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply {
             gravity = Gravity.TOP or Gravity.LEFT
             x = (resources.displayMetrics.widthPixels - dp(160)).coerceAtLeast(0)
