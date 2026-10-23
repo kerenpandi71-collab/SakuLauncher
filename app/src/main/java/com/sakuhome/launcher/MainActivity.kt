@@ -352,14 +352,7 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
-        // Permanent left application library, matching the reference desktop layout.
-        startPanel = buildStartPanel().apply {
-            elevation = dp(15).toFloat()
-            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-        }
-        startPanel.visibility = View.VISIBLE
-        workspace.addView(startPanel, LinearLayout.LayoutParams(0, -1, 0.39f).apply { marginEnd = dp(16) })
-
+        // The app library is a full-screen page, not a permanently docked side window.
         val rightColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
@@ -476,7 +469,7 @@ class MainActivity : Activity() {
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
         rightColumn.addView(notes, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
-        workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 0.61f))
+        workspace.addView(rightColumn, LinearLayout.LayoutParams(-1, -1))
         shell.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val bottom = LinearLayout(this).apply {
@@ -501,8 +494,18 @@ class MainActivity : Activity() {
         desktopGrid = GridView(this)
         desktopCanvas = FrameLayout(this)
         widgetStrip = LinearLayout(this)
-        startScrim = View(this).apply { visibility = View.GONE }
-        startPanel.visibility = View.VISIBLE
+        startScrim = View(this).apply {
+            setBackgroundColor(0x99000000.toInt())
+            visibility = View.GONE
+            setOnClickListener { hideStartPanel() }
+        }
+        startPanel = buildStartPanel().apply {
+            elevation = dp(20).toFloat()
+            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+            visibility = View.GONE
+        }
+        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
         setContentView(rootFrame)
         updateClock()
     }
