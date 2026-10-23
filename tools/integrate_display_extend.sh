@@ -154,7 +154,8 @@ python3 - <<'PY'
 from pathlib import Path
 p=Path("app/src/main/java/com/sakuhome/launcher/MainActivity.kt")
 s=p.read_text()
-s=s.replace('"settings put global force_resizable_activities 1; "', '"settings put secure force_resizable_activities 1; "')
+s=s.replace('"settings put secure force_resizable_activities 1; "', '"settings put global force_resizable_activities 1; "')
+s=s.replace('// force_resizable_activities belongs to Secure, not Global.', '// Android stores the developer resizability toggle in Global settings.')
 old='''                "settings put global force_desktop_mode_on_external_displays 1; " +
                 "am start -W --user current --windowingMode 5 " +
                 "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
