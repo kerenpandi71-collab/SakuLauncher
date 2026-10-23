@@ -1286,8 +1286,8 @@ class MainActivity : Activity() {
             "◐  Transparansi · $transparency%",
             "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
             "＋  Tambahkan widget",
-            "⌘  Dock mengambang · $overlayState",
-            "▤  Kelola aplikasi dock · $pinnedState",
+            "⌘  Bola Asisten · $overlayState",
+            "▤  Kelola aplikasi Bola Asisten · $pinnedState",
             "☾  Mode tampilan · $themeState",
             "✦  Warna aksen",
             "▧  Pilih wallpaper",
@@ -1362,13 +1362,13 @@ class MainActivity : Activity() {
         if (enabled) {
             preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, false).apply()
             stopService(Intent(this, FloatingDockService::class.java))
-            Toast.makeText(this, "Dock mengambang dimatikan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Bola Asisten dimatikan", Toast.LENGTH_SHORT).show()
             return
         }
         if (Settings.canDrawOverlays(this)) {
             preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, true).apply()
             startService(Intent(this, FloatingDockService::class.java))
-            Toast.makeText(this, "Dock mengambang aktif", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Bola Asisten aktif", Toast.LENGTH_SHORT).show()
             return
         }
         AlertDialog.Builder(this)
