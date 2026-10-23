@@ -221,7 +221,7 @@ class FloatingDockService : Service() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable().apply { setColor(bg); cornerRadius = dp(22).toFloat(); setStroke(dp(1), Color.argb(70, fg)) }
+            background = GradientDrawable().apply { setColor(bg); cornerRadius = dp(22).toFloat(); setStroke(dp(1), fg) }
             elevation = dp(20).toFloat()
         }
         panel.addView(TextView(this).apply {
