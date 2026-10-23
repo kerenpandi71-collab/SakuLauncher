@@ -1713,17 +1713,25 @@ class MainActivity : Activity() {
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
-                // Long-press any icon: drawer apps can be dragged onto the desktop,
-                // and desktop icons can be repositioned by dragging to another grid cell.
-                val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
-                val shadow = View.DragShadowBuilder(cell)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    cell.startDragAndDrop(clip, shadow, app.packageName, 0)
+                if (isStartMenu) {
+                    // Keep drawer long-press as an app-action menu (uninstall, app info,
+                    // add/remove from home, window/fullscreen, Play Store). Dragging from
+                    // the drawer is available through the menu's home-placement action.
+                    showAppMenu(app)
+                    true
                 } else {
-                    @Suppress("DEPRECATION")
-                    cell.startDrag(clip, shadow, app.packageName, 0)
+                    // Desktop icons remain freely draggable; drop at any location when
+                    // free placement is enabled, or onto another grid cell otherwise.
+                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
+                    val shadow = View.DragShadowBuilder(cell)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        cell.startDragAndDrop(clip, shadow, app.packageName, 0)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        cell.startDrag(clip, shadow, app.packageName, 0)
+                    }
+                    true
                 }
-                true
             }
             return cell
         }
