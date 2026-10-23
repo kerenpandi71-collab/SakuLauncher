@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var widgetStrip: LinearLayout
     private lateinit var appWidgetHost: AppWidgetHost
     private lateinit var desktopGrid: GridView
+    private lateinit var desktopCanvas: FrameLayout
     private lateinit var startSearchField: EditText
     private lateinit var drawerGridButton: TextView
     private lateinit var drawerListButton: TextView
@@ -87,6 +88,7 @@ class MainActivity : Activity() {
     private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, hideLabels)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
+    private val freeIconPlacement: Boolean get() = preferences.getBoolean(KEY_FREE_ICON_PLACEMENT, false)
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -426,7 +428,44 @@ class MainActivity : Activity() {
                 else -> false
             }
         }
-        shell.addView(desktopGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+        val desktopArea = FrameLayout(this)
+        desktopArea.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
+        desktopCanvas = FrameLayout(this).apply {
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            visibility = if (freeIconPlacement) View.VISIBLE else View.GONE
+            clipChildren = false
+            clipToPadding = false
+            setOnDragListener { canvas, event ->
+                when (event.action) {
+                    android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
+                    android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.9f; true }
+                    android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
+                    android.view.DragEvent.ACTION_DROP -> {
+                        canvas.alpha = 1f
+                        val pkg = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
+                        val app = apps.firstOrNull { it.packageName == pkg }
+                        if (app != null) {
+                            val size = dp((iconSizeDp + 8).coerceAtLeast(36))
+                            val x = (event.x - size / 2f).coerceIn(0f, (canvas.width - size).coerceAtLeast(0).toFloat())
+                            val y = (event.y - size / 2f).coerceIn(0f, (canvas.height - size).coerceAtLeast(0).toFloat())
+                            val positions = freeIconPositions()
+                            positions[pkg] = (if (canvas.width > 0) x / canvas.width else 0.5f).toString() + "," + (if (canvas.height > 0) y / canvas.height else 0.5f).toString()
+                            saveFreeIconPositions(positions)
+                            if (!homePackages().contains(pkg)) { val order = homePackages(); order.add(pkg!!); saveHomePackages(order) }
+                            renderFreeIcons()
+                            Toast.makeText(this@MainActivity, "Ikon dipindahkan ke posisi baru", Toast.LENGTH_SHORT).show()
+                        }
+                        true
+                    }
+                    android.view.DragEvent.ACTION_DRAG_ENDED -> { canvas.alpha = 1f; true }
+                    else -> true
+                }
+            }
+        }
+        desktopArea.addView(desktopCanvas, FrameLayout.LayoutParams(-1, -1))
+        shell.addView(desktopArea, LinearLayout.LayoutParams(-1, 0, 1f))
+        desktopGrid.visibility = if (freeIconPlacement) View.GONE else View.VISIBLE
+        if (freeIconPlacement) desktopCanvas.post { renderFreeIcons() }
 
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
@@ -697,8 +736,49 @@ class MainActivity : Activity() {
             .sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
+    private fun freeIconPositions(): MutableMap<String, String> {
+        return preferences.getString(KEY_FREE_ICON_POSITIONS, "").orEmpty().split("\n")
+            .filter { it.contains("|") }.associate { it.substringBefore("|") to it.substringAfter("|") }.toMutableMap()
+    }
+
+    private fun saveFreeIconPositions(positions: Map<String, String>) {
+        preferences.edit().putString(KEY_FREE_ICON_POSITIONS, positions.entries.joinToString("\n") { it.key + "|" + it.value }).apply()
+    }
+
+    private fun renderFreeIcons() {
+        if (!::desktopCanvas.isInitialized || desktopCanvas.width <= 0 || !freeIconPlacement) return
+        desktopCanvas.removeAllViews()
+        val positions = freeIconPositions()
+        val size = dp((iconSizeDp + 8).coerceAtLeast(36))
+        val visible = homeApps()
+        visible.forEachIndexed { index, app ->
+            val saved = positions[app.packageName]?.split(",")
+            val nx = saved?.getOrNull(0)?.toFloatOrNull() ?: ((index % 4) + 0.5f) / 4f
+            val ny = saved?.getOrNull(1)?.toFloatOrNull() ?: ((index / 4) + 0.5f) / maxOf(1f, kotlin.math.ceil(visible.size / 4f))
+            val x = (nx * desktopCanvas.width - size / 2f).toInt().coerceIn(0, (desktopCanvas.width - size).coerceAtLeast(0))
+            val y = (ny * desktopCanvas.height - size / 2f).toInt().coerceIn(0, (desktopCanvas.height - size).coerceAtLeast(0))
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(2), dp(2), dp(2), dp(2))
+                background = ColorDrawable(Color.TRANSPARENT)
+                addView(ImageView(this@MainActivity).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(size, size))
+                if (!hideLabels) addView(TextView(this@MainActivity).apply { text = app.label; textSize = 10f; gravity = Gravity.CENTER; setTextColor(primaryText); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(dp(84), -2))
+                setOnClickListener { launch(app) }
+                setOnLongClickListener {
+                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
+                    val shadow = View.DragShadowBuilder(this)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) startDragAndDrop(clip, shadow, app.packageName, 0)
+                    else { @Suppress("DEPRECATION") startDrag(clip, shadow, app.packageName, 0) }
+                    true
+                }
+            }
+            desktopCanvas.addView(cell, FrameLayout.LayoutParams(size + dp(8), dp(if (hideLabels) 60 else 82)).apply { leftMargin = x; topMargin = y })
+        }
+    }
     private fun rebuildPinnedViews() {
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
+        if (::desktopCanvas.isInitialized && freeIconPlacement) renderFreeIcons()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
         // When the bottom taskbar is hidden, there is no dock view to rebuild.
         if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
@@ -894,6 +974,7 @@ class MainActivity : Activity() {
             "↺  Reset wallpaper",
             "ⓘ  Tentang & izin",
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
+            "✥  Penempatan ikon bebas · ${if (freeIconPlacement) "Aktif" else "Grid"}",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
@@ -934,6 +1015,11 @@ class MainActivity : Activity() {
                         buildScreen()
                     }
                     18 -> {
+                        preferences.edit().putBoolean(KEY_FREE_ICON_PLACEMENT, !freeIconPlacement).apply()
+                        buildScreen()
+                        Toast.makeText(this, if (freeIconPlacement) "Mode penempatan bebas aktif: tahan ikon lalu seret ke lokasi mana saja" else "Tata letak grid aktif", Toast.LENGTH_LONG).show()
+                    }
+                    19 -> {
                         try {
                             startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
                         } catch (e: Exception) {
@@ -1660,6 +1746,8 @@ class MainActivity : Activity() {
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
+        private const val KEY_FREE_ICON_PLACEMENT = "free_icon_placement"
+        private const val KEY_FREE_ICON_POSITIONS = "free_icon_positions"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_LIST_MODE = "drawer_list_mode"
         private const val KEY_TRANSPARENCY = "dock_transparency"
