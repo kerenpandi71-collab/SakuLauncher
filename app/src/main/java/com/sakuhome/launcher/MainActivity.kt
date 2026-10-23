@@ -552,6 +552,14 @@ class MainActivity : Activity() {
             })
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
+        // Add the scrim before the shell so it stays behind the Start Menu.
+        // A full-screen scrim above the shell caused a dead, dark strip over the menu.
+        startScrim = View(this).apply {
+            setBackgroundColor(0x99000000.toInt())
+            visibility = View.GONE
+            setOnClickListener { hideStartPanel() }
+        }
+        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
         installPanelResetLongPress(shell)
         applyLauncherTypography(rootFrame)
@@ -561,11 +569,6 @@ class MainActivity : Activity() {
         desktopGrid = GridView(this)
         desktopCanvas = FrameLayout(this)
         widgetStrip = LinearLayout(this)
-        startScrim = View(this).apply {
-            setBackgroundColor(0x99000000.toInt())
-            visibility = View.GONE
-            setOnClickListener { hideStartPanel() }
-        }
         if (landscapeLayout) {
             startPanel = buildStartPanel().apply {
                 elevation = dp(20).toFloat()
@@ -573,7 +576,6 @@ class MainActivity : Activity() {
                 visibility = View.VISIBLE
             }
         }
-        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         if (landscapeLayout) {
             // Preserve the existing landscape App Library placement exactly.
             val screenWidth = rootFrame.width.takeIf { it > 0 }
