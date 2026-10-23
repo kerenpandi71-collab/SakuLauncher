@@ -191,6 +191,16 @@ class FloatingDockService : Service() {
                 else -> false
             }
         }
+        // Attach the assistant ball to WindowManager; without this it is created but never visible.
+        try {
+            windowManager.addView(ball, params)
+            dockView = ball
+            android.util.Log.i("SakuDock", "Bola Asisten ditampilkan")
+        } catch (e: Exception) {
+            dockView = null
+            android.util.Log.e("SakuDock", "Gagal menampilkan Bola Asisten", e)
+            Toast.makeText(this, "Bola Asisten gagal muncul: " + (e.message ?: "overlay error"), Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun viewHaptic(view: View) {
