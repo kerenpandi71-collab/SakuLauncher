@@ -149,6 +149,34 @@ s=s.replace('''    Shizuku.removeRequestPermissionResultListener(requestPermissi
 p.write_text(s)
 PY
 
+# Keep the freeform launch fix when the integration script refreshes embedded sources.
+python3 - <<'PY'
+from pathlib import Path
+p=Path("app/src/main/java/com/sakuhome/launcher/MainActivity.kt")
+s=p.read_text()
+s=s.replace('"settings put global force_resizable_activities 1; "', '"settings put secure force_resizable_activities 1; "')
+old='''                "settings put global force_desktop_mode_on_external_displays 1; " +
+                "am start -W --user current --windowingMode 5 " +
+                "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
+                "-n ${shellQuote(flat)}; " +
+                "sleep 1; " +
+                "dumpsys activity activities | grep -B 24 -A 5 ${pkg} | " +
+                "grep -E 'windowingMode=(5|freeform)'";'''
+new='''                "launch_output=\\$(am start -W --user current --windowingMode 5 " +
+                "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
+                "-n ${shellQuote(flat)} 2>&1); " +
+                "launch_code=\\$?; " +
+                "sleep 2; " +
+                "task_dump=\\$(dumpsys activity activities | grep -F -B 28 -A 10 ${pkg}); " +
+                "printf 'launch_exit=%s\\\\n%s\\\\n---TASK DUMP---\\\\n%s\\\\n' \"\\$launch_code\" \"\\$launch_output\" \"\\$task_dump\"; " +
+                "printf '%s' \"\\$task_dump\" | grep -Ei 'windowingMode[=: ]+5|mWindowingMode=5|windowingMode=freeform'";'''
+if old in s:
+    s=s.replace(old,new)
+s=s.replace('(stdout.contains("windowingMode=5", true) || stdout.contains("windowingMode=freeform", true))',
+'''(stdout.contains("windowingMode=5", true) || stdout.contains("mWindowingMode=5", true) || stdout.contains("windowingMode: 5", true) || stdout.contains("windowingMode=freeform", true))''')
+p.write_text(s)
+PY
+
 [ ! -d "$EXTEND_SOURCE/app/src/main/aidl" ] || cp -R "$EXTEND_SOURCE/app/src/main/aidl/." app/src/main/aidl/
 cp -Rn "$EXTEND_SOURCE/app/src/main/res/." app/src/main/res/
 # Remove a stale resource file from an earlier integration attempt; the source project has no values/styles.xml, and it duplicates Saku\x27s AppTheme in values/themes.xml.
