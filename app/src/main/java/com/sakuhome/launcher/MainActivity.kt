@@ -576,11 +576,11 @@ class MainActivity : Activity() {
         panel.setOnTouchListener(if (!enabled) null else View.OnTouchListener { view, event ->
             when (event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
-                    view.setTag(R.id.panel_drag_state, floatArrayOf(event.rawX, event.rawY, view.translationX, view.translationY))
+                    view.tag = floatArrayOf(event.rawX, event.rawY, view.translationX, view.translationY)
                     false
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
-                    val state = view.getTag(R.id.panel_drag_state) as? FloatArray ?: return@OnTouchListener false
+                    val state = view.tag as? FloatArray ?: return@OnTouchListener false
                     val dx = event.rawX - state[0]
                     val dy = event.rawY - state[1]
                     if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) {
@@ -1652,7 +1652,7 @@ class MainActivity : Activity() {
             list.addView(group, LinearLayout.LayoutParams(-1, -2))
         }
         scroll.addView(list, ScrollView.LayoutParams(-1, -2))
-        container.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        container.addView(scroll, LinearLayout.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.58f).toInt()))
         dialog = AlertDialog.Builder(this)
             .setView(container)
             .setNegativeButton("Selesai", null)
