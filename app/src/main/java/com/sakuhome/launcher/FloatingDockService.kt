@@ -265,7 +265,7 @@ class FloatingDockService : Service() {
         header.addView(gridButton, LinearLayout.LayoutParams(dp(42), dp(40)))
         header.addView(listButton, LinearLayout.LayoutParams(dp(42), dp(40)).apply { marginStart = dp(4) })
         outer.addView(header)
-        header.setOnTouchListener(object : View.OnTouchListener {
+        title.setOnTouchListener(object : View.OnTouchListener {
             var downX = 0f; var downY = 0f; var startX = 0; var startY = 0
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 val p = startOverlayParams ?: return false
