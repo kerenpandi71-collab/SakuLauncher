@@ -8,7 +8,11 @@ import android.appwidget.AppWidgetProviderInfo
 import android.widget.SeekBar
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.LauncherApps
+import android.os.UserHandle
+import android.os.Process
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -46,8 +50,15 @@ import java.util.Locale
 private data class LaunchableApp(
     val label: String,
     val packageName: String,
-    val icon: android.graphics.drawable.Drawable
-)
+    val icon: android.graphics.drawable.Drawable,
+    val componentName: ComponentName? = null,
+    val userHandle: UserHandle? = null
+) {
+    val profileKey: String
+        get() = "${packageName}@${userHandle?.hashCode() ?: Process.myUid()}"
+    val isSecondaryProfile: Boolean
+        get() = userHandle != null && userHandle != Process.myUserHandle()
+}
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
@@ -557,6 +568,46 @@ class MainActivity : Activity() {
      * Long-press a dashboard panel to reorder it among its siblings and resize it.
      * Dimensions and order are stored per panel so the desktop arrangement survives rebuilds.
      */
+    private fun enableFreePanelDrag(panel: View, key: String, enabled: Boolean) {
+        val enabledKey = "dashboard_panel_free_drag_$key"
+        val xKey = "dashboard_panel_free_x_$key"
+        val yKey = "dashboard_panel_free_y_$key"
+        preferences.edit().putBoolean(enabledKey, enabled).apply()
+        panel.setOnTouchListener(if (!enabled) null else View.OnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    view.setTag(R.id.panel_drag_state, floatArrayOf(event.rawX, event.rawY, view.translationX, view.translationY))
+                    false
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val state = view.getTag(R.id.panel_drag_state) as? FloatArray ?: return@OnTouchListener false
+                    val dx = event.rawX - state[0]
+                    val dy = event.rawY - state[1]
+                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) {
+                        view.translationX = state[2] + dx
+                        view.translationY = state[3] + dy
+                        true
+                    } else false
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    preferences.edit().putFloat(xKey, view.translationX).putFloat(yKey, view.translationY).apply()
+                    false
+                }
+                else -> false
+            }
+        })
+        if (enabled) {
+            panel.translationX = preferences.getFloat(xKey, panel.translationX)
+            panel.translationY = preferences.getFloat(yKey, panel.translationY)
+            Toast.makeText(this, "Geser panel untuk mengatur posisinya", Toast.LENGTH_SHORT).show()
+        } else {
+            panel.translationX = 0f
+            panel.translationY = 0f
+            preferences.edit().remove(xKey).remove(yKey).apply()
+            Toast.makeText(this, "Posisi bebas panel dimatikan", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun enablePanelLayoutControls(panel: View, key: String) {
         panel.isLongClickable = true
         panel.setOnLongClickListener {
@@ -1094,12 +1145,42 @@ class MainActivity : Activity() {
     }
 
     private fun loadApps(): List<LaunchableApp> {
+        val result = LinkedHashMap<String, LaunchableApp>()
+        // LauncherApps enumerates launchable activities per Android user/profile. Xiaomi Dual Apps
+        // can install the second copy under another user, so PackageManager alone misses it.
+        try {
+            val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            launcherApps.profiles.forEach { profile ->
+                try {
+                    launcherApps.getActivityList(null, profile).forEach { activity ->
+                        val pkg = activity.applicationInfo.packageName
+                        if (pkg == packageName) return@forEach
+                        val label = activity.label?.toString()?.takeIf { it.isNotBlank() } ?: pkg
+                        val profileLabel = if (profile != Process.myUserHandle()) "$label · Klon" else label
+                        val app = LaunchableApp(profileLabel, pkg, activity.getIcon(0), activity.componentName, profile)
+                        result[app.profileKey] = app
+                    }
+                } catch (e: SecurityException) {
+                    android.util.Log.w("SakuApps", "Tidak bisa membaca profil aplikasi", e)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SakuApps", "LauncherApps profile scan gagal; gunakan profil utama", e)
+        }
+        // Fallback preserves the regular app list on ROMs that restrict profile enumeration.
         val queryIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches: List<ResolveInfo> = packageManager.queryIntentActivities(queryIntent, PackageManager.MATCH_ALL)
-        return matches.filter { it.activityInfo.packageName != packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .map { info -> LaunchableApp(info.loadLabel(packageManager).toString(), info.activityInfo.packageName, info.loadIcon(packageManager)) }
-            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+        matches.filter { it.activityInfo.packageName != packageName }.forEach { info ->
+            val app = LaunchableApp(
+                info.loadLabel(packageManager).toString(),
+                info.activityInfo.packageName,
+                info.loadIcon(packageManager),
+                ComponentName(info.activityInfo.packageName, info.activityInfo.name),
+                Process.myUserHandle()
+            )
+            result.putIfAbsent(app.profileKey, app)
+        }
+        return result.values.sortedWith(compareBy<LaunchableApp> { it.label.lowercase(Locale.getDefault()) }.thenBy { it.profileKey })
     }
 
     private fun freeIconPositions(): MutableMap<String, String> {
@@ -1228,6 +1309,18 @@ class MainActivity : Activity() {
             hideWindowStartPanel()
         } else {
             hideStartPanel()
+        }
+        // A cloned app belongs to a different Android user; packageManager.getLaunchIntentForPackage()
+        // would open the primary copy. Start the exact activity in its own profile instead.
+        if (app.isSecondaryProfile && app.componentName != null && app.userHandle != null) {
+            try {
+                val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+                launcherApps.startMainActivity(app.componentName, app.userHandle, null, null)
+            } catch (e: Exception) {
+                android.util.Log.e("SakuApps", "Gagal membuka aplikasi clone ${app.packageName}", e)
+                Toast.makeText(this, "Aplikasi clone tidak bisa dibuka oleh sistem: ${e.localizedMessage ?: "akses profil ditolak"}", Toast.LENGTH_LONG).show()
+            }
+            return
         }
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
@@ -1452,8 +1545,7 @@ class MainActivity : Activity() {
         val pinnedState = "${pinnedApps().size} aplikasi"
         val themeState = if (isDarkTheme) "Gelap" else "Cerah"
         val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
-        val labelState = if (hideLabels) "Sembunyi" else "Tampil"
-        val drawerLabelState = if (hideDrawerLabels) "Sembunyi" else "Tampil"
+        val hideDrawerLabels = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, false)
         val hideStatusBarState = if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Tersembunyi" else "Tampil"
         val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
         val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
@@ -1480,75 +1572,163 @@ class MainActivity : Activity() {
             "▦  Sembunyikan label ikon Grid · ${if (hideDrawerLabels) "Aktif" else "Nonaktif"}",
             "▣  Display Extend · Virtual Display",
             "▰  Status bar Android · $hideStatusBarState",
-            "↔  Orientasi layar · ${if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false)) "Landscape" else "Ikuti sistem"}",
+            "↔  Orientasi layar · ${if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false)) "Landscape" else "Ikuti sistem"}"
         )
-        AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_TASKBAR, !preferences.getBoolean(KEY_HIDE_TASKBAR, false)).apply()
-                        buildScreen()
-                    }
-                    1 -> chooseIconSize()
-                    2 -> chooseFontSettings()
-                    3 -> {
-                        preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
-                        buildScreen()
-                        refreshFloatingDock()
-                    }
-                    4 -> chooseTransparency()
-                    5 -> manageHiddenApps()
-                    6 -> pickWidget()
-                    7 -> toggleOverlay()
-                    8 -> {
-                        val visible = !preferences.getBoolean(KEY_HOME_BUTTON_VISIBLE, true)
-                        preferences.edit().putBoolean(KEY_HOME_BUTTON_VISIBLE, visible).apply()
-                        if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) {
-                            startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
-                        }
-                        Toast.makeText(this, if (visible) "Tombol Home selalu tampil diaktifkan" else "Tombol Home disembunyikan", Toast.LENGTH_SHORT).show()
-                    }
-                    9 -> managePins()
-                    10 -> toggleTheme()
-                    11 -> chooseAccent()
-                    12 -> chooseWallpaper()
-                    13 -> resetWallpaper()
-                    14 -> showPermissionInfo()
-                    15 -> chooseHomeGrid()
-                    16 -> {
-                        val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
-                        preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
-                        Toast.makeText(this, if (windowMode) "Mode pembukaan aplikasi: Jendela" else "Mode pembukaan aplikasi: Layar penuh", Toast.LENGTH_SHORT).show()
-                    }
-                    17 -> chooseDrawerGrid()
-                    18 -> showProcessManager()
-                    19 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
-                        if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
-                        Toast.makeText(this, if (hideDrawerLabels) "Label ikon Grid disembunyikan; List tetap menampilkan teks" else "Label ikon Grid ditampilkan", Toast.LENGTH_SHORT).show()
-                    }
-                    20 -> {
-                        try {
-                            startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
-                        } catch (e: Exception) {
-                            DiagnosticLogger.logFreeform("Could not open Display Extend activity", e)
-                            Toast.makeText(this, "Display Extend belum bisa dibuka: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    21 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_STATUS_BAR, !preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)).apply()
-                        buildScreen()
-                        Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Status bar disembunyikan" else "Status bar ditampilkan", Toast.LENGTH_SHORT).show()
-                    }
-                    22 -> {
-                        val landscape = !preferences.getBoolean(KEY_LANDSCAPE_MODE, false)
-                        preferences.edit().putBoolean(KEY_LANDSCAPE_MODE, landscape).apply()
-                        requestedOrientation = if (landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                            else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        recreate()
-                    }
+
+        val backgroundColor = if (isDarkTheme) Color.rgb(22, 25, 34) else Color.rgb(242, 245, 251)
+        val rowColor = if (isDarkTheme) Color.rgb(39, 43, 55) else Color.WHITE
+        val textColor = if (isDarkTheme) Color.rgb(245, 247, 252) else Color.rgb(31, 37, 49)
+        val mutedColor = if (isDarkTheme) Color.rgb(164, 172, 188) else Color.rgb(112, 121, 138)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            background = rounded(backgroundColor, 28)
+        }
+        container.addView(TextView(this).apply {
+            text = "Personalisasi"
+            textSize = 25f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            setTextColor(textColor)
+            setPadding(dp(3), dp(4), dp(3), dp(2))
+        })
+        container.addView(TextView(this).apply {
+            text = "Sesuaikan tampilan dan perilaku Saku"
+            textSize = 13f
+            setTextColor(mutedColor)
+            setPadding(dp(3), 0, dp(3), dp(12))
+        })
+        val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val sections = listOf(
+            "TAMPILAN" to (0..4),
+            "APLIKASI & WIDGET" to (5..9),
+            "GAYA PERSONAL" to (10..14),
+            "TATA LETAK" to (15..19),
+            "SISTEM & DISPLAY" to (20..22)
+        )
+        lateinit var dialog: AlertDialog
+        sections.forEach { (heading, indices) ->
+            list.addView(TextView(this).apply {
+                text = heading
+                textSize = 10f
+                letterSpacing = 0.12f
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                setTextColor(mutedColor)
+                setPadding(dp(5), dp(13), dp(5), dp(6))
+            })
+            val group = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(rowColor, 17)
+                setPadding(dp(10), dp(3), dp(10), dp(3))
+            }
+            indices.forEach { index ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(7), dp(11), dp(7), dp(11))
+                    isClickable = true
+                    isFocusable = true
+                    background = rounded(rowColor, 12)
                 }
-            }.setNegativeButton("Selesai", null).show()
+                row.addView(TextView(this).apply {
+                    text = options[index]
+                    textSize = 13f
+                    setTextColor(textColor)
+                    maxLines = 2
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(TextView(this).apply {
+                    text = "›"
+                    textSize = 24f
+                    setTextColor(mutedColor)
+                    gravity = Gravity.CENTER
+                }, LinearLayout.LayoutParams(dp(24), dp(28)))
+                row.setOnClickListener { dialog.dismiss(); performSettingSelection(index) }
+                group.addView(row, LinearLayout.LayoutParams(-1, -2))
+                if (index != indices.last) {
+                    group.addView(View(this).apply { setBackgroundColor(if (isDarkTheme) 0x334D5668 else 0x1A6F7B91) }, LinearLayout.LayoutParams(-1, dp(1)))
+                }
+            }
+            list.addView(group, LinearLayout.LayoutParams(-1, -2))
+        }
+        scroll.addView(list, ScrollView.LayoutParams(-1, -2))
+        container.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        dialog = AlertDialog.Builder(this)
+            .setView(container)
+            .setNegativeButton("Selesai", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92f).toInt().coerceAtMost(dp(620)), (resources.displayMetrics.heightPixels * 0.84f).toInt())
+        }
+        dialog.show()
+    }
+
+    private fun performSettingSelection(which: Int) {
+        when (which) {
+            0 -> {
+                preferences.edit().putBoolean(KEY_HIDE_TASKBAR, !preferences.getBoolean(KEY_HIDE_TASKBAR, false)).apply()
+                buildScreen()
+            }
+            1 -> chooseIconSize()
+            2 -> chooseFontSettings()
+            3 -> {
+                preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
+                buildScreen()
+                refreshFloatingDock()
+            }
+            4 -> chooseTransparency()
+            5 -> manageHiddenApps()
+            6 -> pickWidget()
+            7 -> toggleOverlay()
+            8 -> {
+                val visible = !preferences.getBoolean(KEY_HOME_BUTTON_VISIBLE, true)
+                preferences.edit().putBoolean(KEY_HOME_BUTTON_VISIBLE, visible).apply()
+                if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) {
+                    startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                }
+                Toast.makeText(this, if (visible) "Tombol Home selalu tampil diaktifkan" else "Tombol Home disembunyikan", Toast.LENGTH_SHORT).show()
+            }
+            9 -> managePins()
+            10 -> toggleTheme()
+            11 -> chooseAccent()
+            12 -> chooseWallpaper()
+            13 -> resetWallpaper()
+            14 -> showPermissionInfo()
+            15 -> chooseHomeGrid()
+            16 -> {
+                val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
+                preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
+                Toast.makeText(this, if (windowMode) "Mode pembukaan aplikasi: Jendela" else "Mode pembukaan aplikasi: Layar penuh", Toast.LENGTH_SHORT).show()
+            }
+            17 -> chooseDrawerGrid()
+            18 -> showProcessManager()
+            19 -> {
+                preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, false)).apply()
+                if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
+                Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, false)) "Label ikon Grid disembunyikan; List tetap menampilkan teks" else "Label ikon Grid ditampilkan", Toast.LENGTH_SHORT).show()
+            }
+            20 -> {
+                try {
+                    startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
+                } catch (e: Exception) {
+                    DiagnosticLogger.logFreeform("Could not open Display Extend activity", e)
+                    Toast.makeText(this, "Display Extend belum bisa dibuka: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            21 -> {
+                preferences.edit().putBoolean(KEY_HIDE_STATUS_BAR, !preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)).apply()
+                buildScreen()
+                Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Status bar disembunyikan" else "Status bar ditampilkan", Toast.LENGTH_SHORT).show()
+            }
+            22 -> {
+                val landscape = !preferences.getBoolean(KEY_LANDSCAPE_MODE, false)
+                preferences.edit().putBoolean(KEY_LANDSCAPE_MODE, landscape).apply()
+                requestedOrientation = if (landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                recreate()
+            }
+        }
     }
 
     private fun chooseFontSettings() {
