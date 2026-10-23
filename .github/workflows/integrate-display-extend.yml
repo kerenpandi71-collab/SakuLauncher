@@ -7,6 +7,7 @@ on:
       - ".github/workflows/integrate-display-extend.yml"
       - "tools/integrate_display_extend.sh"
       - "app/src/main/java/com/sakuhome/launcher/MainActivity.kt"
+      - "app/src/main/java/com/sakuhome/launcher/FloatingDockService.kt"
   workflow_dispatch:
 permissions:
   contents: write
