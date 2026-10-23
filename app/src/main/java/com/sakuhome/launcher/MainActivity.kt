@@ -29,6 +29,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateInterpolator
@@ -408,6 +409,7 @@ class MainActivity : Activity() {
         topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(8) })
 
         val weatherCard = card("☀  CUACA")
+        enablePanelDragging(weatherCard, "weather")
         weatherCard.addView(TextView(this).apply {
             text = "Cuaca lokal"
             textSize = 21f
@@ -443,6 +445,7 @@ class MainActivity : Activity() {
         rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
         val shortcuts = card("▦  Pintasan")
+        enablePanelDragging(shortcuts, "shortcuts")
         val shortcutGrid = android.widget.GridLayout(this).apply { columnCount = 2 }
         fun shortcut(label: String, symbol: String, action: () -> Unit) {
             shortcutGrid.addView(TextView(this).apply {
@@ -547,6 +550,75 @@ class MainActivity : Activity() {
         }
         setContentView(rootFrame)
         updateClock()
+    }
+
+    /**
+     * Lets dashboard panels be moved around the workspace by dragging their title,
+     * similar to the Android assistive ball. Offsets are persisted in dp so they
+     * survive launcher rebuilds and orientation changes.
+     */
+    private fun enablePanelDragging(panel: View, panelName: String) {
+        val handle = (panel as? ViewGroup)?.getChildAt(0) ?: return
+        val density = resources.displayMetrics.density
+        val keyX = "dashboard_panel_${panelName}_x_dp"
+        val keyY = "dashboard_panel_${panelName}_y_dp"
+        panel.translationX = preferences.getFloat(keyX, 0f) * density
+        panel.translationY = preferences.getFloat(keyY, 0f) * density
+        handle.contentDescription = "Tekan dan geser untuk memindahkan panel ${panelName}"
+        handle.setOnTouchListener(object : View.OnTouchListener {
+            private var downRawX = 0f
+            private var downRawY = 0f
+            private var startX = 0f
+            private var startY = 0f
+            private var dragging = false
+
+            override fun onTouch(view: View, event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        startX = panel.translationX
+                        startY = panel.translationY
+                        dragging = false
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downRawX
+                        val dy = event.rawY - downRawY
+                        if (!dragging && (kotlin.math.abs(dx) > android.view.ViewConfiguration.get(this@MainActivity).scaledTouchSlop ||
+                                    kotlin.math.abs(dy) > android.view.ViewConfiguration.get(this@MainActivity).scaledTouchSlop)) {
+                            dragging = true
+                            panel.bringToFront()
+                            panel.elevation = dp(24).toFloat()
+                        }
+                        if (dragging) {
+                            val parentView = panel.parent as? View
+                            val parentWidth = parentView?.width ?: rootFrame.width
+                            val parentHeight = parentView?.height ?: rootFrame.height
+                            val minX = -panel.left.toFloat()
+                            val maxX = (parentWidth - panel.right).toFloat()
+                            val minY = -panel.top.toFloat()
+                            val maxY = (parentHeight - panel.bottom).toFloat()
+                            panel.translationX = (startX + dx).coerceIn(minX, maxX)
+                            panel.translationY = (startY + dy).coerceIn(minY, maxY)
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (dragging) {
+                            preferences.edit()
+                                .putFloat(keyX, panel.translationX / density)
+                                .putFloat(keyY, panel.translationY / density)
+                                .apply()
+                            panel.performClick()
+                        }
+                        dragging = false
+                        return true
+                    }
+                }
+                return true
+            }
+        })
     }
 
     private fun applyLauncherTypography(view: View) {
