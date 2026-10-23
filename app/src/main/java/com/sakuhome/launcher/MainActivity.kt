@@ -958,6 +958,9 @@ class MainActivity : Activity() {
         }
     }
     private fun rebuildPinnedViews() {
+        // onResume may run before buildScreen() has created the shell/dock.
+        // Never access shellView until its first assignment in buildScreen().
+        if (!::shellView.isInitialized) return
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         if (::desktopCanvas.isInitialized && freeIconPlacement) renderFreeIcons()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
