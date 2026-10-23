@@ -195,17 +195,27 @@ class MainActivity : Activity() {
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         homePage = preferences.getInt(KEY_LAST_HOME_PAGE, 0).coerceIn(0, homePageCount() - 1)
         apps = loadApps()
-        buildScreen()
-        restoreWidgets()
-        if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
-        if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
+        windowStartOnlyMode = intent?.getBooleanExtra(EXTRA_OPEN_WINDOW_START, false) == true
+        if (windowStartOnlyMode) {
+            buildWindowStartOnlyScreen()
+        } else {
+            buildScreen()
+            restoreWidgets()
+            if (intent?.getBooleanExtra(EXTRA_OPEN_START, false) == true) showStartPanel()
+            if (intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true) rootFrame.post { showSettings() }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_OPEN_START, false)) showStartPanel()
-        if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
+        if (intent.getBooleanExtra(EXTRA_OPEN_WINDOW_START, false)) {
+            windowStartOnlyMode = true
+            buildWindowStartOnlyScreen()
+        } else {
+            if (intent.getBooleanExtra(EXTRA_OPEN_START, false)) showStartPanel()
+            if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) showSettings()
+        }
     }
 
     @Deprecated("Deprecated in Android; retained for broad device compatibility")
@@ -496,19 +506,7 @@ class MainActivity : Activity() {
         })
         startPanel.visibility = View.GONE
 
-        // Dedicated window-mode Start menu. Its app clicks always request native Android freeform.
-        windowScrim = View(this).apply {
-            setBackgroundColor(if (isDarkTheme) 0x66070B12 else 0x440E1522)
-            alpha = 0f
-            visibility = View.GONE
-            setOnClickListener { hideWindowStartPanel() }
-        }
-        rootFrame.addView(windowScrim, FrameLayout.LayoutParams(-1, -1))
-        windowStartPanel = buildWindowStartPanel()
-        rootFrame.addView(windowStartPanel, FrameLayout.LayoutParams(panelWidth, dp(panelHeight), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(82)
-        })
-        windowStartPanel.visibility = View.GONE
+        // The freeform-only Start menu is launched from FloatingDockService, not from the desktop dock.
         setContentView(rootFrame)
         updateClock()
     }
@@ -526,11 +524,6 @@ class MainActivity : Activity() {
             contentDescription = "Buka App Library"
             setOnClickListener { toggleStartPanel() }
         }, LinearLayout.LayoutParams(dp(44), -1))
-        dock.addView(chipButton("▱", cardSurface, primaryText, 16).apply {
-            contentDescription = "Buka Start menu mode jendela"
-            setOnClickListener { showWindowStartPanel() }
-        }, LinearLayout.LayoutParams(dp(40), -1).apply { marginStart = dp(5) })
-
         dock.addView(View(this).apply {
             setBackgroundColor(Color.argb(if (isDarkTheme) 100 else 65, primaryText shr 16 and 0xff, primaryText shr 8 and 0xff, primaryText and 0xff))
         }, LinearLayout.LayoutParams(dp(1), dp(34)).apply { marginStart = dp(7); marginEnd = dp(5) })
@@ -677,6 +670,42 @@ class MainActivity : Activity() {
         if (startPanel.visibility == View.VISIBLE) hideStartPanel() else showStartPanel()
     }
 
+    private var windowStartOnlyMode = false
+
+    private fun buildWindowStartOnlyScreen() {
+        windowStartOnlyMode = true
+        window.statusBarColor = backgroundTop
+        window.navigationBarColor = backgroundTop
+        applyStatusBarPreference()
+        rootFrame = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(backgroundTop, backgroundBottom)
+            )
+        }
+        loadWallpaper()?.let { bitmap ->
+            rootFrame.addView(ImageView(this).apply {
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            }, FrameLayout.LayoutParams(-1, -1))
+            rootFrame.addView(View(this).apply {
+                setBackgroundColor(if (isDarkTheme) 0x550D1420 else 0x260D1420)
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        windowScrim = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            visibility = View.GONE
+            setOnClickListener { hideWindowStartPanel() }
+        }
+        rootFrame.addView(windowScrim, FrameLayout.LayoutParams(-1, -1))
+        windowStartPanel = buildWindowStartPanel()
+        rootFrame.addView(windowStartPanel, FrameLayout.LayoutParams(-1, -1))
+        setContentView(rootFrame)
+        windowStartPanel.alpha = 1f
+        windowStartPanel.visibility = View.VISIBLE
+        windowStartPanel.setPadding(dp(14), dp(12), dp(14), dp(10))
+    }
+
     private fun buildWindowStartPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -778,6 +807,10 @@ class MainActivity : Activity() {
     }
 
     private fun hideWindowStartPanel() {
+        if (windowStartOnlyMode) {
+            finish()
+            return
+        }
         if (!::windowStartPanel.isInitialized || windowStartPanel.visibility != View.VISIBLE) return
         windowStartPanel.animate().cancel()
         windowScrim.animate().cancel()
@@ -2042,6 +2075,7 @@ class MainActivity : Activity() {
         private const val REQUEST_WALLPAPER = 481
         private const val REQUEST_UNINSTALL = 482
         const val EXTRA_OPEN_START = "com.sakuhome.launcher.OPEN_START"
+        const val EXTRA_OPEN_WINDOW_START = "com.sakuhome.launcher.OPEN_WINDOW_START"
         const val EXTRA_OPEN_SETTINGS = "com.sakuhome.launcher.OPEN_SETTINGS"
     }
 }
