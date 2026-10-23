@@ -495,6 +495,8 @@ class FloatingDockService : Service() {
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_START_X = "floating_start_x"
+        private const val KEY_ASSISTANT_X = "floating_assistant_x"
+        private const val KEY_ASSISTANT_Y = "floating_assistant_y"
         private const val KEY_START_Y = "floating_start_y"
     }
 }
