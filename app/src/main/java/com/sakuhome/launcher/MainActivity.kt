@@ -393,12 +393,16 @@ class MainActivity : Activity() {
                     val from = order.indexOf(sourcePackage)
                     val targetPackage = pinnedAdapter.getItemOrNull(targetPosition)?.packageName
                     val targetIndex = if (targetPackage != null) order.indexOf(targetPackage) else -1
-                    if (from >= 0) {
-                        val moving = order.removeAt(from)
+                    val knownPackage = sourcePackage?.let { pkg -> apps.any { it.packageName == pkg } } == true
+                    if (knownPackage) {
+                        // A drawer icon can be dropped onto the desktop to add it; an existing
+                        // desktop icon can be dropped to reorder it. Dropping on empty space appends.
+                        val moving = if (from >= 0) order.removeAt(from) else sourcePackage!!
                         val insertAt = if (targetIndex >= 0) targetIndex.coerceAtMost(order.size) else order.size
                         order.add(insertAt, moving)
                         saveHomePackages(order)
                         pinnedAdapter.notifyDataSetChanged()
+                        Toast.makeText(this@MainActivity, if (from >= 0) "Posisi ikon diperbarui" else "Aplikasi ditambahkan ke layar utama", Toast.LENGTH_SHORT).show()
                     }
                     true
                 }
@@ -1623,20 +1627,17 @@ class MainActivity : Activity() {
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app) }
             cell.setOnLongClickListener {
-                if (!isStartMenu && homePackages().contains(app.packageName)) {
-                    val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
-                    val shadow = View.DragShadowBuilder(cell)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        cell.startDragAndDrop(clip, shadow, app.packageName, 0)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        cell.startDrag(clip, shadow, app.packageName, 0)
-                    }
-                    true
+                // Long-press any icon: drawer apps can be dragged onto the desktop,
+                // and desktop icons can be repositioned by dragging to another grid cell.
+                val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
+                val shadow = View.DragShadowBuilder(cell)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    cell.startDragAndDrop(clip, shadow, app.packageName, 0)
                 } else {
-                    showAppMenu(app)
-                    true
+                    @Suppress("DEPRECATION")
+                    cell.startDrag(clip, shadow, app.packageName, 0)
                 }
+                true
             }
             return cell
         }
