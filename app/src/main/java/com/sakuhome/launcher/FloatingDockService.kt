@@ -34,7 +34,6 @@ import android.widget.Toast
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
     private var dockView: View? = null
-    private var homeButtonView: View? = null
     private var startOverlayView: View? = null
     private var startOverlayParams: WindowManager.LayoutParams? = null
     private var startOverlayListMode = false
@@ -136,23 +135,14 @@ class FloatingDockService : Service() {
         var downX = 0
         var downY = 0
         var dragged = false
-        var longPressed = false
         var lastTapAt = 0L
         var pendingSingleTap: Runnable? = null
-        val longPressAction = Runnable {
-            if (!dragged) {
-                longPressed = true
-                viewHaptic(ball)
-                showNavigationOverlay()
-            }
-        }
         ball.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downRawX = event.rawX; downRawY = event.rawY
                     downX = params.x; downY = params.y
-                    dragged = false; longPressed = false
-                    gestureHandler.postDelayed(longPressAction, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    dragged = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -160,7 +150,6 @@ class FloatingDockService : Service() {
                     val dy = (event.rawY - downRawY).toInt()
                     if (kotlin.math.abs(dx) > dp(7) || kotlin.math.abs(dy) > dp(7)) {
                         dragged = true
-                        gestureHandler.removeCallbacks(longPressAction)
                     }
                     if (dragged) {
                         params.x = (downX + dx).coerceIn(0, (resources.displayMetrics.widthPixels - dp(58)).coerceAtLeast(0))
@@ -170,10 +159,9 @@ class FloatingDockService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    gestureHandler.removeCallbacks(longPressAction)
                     if (dragged) {
                         prefs.edit().putInt(KEY_ASSISTANT_X, params.x).putInt(KEY_ASSISTANT_Y, params.y).apply()
-                    } else if (!longPressed) {
+                    } else {
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastTapAt <= 320L) {
                             pendingSingleTap?.let { gestureHandler.removeCallbacks(it) }
@@ -195,7 +183,6 @@ class FloatingDockService : Service() {
         }
         // Keep a separate Home control attached independently so it does not disappear
         // when the navigation popup is dismissed. It can be disabled in launcher settings.
-        showPersistentHomeButton()
         // Attach the assistant ball to WindowManager; without this it is created but never visible.
         try {
             windowManager.addView(ball, params)
