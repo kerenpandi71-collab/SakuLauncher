@@ -566,10 +566,12 @@ class MainActivity : Activity() {
             visibility = View.GONE
             setOnClickListener { hideStartPanel() }
         }
-        startPanel = buildStartPanel().apply {
-            elevation = dp(20).toFloat()
-            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-            visibility = if (landscapeLayout) View.VISIBLE else View.GONE
+        if (landscapeLayout) {
+            startPanel = buildStartPanel().apply {
+                elevation = dp(20).toFloat()
+                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+                visibility = View.VISIBLE
+            }
         }
         rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         if (landscapeLayout) {
