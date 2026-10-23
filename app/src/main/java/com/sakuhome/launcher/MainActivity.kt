@@ -67,6 +67,7 @@ class MainActivity : Activity() {
     private lateinit var startSearchField: EditText
     private lateinit var drawerGridButton: TextView
     private lateinit var drawerListButton: TextView
+    private lateinit var drawerLaunchModeButton: TextView
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
     private lateinit var pinnedAdapter: AppGridAdapter
@@ -94,7 +95,7 @@ class MainActivity : Activity() {
     private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, hideLabels)
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
-    private val freeIconPlacement: Boolean get() = preferences.getBoolean(KEY_FREE_ICON_PLACEMENT, false)
+    private val freeIconPlacement: Boolean get() = false
 
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
@@ -629,8 +630,24 @@ class MainActivity : Activity() {
             setOnClickListener { setDrawerLayout(listMode = true) }
             contentDescription = "Tampilan daftar"
         }
-        filters.addView(drawerGridButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(6) })
-        filters.addView(drawerListButton, LinearLayout.LayoutParams(-2, dp(38) ))
+        drawerLaunchModeButton = chipButton(
+            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "▣ Jendela" else "□ Layar penuh",
+            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) accent else cardSurface,
+            primaryText, 11
+        ).apply {
+            textSize = 11f
+            setOnClickListener {
+                val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
+                preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
+                text = if (windowMode) "▣ Jendela" else "□ Layar penuh"
+                background = rounded(if (windowMode) accent else cardSurface, 15)
+                Toast.makeText(this@MainActivity, if (windowMode) "Aplikasi dibuka sebagai jendela" else "Aplikasi dibuka layar penuh", Toast.LENGTH_SHORT).show()
+            }
+            contentDescription = "Pilih mode pembukaan aplikasi"
+        }
+        filters.addView(drawerGridButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerLaunchModeButton, LinearLayout.LayoutParams(-2, dp(38)))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
@@ -1038,7 +1055,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
+    private fun launch(app: LaunchableApp, asFreeform: Boolean = preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) {
         if (asFreeform && ::windowStartPanel.isInitialized && windowStartPanel.visibility == View.VISIBLE) {
             hideWindowStartPanel()
         } else {
@@ -1277,7 +1294,7 @@ class MainActivity : Activity() {
             "↺  Reset wallpaper",
             "ⓘ  Tentang & izin",
             "▦  Tata letak grid · ${preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)} kolom",
-            "✥  Penempatan ikon bebas · ${if (freeIconPlacement) "Aktif" else "Grid"}",
+            "▣  Mode buka aplikasi · ${if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "Jendela" else "Layar penuh"}",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
@@ -1313,9 +1330,9 @@ class MainActivity : Activity() {
                     13 -> showPermissionInfo()
                     14 -> chooseHomeGrid()
                     15 -> {
-                        preferences.edit().putBoolean(KEY_FREE_ICON_PLACEMENT, !freeIconPlacement).apply()
-                        buildScreen()
-                        Toast.makeText(this, if (preferences.getBoolean(KEY_FREE_ICON_PLACEMENT, false)) "Mode penempatan bebas aktif: tahan ikon lalu seret ke lokasi mana saja" else "Tata letak grid aktif", Toast.LENGTH_LONG).show()
+                        val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
+                        preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
+                        Toast.makeText(this, if (windowMode) "Mode pembukaan aplikasi: Jendela" else "Mode pembukaan aplikasi: Layar penuh", Toast.LENGTH_SHORT).show()
                     }
                     16 -> chooseDrawerGrid()
                     17 -> showProcessManager()
@@ -2071,6 +2088,7 @@ class MainActivity : Activity() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val KEY_FREE_ICON_PLACEMENT = "free_icon_placement"
+        private const val KEY_APP_LAUNCH_WINDOW = "app_launch_window_mode"
         private const val KEY_FREE_ICON_POSITIONS = "free_icon_positions"
         private const val KEY_DRAWER_GRID_COLUMNS = "drawer_grid_columns"
         private const val KEY_DRAWER_LIST_MODE = "drawer_list_mode"
