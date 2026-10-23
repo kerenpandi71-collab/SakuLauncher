@@ -994,8 +994,8 @@ class MainActivity : Activity() {
             val flat = component.flattenToString() ?: return false
             val pkg = shellQuote(component.packageName)
             val command = "settings put global enable_freeform_support 1; " +
-                // force_resizable_activities belongs to Secure, not Global.
-                "settings put secure force_resizable_activities 1; " +
+                // Android stores the developer resizability toggle in Global settings.
+                "settings put global force_resizable_activities 1; " +
                 "launch_output=\$(am start -W --user current --windowingMode 5 " +
                 // Android 15's am start parser does not support --activity-bounds.
                 // Let ActivityTaskManager choose initial bounds; ActivityOptions below is the
