@@ -87,6 +87,16 @@ public final class DiagnosticLogger {
         return out.toString();
     }
 
+    /** Persist a structured diagnostic event for failed or ignored freeform launches. */
+    public static void logFreeform(String message, Throwable error) {
+        Log.e(TAG, "FREEFORM: " + message, error);
+        write("FREEFORM", message, error, Thread.currentThread());
+    }
+
+    public static void logFreeform(String message) {
+        logFreeform(message, null);
+    }
+
     private static void write(String type, String message, Throwable error, Thread thread) {
         StringWriter sw = new StringWriter();
         if (error != null) error.printStackTrace(new PrintWriter(sw));
