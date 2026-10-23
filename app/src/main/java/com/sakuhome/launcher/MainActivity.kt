@@ -791,14 +791,23 @@ class MainActivity : Activity() {
 
     private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
 
-    /** Prefer the Android Activity Manager shell so the system receives an explicit
-     * freeform windowing-mode request; fall back to ActivityOptions if root is unavailable. */
+    /** Ask Android's own ActivityTaskManager to create a real FREEFORM task.
+     * Root is used only to set the same developer options exposed by Android and to request
+     * windowingMode=5. We then inspect dumpsys instead of assuming an accepted command means
+     * the app actually entered a freeform window. */
     private fun tryLaunchFreeformAsRoot(component: android.content.ComponentName, bounds: Rect): Boolean {
         return try {
             val flat = component.flattenToString() ?: return false
-            val command = "am start --user current --windowingMode 5 " +
+            val pkg = shellQuote(component.packageName)
+            val command = "settings put global enable_freeform_support 1; " +
+                "settings put global force_resizable_activities 1; " +
+                "settings put global force_desktop_mode_on_external_displays 1; " +
+                "am start -W --user current --windowingMode 5 " +
                 "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
-                "-n ${shellQuote(flat)}"
+                "-n ${shellQuote(flat)}; " +
+                "sleep 1; " +
+                "dumpsys activity activities | grep -B 24 -A 5 ${pkg} | " +
+                "grep -E 'windowingMode=(5|freeform)'"
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             val output = java.io.ByteArrayOutputStream()
             val error = java.io.ByteArrayOutputStream()
@@ -806,20 +815,26 @@ class MainActivity : Activity() {
             val errThread = Thread { process.errorStream.use { it.copyTo(error) } }
             outThread.start()
             errThread.start()
-            if (!process.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)) {
+            if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)) {
                 process.destroyForcibly()
-                android.util.Log.w("SakuFreeform", "Root freeform launch timed out")
+                android.util.Log.w("SakuFreeform", "Root freeform launch/verification timed out")
                 return false
             }
-            outThread.join(250)
-            errThread.join(250)
+            outThread.join(300)
+            errThread.join(300)
             val stdout = output.toString("UTF-8")
             val stderr = error.toString("UTF-8")
-            android.util.Log.i("SakuFreeform", "root am start exit=${process.exitValue()} out=$stdout err=$stderr")
-            process.exitValue() == 0 && !stdout.contains("Error:", true) &&
-                !stderr.contains("Exception", true) && !stderr.contains("Error", true)
+            val verified = process.exitValue() == 0 &&
+                !stdout.contains("Error:", true) &&
+                !stderr.contains("Exception", true) &&
+                (stdout.contains("windowingMode=5", true) || stdout.contains("windowingMode=freeform", true))
+            android.util.Log.i(
+                "SakuFreeform",
+                "root launch exit=${process.exitValue()} verified=$verified out=$stdout err=$stderr"
+            )
+            verified
         } catch (e: Exception) {
-            android.util.Log.w("SakuFreeform", "Root launch unavailable; trying ActivityOptions", e)
+            android.util.Log.w("SakuFreeform", "Root freeform launch unavailable; trying ActivityOptions", e)
             false
         }
     }
