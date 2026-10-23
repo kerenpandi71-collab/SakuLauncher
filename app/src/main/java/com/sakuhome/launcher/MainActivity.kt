@@ -349,7 +349,7 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         if (landscapeLayout) {
-            buildKdeLandscapeDesktop()
+            buildReferenceLandscapeDesktop()
             return
         }
         window.statusBarColor = if (landscapeLayout) Color.TRANSPARENT else backgroundTop
@@ -584,6 +584,162 @@ class MainActivity : Activity() {
         startPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
+    }
+
+
+    /** Landscape desktop matching the KDE/iOS reference: glass panels, left app menu,
+     * right-side system cards, and a centered bottom dock. Portrait stays unchanged. */
+    private fun buildReferenceLandscapeDesktop() {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+
+        rootFrame = FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        rootFrame.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(backgroundTop, backgroundBottom))
+        loadWallpaper()?.let { bitmap ->
+            rootFrame.addView(ImageView(this).apply {
+                setImageBitmap(bitmap); scaleType = ImageView.ScaleType.CENTER_CROP
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        rootFrame.addView(View(this).apply {
+            setBackgroundColor(if (isDarkTheme) 0x33081324 else 0x180D1420)
+        }, FrameLayout.LayoutParams(-1, -1))
+
+        fun glassCard(): GradientDrawable = GradientDrawable().apply {
+            setColor(Color.argb(if (isDarkTheme) 190 else 218, 25, 39, 60))
+            setStroke(dp(1), Color.argb(75, 225, 238, 255))
+            cornerRadius = dp(18).toFloat()
+        }
+        fun text(value: String, size: Float, color: Int = Color.WHITE, bold: Boolean = false): TextView =
+            TextView(this).apply {
+                text = value; textSize = size; setTextColor(color); includeFontPadding = false
+                if (bold) setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0))
+            }
+        fun makeCard(title: String): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = if (liquidGlass) glassSurface(18) else glassCard()
+            elevation = dp(8).toFloat()
+            addView(text(title, 13f, Color.WHITE, true), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+        }
+
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(14), 0)
+            background = GradientDrawable().apply { setColor(Color.argb(190, 25, 43, 66)) }
+        }
+        topBar.addView(text("✣", 21f, Color.WHITE, true), LinearLayout.LayoutParams(dp(36), -1))
+        topBar.addView(text("▦   Aplikasi", 13f, Color.WHITE, true).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener { toggleStartPanel() }
+        }, LinearLayout.LayoutParams(0, -1, 1f))
+        topBar.addView(text("◉   ᛒ   ▰  " + batteryPercentText(), 12f), LinearLayout.LayoutParams(-2, -1).apply { gravity = Gravity.CENTER_VERTICAL })
+        topBar.addView(text("   " + SimpleDateFormat("EEE, d MMM  HH:mm", Locale("id", "ID")).format(Date()), 12f), LinearLayout.LayoutParams(-2, -1).apply { gravity = Gravity.CENTER_VERTICAL })
+        rootFrame.addView(topBar, FrameLayout.LayoutParams(-1, dp(32), Gravity.TOP))
+
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
+        val timeCard = makeCard("")
+        timeCard.addView(text(SimpleDateFormat("HH:mm", Locale("id", "ID")).format(Date()), 38f, Color.WHITE, true), 0,
+            LinearLayout.LayoutParams(-1, -2))
+        timeCard.addView(text(SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(Date()), 12f))
+        right.addView(timeCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+
+        val memory = android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+        val ramTotal = memory.totalMem / (1024L * 1024L * 1024L)
+        val ramUsed = (memory.totalMem - memory.availMem).coerceAtLeast(0L) / (1024L * 1024L * 1024L)
+        val stat = android.os.StatFs(android.os.Environment.getDataDirectory().absolutePath)
+        val storageTotal = stat.totalBytes / (1024L * 1024L * 1024L)
+        val storageUsed = storageTotal - stat.availableBytes / (1024L * 1024L * 1024L)
+        val system = makeCard("▣  Sistem")
+        system.addView(text("RAM                         " + ramUsed + " GB / " + ramTotal + " GB", 12f), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        system.addView(text("Penyimpanan          " + storageUsed + " GB / " + storageTotal + " GB", 12f), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        system.addView(text("Baterai                    " + batteryPercentText(), 12f))
+        right.addView(system, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+
+        val shortcuts = makeCard("⌑  Pintasan")
+        listOf("⌂  Home", "▤  Dokumen", "⇩  Unduhan", "▧  Sampah").chunked(2).forEach { pair ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            pair.forEach { caption ->
+                row.addView(text(caption, 12f).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(9), 0, dp(4), 0)
+                    background = GradientDrawable().apply { setColor(Color.argb(45, 220, 230, 250)); cornerRadius = dp(11).toFloat() }
+                    setOnClickListener {
+                        val folder = when {
+                            caption.contains("Dokumen") -> android.os.Environment.DIRECTORY_DOCUMENTS
+                            caption.contains("Unduhan") -> android.os.Environment.DIRECTORY_DOWNLOADS
+                            else -> null
+                        }
+                        if (folder != null) {
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(
+                                    Uri.parse("content://com.android.externalstorage.documents/document/primary%3A" + folder), "*/*"
+                                ))
+                            } catch (_: Exception) {
+                                Toast.makeText(this@MainActivity, "Folder tidak dapat dibuka dari pintasan ini", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }, LinearLayout.LayoutParams(0, dp(36), 1f).apply { marginEnd = dp(6) })
+            }
+            shortcuts.addView(row, LinearLayout.LayoutParams(-1, dp(36)).apply { bottomMargin = dp(7) })
+        }
+        right.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        val notes = makeCard("🗒  Catatan Cepat")
+        notes.addView(text("•  Fokus hari ini\n•  Lanjutkan proyek\n•  Buka aplikasi favorit", 12f))
+        right.addView(notes, LinearLayout.LayoutParams(-1, -2))
+        val rightWidth = (resources.displayMetrics.widthPixels * 0.205f).toInt().coerceAtLeast(dp(210))
+        rootFrame.addView(right, FrameLayout.LayoutParams(rightWidth, -2, Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(52); marginEnd = dp(16)
+        })
+
+        // Keep the existing searchable Start menu and its application-launch behavior.
+        startPanel = buildStartPanel()
+        val panelWidth = (resources.displayMetrics.widthPixels * 0.345f).toInt().coerceIn(dp(350), dp(520))
+        val panelHeight = resources.displayMetrics.heightPixels - dp(120)
+        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, panelHeight, Gravity.START or Gravity.TOP).apply {
+            topMargin = dp(46); marginStart = dp(16)
+        })
+        startPanel.visibility = View.VISIBLE
+
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            setPadding(dp(9), dp(5), dp(9), dp(5))
+            background = if (liquidGlass) glassSurface(22) else glassCard()
+            elevation = dp(20).toFloat()
+        }
+        val dockApps = (pinnedApps().take(8) + apps.filter { app -> pinnedPackages().none { it == app.packageName } }.take(1))
+            .distinctBy { it.packageName }.take(9)
+        dockApps.forEach { app ->
+            dock.addView(ImageView(this).apply {
+                setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(5), dp(4), dp(5), dp(4))
+                setOnClickListener {
+                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
+                    if (launch != null) try { startActivity(launch) } catch (_: Exception) {
+                        Toast.makeText(this@MainActivity, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }, LinearLayout.LayoutParams(dp(42), dp(44)))
+        }
+        dock.addView(text("⠿", 22f).apply { gravity = Gravity.CENTER; setOnClickListener { toggleStartPanel() } },
+            LinearLayout.LayoutParams(dp(40), dp(44)))
+        val dockWidth = (resources.displayMetrics.widthPixels * 0.46f).toInt().coerceAtLeast(dp(300))
+        rootFrame.addView(dock, FrameLayout.LayoutParams(dockWidth, dp(56), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(10)
+        })
+        setContentView(rootFrame)
+        updateClock()
+    }
+
+    private fun batteryPercentText(): String {
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        return if (level >= 0 && scale > 0) (level * 100 / scale).toString() + "%" else "--%"
     }
 
     /**
