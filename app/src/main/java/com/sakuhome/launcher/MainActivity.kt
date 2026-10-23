@@ -591,8 +591,10 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(5), 0, dp(5), 0)
         }
-        pinnedApps().take(6).forEachIndexed { index, app ->
-            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp), -1))
+        // No fixed six-icon cap: the horizontal scroller keeps every pinned app reachable
+        // without allowing icons to be clipped at the dock edges.
+        pinnedApps().forEachIndexed { index, app ->
+            icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp.coerceIn(32, 72)), -1))
         }
         scroll.addView(icons)
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
@@ -667,34 +669,35 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, dp(38), 1f))
-        drawerGridButton = chipButton("▦ Grid", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 12f
+        drawerGridButton = chipButton("▦", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 18f
             setOnClickListener { setDrawerLayout(listMode = false) }
             contentDescription = "Tampilan grid"
         }
-        drawerListButton = chipButton("☷ List", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 12f
+        drawerListButton = chipButton("☷", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 18f
             setOnClickListener { setDrawerLayout(listMode = true) }
             contentDescription = "Tampilan daftar"
         }
         drawerLaunchModeButton = chipButton(
-            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "▣ Jendela" else "□ Layar penuh",
+            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "▣" else "□",
             if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) accent else cardSurface,
             primaryText, 11
         ).apply {
-            textSize = 11f
+            textSize = 18f
             setOnClickListener {
                 val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
                 preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
-                text = if (windowMode) "▣ Jendela" else "□ Layar penuh"
+                text = if (windowMode) "▣" else "□"
                 background = rounded(if (windowMode) accent else cardSurface, 15)
+                contentDescription = if (windowMode) "Mode jendela aktif; ketuk untuk layar penuh" else "Mode layar penuh aktif; ketuk untuk jendela"
                 Toast.makeText(this@MainActivity, if (windowMode) "Aplikasi dibuka sebagai jendela" else "Aplikasi dibuka layar penuh", Toast.LENGTH_SHORT).show()
             }
-            contentDescription = "Pilih mode pembukaan aplikasi"
+            contentDescription = if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "Mode jendela" else "Mode layar penuh"
         }
-        filters.addView(drawerGridButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerListButton, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerLaunchModeButton, LinearLayout.LayoutParams(-2, dp(38)))
+        filters.addView(drawerGridButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerLaunchModeButton, LinearLayout.LayoutParams(dp(38), dp(38)))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
@@ -1348,6 +1351,7 @@ class MainActivity : Activity() {
             "▦  Sembunyikan label ikon Grid · ${if (hideDrawerLabels) "Aktif" else "Nonaktif"}",
             "▣  Display Extend · Virtual Display",
             "▰  Status bar Android · $hideStatusBarState",
+            "↔  Orientasi layar · ${if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false)) "Landscape" else "Ikuti sistem"}",
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -1406,6 +1410,13 @@ class MainActivity : Activity() {
                         preferences.edit().putBoolean(KEY_HIDE_STATUS_BAR, !preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)).apply()
                         buildScreen()
                         Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Status bar disembunyikan" else "Status bar ditampilkan", Toast.LENGTH_SHORT).show()
+                    }
+                    22 -> {
+                        val landscape = !preferences.getBoolean(KEY_LANDSCAPE_MODE, false)
+                        preferences.edit().putBoolean(KEY_LANDSCAPE_MODE, landscape).apply()
+                        requestedOrientation = if (landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        recreate()
                     }
                 }
             }.setNegativeButton("Selesai", null).show()
@@ -2226,6 +2237,7 @@ class MainActivity : Activity() {
         private const val KEY_FROZEN_APPS = "frozen_app_packages"
         private const val KEY_WIDGET_IDS = "home_widget_ids"
         private const val KEY_WIDGET_HEIGHT_PREFIX = "home_widget_height_"
+        private const val KEY_LANDSCAPE_MODE = "landscape_mode_enabled"
         private const val APP_WIDGET_HOST_ID = 2096
         private const val REQUEST_WIDGET_PICK = 483
         private const val REQUEST_WALLPAPER = 481
