@@ -472,7 +472,11 @@ class MainActivity : Activity() {
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
         rightColumn.addView(notes, if (landscapeLayout) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) } else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        workspace.addView(rightColumn, if (landscapeLayout) LinearLayout.LayoutParams(-1, -1) else LinearLayout.LayoutParams(-1, -2))
+        workspace.addView(rightColumn, if (landscapeLayout) {
+            LinearLayout.LayoutParams(0, -1, 1f)
+        } else {
+            LinearLayout.LayoutParams(-1, -2)
+        })
         shell.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val bottom = LinearLayout(this).apply {
@@ -503,10 +507,20 @@ class MainActivity : Activity() {
         startPanel = buildStartPanel().apply {
             elevation = dp(20).toFloat()
             background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-            visibility = View.GONE
+            visibility = if (landscapeLayout) View.VISIBLE else View.GONE
         }
         rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
-        rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
+        if (landscapeLayout) {
+            // KDE-like permanent Start panel on the left in landscape only.
+            // Portrait retains the existing full-screen Start overlay behavior.
+            val panelWidth = (resources.displayMetrics.widthPixels * 0.34f).toInt()
+                .coerceIn(dp(175), dp(270))
+            workspace.addView(startPanel, 0, LinearLayout.LayoutParams(panelWidth, -1).apply {
+                marginEnd = dp(12)
+            })
+        } else {
+            rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
+        }
         setContentView(rootFrame)
         updateClock()
     }
