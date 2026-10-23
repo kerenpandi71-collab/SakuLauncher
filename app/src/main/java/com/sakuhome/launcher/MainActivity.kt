@@ -92,8 +92,10 @@ class MainActivity : Activity() {
     private val primaryText: Int get() = if (isDarkTheme) Color.rgb(245, 248, 255) else Color.rgb(25, 37, 57)
     private val secondaryText: Int get() = if (isDarkTheme) Color.rgb(159, 177, 202) else Color.rgb(82, 101, 130)
     private val accent: Int get() = preferences.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
-    private val hideLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_LABELS, false)
-    private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, hideLabels)
+    private val hideLabels: Boolean get() = false // Label layar utama selalu tampil pada desain desktop baru.
+    private val hideDrawerLabels: Boolean get() = preferences.getBoolean(KEY_HIDE_DRAWER_LABELS, false)
+    private val appFontSizeSp: Int get() = preferences.getInt(KEY_APP_FONT_SIZE, 14).coerceIn(10, 24)
+    private val appFontFamily: String get() = preferences.getString(KEY_APP_FONT_FAMILY, "sans-serif") ?: "sans-serif"
     private val liquidGlass: Boolean get() = preferences.getBoolean(KEY_LIQUID_GLASS, true)
     private val iconSizeDp: Int get() = preferences.getInt(KEY_ICON_SIZE, 48)
     private val freeIconPlacement: Boolean get() = false
@@ -977,7 +979,7 @@ class MainActivity : Activity() {
                 setPadding(dp(2), dp(2), dp(2), dp(2))
                 background = ColorDrawable(Color.TRANSPARENT)
                 addView(ImageView(this@MainActivity).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(size, size))
-                if (!hideLabels) addView(TextView(this@MainActivity).apply { text = app.label; textSize = 10f; gravity = Gravity.CENTER; setTextColor(primaryText); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(dp(84), -2))
+                addView(TextView(this@MainActivity).apply { text = app.label; textSize = (appFontSizeSp - 3).coerceAtLeast(9).toFloat(); typeface = android.graphics.Typeface.create(appFontFamily, android.graphics.Typeface.NORMAL); gravity = Gravity.CENTER; setTextColor(primaryText); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(dp(84), -2))
                 setOnClickListener { launch(app) }
                 setOnLongClickListener {
                     val clip = android.content.ClipData.newPlainText("Saku app", app.packageName)
@@ -987,7 +989,7 @@ class MainActivity : Activity() {
                     true
                 }
             }
-            desktopCanvas.addView(cell, FrameLayout.LayoutParams(size + dp(8), dp(if (hideLabels) 60 else 82)).apply { leftMargin = x; topMargin = y })
+            desktopCanvas.addView(cell, FrameLayout.LayoutParams(size + dp(8), dp(82)).apply { leftMargin = x; topMargin = y })
         }
     }
     private fun rebuildPinnedViews() {
@@ -1297,7 +1299,7 @@ class MainActivity : Activity() {
         val options = arrayOf(
             "◧  Taskbar bawah · $hideTaskbarState",
             "▦  Ukuran ikon · ${iconSizeDp} dp",
-            "◌  Label aplikasi · $labelState",
+            "Aa  Font & ukuran teks · ${appFontSizeSp}sp",
             "✧  Liquid Glass · $glassState",
             "◐  Transparansi · $transparency%",
             "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
@@ -1314,7 +1316,7 @@ class MainActivity : Activity() {
             "▣  Mode buka aplikasi · ${if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "Jendela" else "Layar penuh"}",
             "▤  Kolom menu aplikasi · ${preferences.getInt(KEY_DRAWER_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4)}",
             "◉  Pengelola proses aplikasi",
-            "◌  Label menu aplikasi · $drawerLabelState",
+            "▦  Sembunyikan label ikon Grid · ${if (hideDrawerLabels) "Aktif" else "Nonaktif"}",
             "▣  Display Extend · Virtual Display",
             "▰  Status bar Android · $hideStatusBarState",
         )
@@ -1326,10 +1328,7 @@ class MainActivity : Activity() {
                         buildScreen()
                     }
                     1 -> chooseIconSize()
-                    2 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_LABELS, !hideLabels).apply()
-                        buildScreen()
-                    }
+                    2 -> chooseFontSettings()
                     3 -> {
                         preferences.edit().putBoolean(KEY_LIQUID_GLASS, !liquidGlass).apply()
                         buildScreen()
@@ -1363,7 +1362,8 @@ class MainActivity : Activity() {
                     18 -> showProcessManager()
                     19 -> {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
-                        buildScreen()
+                        if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
+                        Toast.makeText(this, if (hideDrawerLabels) "Label ikon Grid disembunyikan; List tetap menampilkan teks" else "Label ikon Grid ditampilkan", Toast.LENGTH_SHORT).show()
                     }
                     20 -> {
                         try {
@@ -1380,6 +1380,79 @@ class MainActivity : Activity() {
                     }
                 }
             }.setNegativeButton("Selesai", null).show()
+    }
+
+    private fun chooseFontSettings() {
+        val families = arrayOf(
+            "System default" to "sans-serif",
+            "Roboto" to "sans-serif",
+            "Roboto Condensed" to "sans-serif-condensed",
+            "Serif" to "serif",
+            "Monospace" to "monospace",
+            "Sans Serif Light" to "sans-serif-light",
+            "Sans Serif Medium" to "sans-serif-medium",
+            "Casual" to "casual"
+        )
+        val currentFamily = appFontFamily
+        val familyNames = families.map { it.first }.toTypedArray()
+        val selectedFamily = families.indexOfFirst { it.second == currentFamily }.coerceAtLeast(0)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(4))
+        }
+        val sizeLabel = TextView(this).apply {
+            text = "Ukuran teks: ${appFontSizeSp} sp"
+            textSize = 15f
+            setTextColor(primaryText)
+        }
+        container.addView(sizeLabel)
+        val slider = SeekBar(this).apply {
+            max = 14
+            progress = appFontSizeSp - 10
+            contentDescription = "Ukuran font, geser kiri untuk memperkecil dan kanan untuk memperbesar"
+        }
+        container.addView(slider, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        val preview = TextView(this).apply {
+            text = "Pratinjau teks aplikasi — Aplikasi"
+            textSize = appFontSizeSp.toFloat()
+            typeface = android.graphics.Typeface.create(appFontFamily, android.graphics.Typeface.NORMAL)
+            setTextColor(primaryText)
+            maxLines = 2
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        container.addView(preview)
+        val familyLabel = TextView(this).apply {
+            text = "Gaya font"
+            textSize = 14f
+            setTextColor(secondaryText)
+            setPadding(0, dp(8), 0, dp(4))
+        }
+        container.addView(familyLabel)
+        val familySpinner = android.widget.Spinner(this)
+        familySpinner.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, familyNames)
+        familySpinner.setSelection(selectedFamily)
+        container.addView(familySpinner, LinearLayout.LayoutParams(-1, dp(48)))
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val size = progress + 10
+                sizeLabel.text = "Ukuran teks: ${size} sp"
+                preview.textSize = size.toFloat()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        AlertDialog.Builder(this)
+            .setTitle("Font & ukuran teks")
+            .setView(container)
+            .setPositiveButton("Simpan") { _, _ ->
+                val size = slider.progress + 10
+                val family = families[familySpinner.selectedItemPosition].second
+                preferences.edit().putInt(KEY_APP_FONT_SIZE, size).putString(KEY_APP_FONT_FAMILY, family).apply()
+                buildScreen()
+                Toast.makeText(this, "Font diperbarui: ${size} sp", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     private fun toggleOverlay() {
@@ -2048,14 +2121,14 @@ class MainActivity : Activity() {
                 })
                 addView(TextView(context).apply {
                     id = android.R.id.text1
-                    textSize = if (wantedMode == "list") 14f else 10.5f
-                    setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+                    textSize = if (wantedMode == "list") appFontSizeSp.toFloat() else (appFontSizeSp - 3).coerceAtLeast(9).toFloat()
+                    setTypeface(android.graphics.Typeface.create(appFontFamily, android.graphics.Typeface.NORMAL))
                     setTextColor(primaryText)
                     gravity = if (wantedMode == "list") Gravity.CENTER_VERTICAL or Gravity.START else Gravity.CENTER
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setPadding(if (wantedMode == "list") 0 else 0, if (wantedMode == "list") 0 else dp(5), 0, 0)
-                    visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
+                    visibility = if (isStartMenu && wantedMode == "grid" && hideDrawerLabels) View.GONE else View.VISIBLE
                 }, LinearLayout.LayoutParams(if (wantedMode == "list") 0 else -1, -2, if (wantedMode == "list") 1f else 0f))
                 if (wantedMode == "list") addView(TextView(context).apply {
                     text = "›"
@@ -2066,7 +2139,7 @@ class MainActivity : Activity() {
             }
             cell.findViewById<ImageView>(android.R.id.icon).setImageDrawable(app.icon)
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
-            cell.findViewById<TextView>(android.R.id.text1).visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
+            cell.findViewById<TextView>(android.R.id.text1).visibility = if (isStartMenu && wantedMode == "grid" && hideDrawerLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
             cell.setOnClickListener { launch(app, asFreeform = wantedMode != "list") }
             cell.setOnLongClickListener {
@@ -2108,8 +2181,9 @@ class MainActivity : Activity() {
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val KEY_HIDE_TASKBAR = "hide_bottom_taskbar"
         private const val KEY_HIDE_STATUS_BAR = "hide_android_status_bar"
-        private const val KEY_HIDE_LABELS = "hide_app_labels"
         private const val KEY_HIDE_DRAWER_LABELS = "hide_drawer_app_labels"
+        private const val KEY_APP_FONT_SIZE = "app_font_size_sp"
+        private const val KEY_APP_FONT_FAMILY = "app_font_family"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HOME_GRID_COLUMNS = "home_grid_columns"
