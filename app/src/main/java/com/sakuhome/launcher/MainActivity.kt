@@ -797,23 +797,63 @@ class MainActivity : Activity() {
             return
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            if (asFreeform) {
-                val width = resources.displayMetrics.widthPixels
-                val height = resources.displayMetrics.heightPixels
-                val margin = dp(24)
-                val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                startActivity(launchIntent, options.toBundle())
-            } else {
+        if (!asFreeform) {
+            try {
                 startActivity(launchIntent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Aplikasi tidak dapat dibuka: ${e.localizedMessage ?: "akses ditolak"}", Toast.LENGTH_LONG).show()
             }
-        } catch (_: Exception) {
-            if (asFreeform) {
-                Toast.makeText(this, "Mode jendela tidak didukung; membuka aplikasi seperti biasa", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            val metrics = resources.displayMetrics
+            val width = metrics.widthPixels
+            val height = metrics.heightPixels
+            val margin = dp(18)
+            // ActivityOptions launch bounds only hint at a size. Explicitly request Android's
+            // FREEFORM windowing mode (5) as well; on ROMs without freeform support Android
+            // may ignore the request, in which case we fall back safely.
+            val left = margin
+            val top = dp(56)
+            val right = (width - margin).coerceAtLeast(left + dp(240))
+            val bottom = (height - dp(72)).coerceAtLeast(top + dp(240))
+            val bounds = Rect(left, top, right, bottom)
+            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+            var windowModeRequested = false
+            try {
+                val method = ActivityOptions::class.java.getMethod(
+                    "setLaunchWindowingMode", Int::class.javaPrimitiveType
+                )
+                method.isAccessible = true
+                method.invoke(options, 5) // WindowConfiguration.WINDOWING_MODE_FREEFORM
+                windowModeRequested = true
+            } catch (e: ReflectiveOperationException) {
+                android.util.Log.w("SakuFreeform", "Android does not expose setLaunchWindowingMode", e)
+            } catch (e: SecurityException) {
+                android.util.Log.w("SakuFreeform", "Freeform request blocked by system", e)
+            }
+            android.util.Log.i("SakuFreeform", "launching ${app.packageName}; modeRequested=$windowModeRequested; bounds=$bounds")
+            startActivity(launchIntent, options.toBundle())
+            if (!windowModeRequested) {
+                Toast.makeText(
+                    this,
+                    "Ukuran jendela diminta. Jika tetap layar penuh, aktifkan 'Aktifkan jendela bentuk bebas' di Opsi Pengembang lalu mulai ulang sistem.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SakuFreeform", "Freeform launch failed for ${app.packageName}", e)
+            try {
                 startActivity(launchIntent)
-            } else {
-                Toast.makeText(this, "Aplikasi tidak dapat dibuka pada perangkat ini", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Mode jendela tidak didukung/diaktifkan di ROM ini; aplikasi dibuka normal.",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (fallback: Exception) {
+                android.util.Log.e("SakuFreeform", "Normal launch also failed", fallback)
+                Toast.makeText(this, "Aplikasi tidak dapat dibuka: ${fallback.localizedMessage ?: "akses ditolak"}", Toast.LENGTH_LONG).show()
             }
         }
     }
