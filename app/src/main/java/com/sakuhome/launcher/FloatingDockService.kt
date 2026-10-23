@@ -99,127 +99,82 @@ class FloatingDockService : Service() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val accentColor = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
         val darkTheme = prefs.getBoolean(KEY_DARK_THEME, true)
-        val liquidGlass = prefs.getBoolean(KEY_LIQUID_GLASS, true)
-        val transparency = prefs.getInt(KEY_TRANSPARENCY, 88).coerceIn(0, 100)
-        val iconSize = prefs.getInt(KEY_ICON_SIZE, 48).coerceIn(32, 64)
-        val hiddenPackages = prefs.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
-        val pinnedPackages = if (prefs.contains(KEY_PINNED)) {
-            prefs.getString(KEY_PINNED, "").orEmpty().split('\n').filter { it.isNotBlank() }
-        } else loadApps().take(5).map { it.packageName }
-        val apps = loadApps().associateBy { it.packageName }
-        val dock = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(5), dp(8), dp(5))
-            background = GradientDrawable().apply {
-                setColor(Color.argb(transparency * 255 / 100, if (darkTheme) 31 else 247, if (darkTheme) 37 else 249, if (darkTheme) 52 else 253))
-                setStroke(dp(1), Color.argb(170, 255, 255, 255))
-                cornerRadius = dp(23).toFloat()
-            }
-            elevation = dp(14).toFloat()
-        }
-        val startButton = TextView(this).apply {
-            text = "▦"
-            textSize = 20f
+
+        // A compact movable assistant ball replaces the old fixed bottom dock.
+        val ball = TextView(this).apply {
+            text = "✦"
+            textSize = 25f
             gravity = Gravity.CENTER
-            setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
-            background = rounded(accentColor, 17)
-            contentDescription = "Buka Start"
-            setOnClickListener { toggleStartOverlay() }
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(accentColor)
+                setStroke(dp(1), Color.argb(160, 255, 255, 255))
+            }
+            elevation = dp(16).toFloat()
+            contentDescription = "Bola asisten Saku — ketuk untuk membuka drawer, tahan untuk memindahkan"
         }
-        dock.addView(startButton, LinearLayout.LayoutParams(dp(43), dp(46)))
-        dock.addView(View(this).apply {
-            setBackgroundColor(Color.argb(95, 255, 255, 255))
-        }, LinearLayout.LayoutParams(dp(1), dp(32)).apply {
-            marginStart = dp(6)
-            marginEnd = dp(4)
-        })
-        pinnedPackages.filterNot { hiddenPackages.contains(it) }.take(6).mapNotNull { apps[it] }.forEachIndexed { index, app ->
-            val icon = ImageView(this).apply {
-                setImageDrawable(app.icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(5), dp(5), dp(5), dp(5))
-                contentDescription = app.label
-                setOnClickListener {
-                    animate().cancel()
-                    scaleX = 0.86f
-                    scaleY = 0.86f
-                    animate().scaleX(1.08f).scaleY(1.08f).setDuration(120).withEndAction {
-                        animate().scaleX(1f).scaleY(1f).setDuration(140).start()
-                    }.start()
-                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val width = resources.displayMetrics.widthPixels
-                        val height = resources.displayMetrics.heightPixels
-                        val margin = dp(24)
-                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                        try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                            startActivity(launch, options.toBundle())
-                        } catch (_: Exception) {
-                            try { startActivity(launch) } catch (_: Exception) {
-                                Toast.makeText(this@FloatingDockService, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+        val params = WindowManager.LayoutParams(
+            dp(58), dp(58),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = prefs.getInt(KEY_ASSISTANT_X, resources.displayMetrics.widthPixels - dp(76))
+                .coerceIn(0, (resources.displayMetrics.widthPixels - dp(58)).coerceAtLeast(0))
+            y = prefs.getInt(KEY_ASSISTANT_Y, resources.displayMetrics.heightPixels / 2)
+                .coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
+        }
+
+        var downRawX = 0f
+        var downRawY = 0f
+        var downX = 0
+        var downY = 0
+        var dragged = false
+        ball.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    downX = params.x
+                    downY = params.y
+                    dragged = false
+                    true
                 }
-                setOnLongClickListener {
-                    val launch = packageManager.getLaunchIntentForPackage(app.packageName)
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val width = resources.displayMetrics.widthPixels
-                        val height = resources.displayMetrics.heightPixels
-                        val margin = dp(24)
-                        val bounds = Rect(margin, dp(64), width - margin, height - dp(84))
-                        try {
-                            val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
-                            startActivity(launch, options.toBundle())
-                        } catch (_: Exception) {
-                            Toast.makeText(this@FloatingDockService, "Android tidak mengizinkan jendela bebas untuk aplikasi ini", Toast.LENGTH_SHORT).show()
-                        }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - downRawX).toInt()
+                    val dy = (event.rawY - downRawY).toInt()
+                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) dragged = true
+                    if (dragged) {
+                        params.x = (downX + dx).coerceIn(0, (resources.displayMetrics.widthPixels - dp(58)).coerceAtLeast(0))
+                        params.y = (downY + dy).coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
+                        try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
                     }
                     true
                 }
-            }
-            dock.addView(icon, LinearLayout.LayoutParams(dp(iconSize), dp(48)))
-        }
-
-        val blurSupported = liquidGlass && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && windowManager.isCrossWindowBlurEnabled()
-        var windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-        if (blurSupported) windowFlags = windowFlags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            dp(58),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            windowFlags,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(28)
-            if (blurSupported) setBlurBehindRadius(dp(28))
-        }
-        try {
-            windowManager.addView(dock, params)
-            dockView = dock
-        } catch (_: Exception) {
-            if (blurSupported) {
-                try {
-                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
-                    params.setBlurBehindRadius(0)
-                    windowManager.addView(dock, params)
-                    dockView = dock
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Tidak dapat menampilkan dock di atas aplikasi", Toast.LENGTH_SHORT).show()
-                    stopSelf()
+                MotionEvent.ACTION_UP -> {
+                    if (dragged) {
+                        prefs.edit().putInt(KEY_ASSISTANT_X, params.x).putInt(KEY_ASSISTANT_Y, params.y).apply()
+                    } else {
+                        view.performClick()
+                    }
+                    true
                 }
-            } else {
-                Toast.makeText(this, "Tidak dapat menampilkan dock di atas aplikasi", Toast.LENGTH_SHORT).show()
-                stopSelf()
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
             }
+        }
+        ball.setOnClickListener { toggleStartOverlay() }
+        try {
+            windowManager.addView(ball, params)
+            dockView = ball
+        } catch (e: Exception) {
+            android.util.Log.e("SakuDock", "Unable to attach assistant ball", e)
+            Toast.makeText(this, "Bola asisten gagal ditampilkan: " + e.message, Toast.LENGTH_LONG).show()
+            stopSelf()
         }
     }
-
 
     private fun toggleStartOverlay() {
         if (startOverlayView != null) removeStartOverlay() else showStartOverlay()
@@ -265,6 +220,13 @@ class FloatingDockService : Service() {
         }
         header.addView(gridButton, LinearLayout.LayoutParams(dp(42), dp(40)))
         header.addView(listButton, LinearLayout.LayoutParams(dp(42), dp(40)).apply { marginStart = dp(4) })
+        val closeButton = TextView(this).apply {
+            text = "×"; textSize = 26f; gravity = Gravity.CENTER; setTextColor(fg)
+            contentDescription = "Tutup drawer aplikasi"
+            background = rounded(Color.argb(45, 255, 255, 255), 14)
+            setOnClickListener { removeStartOverlay() }
+        }
+        header.addView(closeButton, LinearLayout.LayoutParams(dp(42), dp(40)).apply { marginStart = dp(4) })
         outer.addView(header)
         title.setOnTouchListener(object : View.OnTouchListener {
             var downX = 0f; var downY = 0f; var startX = 0; var startY = 0
