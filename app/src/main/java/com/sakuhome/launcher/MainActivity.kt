@@ -464,7 +464,10 @@ class MainActivity : Activity() {
         shortcut("Unduhan", "↓") { openStorage(android.os.Environment.DIRECTORY_DOWNLOADS) }
         shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp( if (landscapeLayout) 14 else 8) })
+        // Pintasan hanya ditampilkan di portrait; landscape dibuat lebih lega.
+        if (!landscapeLayout) {
+            rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -487,7 +490,10 @@ class MainActivity : Activity() {
             })
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-        rightColumn.addView(notes, if (landscapeLayout) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) } else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        // Catatan tetap tersedia dan tersimpan di portrait, tetapi disembunyikan di landscape.
+        if (!landscapeLayout) {
+            rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
 
         workspace.addView(rightColumn, if (landscapeLayout) {
             LinearLayout.LayoutParams(0, -1, 1f)
