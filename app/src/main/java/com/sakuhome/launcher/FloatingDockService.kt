@@ -34,6 +34,7 @@ import android.widget.Toast
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
     private var dockView: View? = null
+    private var homeButtonView: View? = null
     private var startOverlayView: View? = null
     private var startOverlayParams: WindowManager.LayoutParams? = null
     private var startOverlayListMode = false
@@ -187,11 +188,108 @@ class FloatingDockService : Service() {
         try {
             windowManager.addView(ball, params)
             dockView = ball
-            android.util.Log.i("SakuDock", "Bola Asisten ditampilkan")
+            showFloatingHomeButton(prefs, accentColor)
+            android.util.Log.i("SakuDock", "Bola Asisten dan tombol Home mengambang ditampilkan")
         } catch (e: Exception) {
             dockView = null
             android.util.Log.e("SakuDock", "Gagal menampilkan Bola Asisten", e)
             Toast.makeText(this, "Bola Asisten gagal muncul: " + (e.message ?: "overlay error"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Tombol Home independen dari Bola Asisten: dapat dipindah bebas dan
+     * koordinatnya disimpan agar tetap sama setelah service/aplikasi dimulai ulang.
+     */
+    private fun showFloatingHomeButton(prefs: android.content.SharedPreferences, accentColor: Int) {
+        if (!prefs.getBoolean(KEY_HOME_BUTTON_VISIBLE, true) || homeButtonView != null) return
+        val size = dp(48)
+        val button = TextView(this).apply {
+            text = "⌂"
+            textSize = 27f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            contentDescription = "Tombol Home — tahan dan geser untuk memindahkan"
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(accentColor)
+                setStroke(dp(1), Color.argb(170, 255, 255, 255))
+            }
+            elevation = dp(16).toFloat()
+        }
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        val params = WindowManager.LayoutParams(
+            size, size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = prefs.getInt(KEY_HOME_X, (metrics.widthPixels - dp(72)).coerceAtLeast(0))
+                .coerceIn(0, (metrics.widthPixels - size).coerceAtLeast(0))
+            y = prefs.getInt(KEY_HOME_Y, (metrics.heightPixels / 2 + dp(45)))
+                .coerceIn(0, (metrics.heightPixels - size - dp(24)).coerceAtLeast(0))
+        }
+        var downRawX = 0f
+        var downRawY = 0f
+        var downX = 0
+        var downY = 0
+        var dragged = false
+        button.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    downX = params.x
+                    downY = params.y
+                    dragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - downRawX).toInt()
+                    val dy = (event.rawY - downRawY).toInt()
+                    if (kotlin.math.abs(dx) > dp(6) || kotlin.math.abs(dy) > dp(6)) dragged = true
+                    if (dragged) {
+                        params.x = (downX + dx).coerceIn(0, (metrics.widthPixels - size).coerceAtLeast(0))
+                        params.y = (downY + dy).coerceIn(0, (metrics.heightPixels - size - dp(24)).coerceAtLeast(0))
+                        try { windowManager.updateViewLayout(view, params) } catch (e: Exception) {
+                            android.util.Log.w("SakuDock", "Tidak dapat memperbarui posisi tombol Home", e)
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragged) {
+                        prefs.edit().putInt(KEY_HOME_X, params.x).putInt(KEY_HOME_Y, params.y).apply()
+                    } else {
+                        viewHaptic(view)
+                        Thread({
+                            try {
+                                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "input keyevent 3"))
+                                process.waitFor()
+                            } catch (e: Exception) {
+                                android.util.Log.e("SakuDock", "Home key injection failed", e)
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    Toast.makeText(this@FloatingDockService, "Perintah Home gagal. Periksa izin root.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, "saku-home-key").start()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
+        }
+        try {
+            windowManager.addView(button, params)
+            homeButtonView = button
+            android.util.Log.i("SakuDock", "Tombol Home mengambang siap; posisi disimpan")
+        } catch (e: Exception) {
+            homeButtonView = null
+            android.util.Log.e("SakuDock", "Gagal menampilkan tombol Home mengambang", e)
         }
     }
 
@@ -600,6 +698,10 @@ class FloatingDockService : Service() {
             try { windowManager.removeView(view) } catch (_: Exception) { }
         }
         dockView = null
+        homeButtonView?.let { view ->
+            try { windowManager.removeView(view) } catch (_: Exception) { }
+        }
+        homeButtonView = null
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
@@ -640,6 +742,8 @@ class FloatingDockService : Service() {
         private const val KEY_START_X = "floating_start_x"
         private const val KEY_ASSISTANT_X = "floating_assistant_x"
         private const val KEY_ASSISTANT_Y = "floating_assistant_y"
+        private const val KEY_HOME_X = "floating_home_button_x"
+        private const val KEY_HOME_Y = "floating_home_button_y"
         private const val KEY_START_Y = "floating_start_y"
     }
 }
