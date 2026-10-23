@@ -117,13 +117,7 @@ class FloatingDockService : Service() {
             setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
             background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
-            setOnClickListener {
-                val open = Intent(this@FloatingDockService, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    putExtra(MainActivity.EXTRA_OPEN_START, true)
-                }
-                startActivity(open)
-            }
+            setOnClickListener { openFreeformStartMenu() }
         }
         dock.addView(startButton, LinearLayout.LayoutParams(dp(43), dp(46)))
         dock.addView(View(this).apply {
@@ -216,6 +210,72 @@ class FloatingDockService : Service() {
                 stopSelf()
             }
         }
+    }
+
+    /**
+     * Open the dedicated Start menu as a separate Android FREEFORM task.
+     * Use the root launch path first, then fall back to ActivityOptions.
+     */
+    private fun openFreeformStartMenu() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+            putExtra(MainActivity.EXTRA_OPEN_WINDOW_START, true)
+        }
+        Thread({
+            var launchedByRoot = false
+            try {
+                val command = "settings put global enable_freeform_support 1; " +
+                    "settings put secure force_resizable_activities 1; " +
+                    "am start -W --user current --windowingMode 5 --activity-multiple-task " +
+                    "-n com.sakuhome.launcher/.MainActivity " +
+                    "--ez com.sakuhome.launcher.OPEN_WINDOW_START true"
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+                val output = java.io.ByteArrayOutputStream()
+                val errors = java.io.ByteArrayOutputStream()
+                val outThread = Thread { process.inputStream.use { it.copyTo(output) } }
+                val errThread = Thread { process.errorStream.use { it.copyTo(errors) } }
+                outThread.start()
+                errThread.start()
+                if (process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    outThread.join(200)
+                    errThread.join(200)
+                    val stdout = output.toString("UTF-8")
+                    val stderr = errors.toString("UTF-8")
+                    launchedByRoot = process.exitValue() == 0 &&
+                        stdout.contains("Status: ok", true) &&
+                        !stdout.contains("Error:", true) &&
+                        !stderr.contains("Exception", true)
+                    if (!launchedByRoot) android.util.Log.w("SakuFreeform", "Floating Start root launch not verified: $stdout $stderr")
+                } else {
+                    process.destroyForcibly()
+                    android.util.Log.w("SakuFreeform", "Floating Start root launch timed out")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("SakuFreeform", "Floating Start root launch unavailable", e)
+            }
+            if (!launchedByRoot) {
+                try {
+                    val width = resources.displayMetrics.widthPixels
+                    val height = resources.displayMetrics.heightPixels
+                    val margin = dp(20)
+                    val bounds = Rect(margin, dp(50), width - margin, height - dp(70))
+                    val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                    try {
+                        val method = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                        method.isAccessible = true
+                        method.invoke(options, 5)
+                    } catch (e: ReflectiveOperationException) {
+                        android.util.Log.w("SakuFreeform", "ActivityOptions freeform mode unavailable", e)
+                    }
+                    startActivity(intent, options.toBundle())
+                } catch (e: Exception) {
+                    android.util.Log.e("SakuFreeform", "Unable to open floating Start menu", e)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        Toast.makeText(this@FloatingDockService, "Start menu jendela gagal dibuka. Periksa izin root dan mode freeform Android.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }, "saku-freeform-start").start()
     }
 
     private fun loadApps(): List<AppInfo> {
