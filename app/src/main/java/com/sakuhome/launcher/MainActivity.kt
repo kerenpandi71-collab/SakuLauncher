@@ -617,6 +617,7 @@ class MainActivity : Activity() {
             if (height > 0) lp.height = height
             panel.layoutParams = lp
         }
+        if (preferences.getBoolean("dashboard_panel_drag_${key}", false)) enableFreePanelDrag(panel, key, true)
     }
 
     private fun enableFreePanelDrag(panel: View, key: String, enabled: Boolean) {
