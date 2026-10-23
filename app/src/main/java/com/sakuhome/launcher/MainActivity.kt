@@ -261,7 +261,7 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         window.statusBarColor = backgroundTop
         window.navigationBarColor = backgroundTop
-        window.decorView.systemUiVisibility = 0
+        applyStatusBarPreference()
 
         rootFrame = FrameLayout(this).apply {
             background = GradientDrawable(
@@ -938,6 +938,15 @@ class MainActivity : Activity() {
      * Root is used only to set the same developer options exposed by Android and to request
      * windowingMode=5. We then inspect dumpsys instead of assuming an accepted command means
      * the app actually entered a freeform window. */
+    private fun applyStatusBarPreference() {
+        val hide = preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = if (hide) {
+            View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        } else 0
+    }
+
     private fun tryLaunchFreeformAsRoot(component: android.content.ComponentName, bounds: Rect): Boolean {
         return try {
             val flat = component.flattenToString() ?: return false
@@ -962,7 +971,8 @@ class MainActivity : Activity() {
             errThread.start()
             if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)) {
                 process.destroyForcibly()
-                android.util.Log.w("SakuFreeform", "Root freeform launch/verification timed out")
+                android.util.Log.w("SakuFreeform", "Root freeform launch/verification timed out; package=${component.packageName}; bounds=$bounds")
+                DiagnosticLogger.logFreeform("ROOT launch/verification timed out; package=${component.packageName}; component=$flat; bounds=$bounds; command=$command")
                 return false
             }
             outThread.join(300)
@@ -973,13 +983,13 @@ class MainActivity : Activity() {
                 !stdout.contains("Error:", true) &&
                 !stderr.contains("Exception", true) &&
                 (stdout.contains("windowingMode=5", true) || stdout.contains("mWindowingMode=5", true) || stdout.contains("windowingMode: 5", true) || stdout.contains("windowingMode=freeform", true))
-            android.util.Log.i(
-                "SakuFreeform",
-                "root launch exit=${process.exitValue()} verified=$verified out=$stdout err=$stderr"
-            )
+            val report = "method=root; package=${component.packageName}; component=$flat; bounds=$bounds; exit=${process.exitValue()}; verified=$verified\\nstdout=$stdout\\nstderr=$stderr"
+            android.util.Log.i("SakuFreeform", report)
+            if (!verified) DiagnosticLogger.logFreeform(report)
             verified
         } catch (e: Exception) {
             android.util.Log.w("SakuFreeform", "Root freeform launch unavailable; trying ActivityOptions", e)
+            DiagnosticLogger.logFreeform("Root launch unavailable; package=${component.packageName}; bounds=$bounds; exception=${e.stackTraceToString()}", e)
             false
         }
     }
@@ -1037,8 +1047,10 @@ class MainActivity : Activity() {
             } catch (e: SecurityException) {
                 android.util.Log.w("SakuFreeform", "Freeform request blocked by system", e)
             }
-            android.util.Log.i("SakuFreeform", "launching ${app.packageName}; modeRequested=$windowModeRequested; bounds=$bounds")
+            val report = "method=ActivityOptions; package=${app.packageName}; modeRequested=$windowModeRequested; bounds=$bounds; Android=${android.os.Build.VERSION.RELEASE} API=${android.os.Build.VERSION.SDK_INT}"
+            android.util.Log.i("SakuFreeform", report)
             startActivity(launchIntent, options.toBundle())
+            rootFrame.postDelayed({ DiagnosticLogger.logFreeform("$report; launch request returned; confirm windowing mode visually") }, 1800)
             if (!windowModeRequested) {
                 Toast.makeText(
                     this,
@@ -1048,6 +1060,7 @@ class MainActivity : Activity() {
             }
         } catch (e: Exception) {
             android.util.Log.e("SakuFreeform", "Freeform launch failed for ${app.packageName}", e)
+            DiagnosticLogger.logFreeform("Freeform launch failed; package=${app.packageName}; exception=${e.stackTraceToString()}", e)
             try {
                 startActivity(launchIntent)
                 Toast.makeText(
@@ -1057,6 +1070,7 @@ class MainActivity : Activity() {
                 ).show()
             } catch (fallback: Exception) {
                 android.util.Log.e("SakuFreeform", "Normal launch also failed", fallback)
+                DiagnosticLogger.logFreeform("Normal fallback launch also failed; package=${app.packageName}; exception=${fallback.stackTraceToString()}", fallback)
                 Toast.makeText(this, "Aplikasi tidak dapat dibuka: ${fallback.localizedMessage ?: "akses ditolak"}", Toast.LENGTH_LONG).show()
             }
         }
@@ -1200,6 +1214,7 @@ class MainActivity : Activity() {
         val hideTaskbarState = if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) "Tersembunyi" else "Tampil"
         val labelState = if (hideLabels) "Sembunyi" else "Tampil"
         val drawerLabelState = if (hideDrawerLabels) "Sembunyi" else "Tampil"
+        val hideStatusBarState = if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Tersembunyi" else "Tampil"
         val glassState = if (liquidGlass) "Aktif" else "Nonaktif"
         val transparency = preferences.getInt(KEY_TRANSPARENCY, 88)
         val options = arrayOf(
@@ -1223,6 +1238,7 @@ class MainActivity : Activity() {
             "◉  Pengelola proses aplikasi",
             "◌  Label menu aplikasi · $drawerLabelState",
             "▣  Display Extend · Virtual Display",
+            "▰  Status bar Android · $hideStatusBarState",
         )
         AlertDialog.Builder(this).setTitle("Saku  •  Personalisasi")
             .setItems(options) { _, which ->
@@ -1252,23 +1268,29 @@ class MainActivity : Activity() {
                     12 -> resetWallpaper()
                     13 -> showPermissionInfo()
                     14 -> chooseHomeGrid()
-                    15 -> chooseDrawerGrid()
-                    16 -> showProcessManager()
-                    17 -> {
-                        preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
-                        buildScreen()
-                    }
-                    18 -> {
+                    15 -> {
                         preferences.edit().putBoolean(KEY_FREE_ICON_PLACEMENT, !freeIconPlacement).apply()
                         buildScreen()
-                        Toast.makeText(this, if (freeIconPlacement) "Mode penempatan bebas aktif: tahan ikon lalu seret ke lokasi mana saja" else "Tata letak grid aktif", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, if (preferences.getBoolean(KEY_FREE_ICON_PLACEMENT, false)) "Mode penempatan bebas aktif: tahan ikon lalu seret ke lokasi mana saja" else "Tata letak grid aktif", Toast.LENGTH_LONG).show()
+                    }
+                    16 -> chooseDrawerGrid()
+                    17 -> showProcessManager()
+                    18 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
+                        buildScreen()
                     }
                     19 -> {
                         try {
                             startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
                         } catch (e: Exception) {
+                            DiagnosticLogger.logFreeform("Could not open Display Extend activity", e)
                             Toast.makeText(this, "Display Extend belum bisa dibuka: ${e.message}", Toast.LENGTH_LONG).show()
                         }
+                    }
+                    20 -> {
+                        preferences.edit().putBoolean(KEY_HIDE_STATUS_BAR, !preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)).apply()
+                        buildScreen()
+                        Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Status bar disembunyikan" else "Status bar ditampilkan", Toast.LENGTH_SHORT).show()
                     }
                 }
             }.setNegativeButton("Selesai", null).show()
@@ -1998,6 +2020,7 @@ class MainActivity : Activity() {
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val KEY_HIDE_TASKBAR = "hide_bottom_taskbar"
+        private const val KEY_HIDE_STATUS_BAR = "hide_android_status_bar"
         private const val KEY_HIDE_LABELS = "hide_app_labels"
         private const val KEY_HIDE_DRAWER_LABELS = "hide_drawer_app_labels"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
