@@ -103,7 +103,7 @@ class MainActivity : Activity() {
     private fun pinnedPackages(): MutableList<String> {
         if (!preferences.contains(KEY_PINNED)) return apps.take(5).map { it.packageName }.toMutableList()
         return preferences.getString(KEY_PINNED, "").orEmpty()
-            .split('\n').filter { it.isNotBlank() }.toMutableList()
+            .split('\n').filter { it.isNotBlank() }.distinct().take(MAX_DOCK_APPS).toMutableList()
     }
 
     private fun homePageKey(page: Int) = "home_screen_packages_page_$page"
@@ -394,6 +394,7 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(8) })
+        enablePanelLayoutControls(timeCard, "clock")
 
         val weatherCard = card("☀  CUACA")
         weatherCard.addView(TextView(this).apply {
@@ -407,6 +408,7 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
         topWidgets.addView(weatherCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
+        enablePanelLayoutControls(weatherCard, "weather")
 
         val systemCard = card("▣  Sistem")
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -427,6 +429,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
         topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
+        enablePanelLayoutControls(systemCard, "system")
         rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
         val shortcuts = card("▦  Pintasan")
@@ -453,6 +456,7 @@ class MainActivity : Activity() {
         shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp( if (landscapeLayout) 14 else 8) })
+        enablePanelLayoutControls(shortcuts, "shortcuts")
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -476,6 +480,7 @@ class MainActivity : Activity() {
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
         rightColumn.addView(notes, if (landscapeLayout) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) } else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        enablePanelLayoutControls(notes, "notes")
         workspace.addView(rightColumn, if (landscapeLayout) {
             LinearLayout.LayoutParams(0, -1, 1f)
         } else {
@@ -543,6 +548,69 @@ class MainActivity : Activity() {
             }
         }
         visit(view)
+    }
+
+    /**
+     * Long-press a dashboard panel to reorder it among its siblings and resize it.
+     * Dimensions and order are stored per panel so the desktop arrangement survives rebuilds.
+     */
+    private fun enablePanelLayoutControls(panel: View, key: String) {
+        panel.isLongClickable = true
+        panel.setOnLongClickListener {
+            val options = arrayOf("Geser ke atas/kiri", "Geser ke bawah/kanan", "Lebih lebar", "Lebih sempit", "Lebih tinggi", "Lebih pendek", "Reset ukuran")
+            AlertDialog.Builder(this)
+                .setTitle("Atur panel")
+                .setItems(options) { _, selected ->
+                    val parent = panel.parent as? LinearLayout ?: return@setItems
+                    val index = parent.indexOfChild(panel)
+                    when (selected) {
+                        0, 1 -> {
+                            val target = if (selected == 0) index - 1 else index + 1
+                            if (target in 0 until parent.childCount) {
+                                val lp = panel.layoutParams
+                                parent.removeView(panel)
+                                parent.addView(panel, target, lp)
+                            }
+                        }
+                        2, 3, 4, 5 -> {
+                            val widthKey = "dashboard_panel_width_$key"
+                            val heightKey = "dashboard_panel_height_$key"
+                            val lp = panel.layoutParams as? LinearLayout.LayoutParams ?: return@setItems
+                            val currentWidth = if (lp.width > 0) lp.width else dp(210)
+                            val currentHeight = if (lp.height > 0) lp.height else dp(125)
+                            val newWidth = when (selected) {
+                                2 -> (currentWidth + dp(24)).coerceAtMost(dp(700))
+                                3 -> (currentWidth - dp(24)).coerceAtLeast(dp(110))
+                                else -> currentWidth
+                            }
+                            val newHeight = when (selected) {
+                                4 -> (currentHeight + dp(20)).coerceAtMost(dp(520))
+                                5 -> (currentHeight - dp(20)).coerceAtLeast(dp(70))
+                                else -> currentHeight
+                            }
+                            preferences.edit().putInt(widthKey, newWidth).putInt(heightKey, newHeight).apply()
+                            lp.width = newWidth
+                            lp.height = newHeight
+                            lp.weight = 0f
+                            panel.layoutParams = lp
+                        }
+                        6 -> {
+                            preferences.edit().remove("dashboard_panel_width_$key").remove("dashboard_panel_height_$key").apply()
+                            buildScreen()
+                        }
+                    }
+                    Toast.makeText(this, "Panel diatur", Toast.LENGTH_SHORT).show()
+                }.setNegativeButton("Batal", null).show()
+            true
+        }
+        val width = preferences.getInt("dashboard_panel_width_$key", 0)
+        val height = preferences.getInt("dashboard_panel_height_$key", 0)
+        val lp = panel.layoutParams as? LinearLayout.LayoutParams
+        if (lp != null) {
+            if (width > 0) { lp.width = width; lp.weight = 0f }
+            if (height > 0) lp.height = height
+            panel.layoutParams = lp
+        }
     }
 
     private fun performHome() {
@@ -1194,6 +1262,7 @@ class MainActivity : Activity() {
     private fun showAppMenu(app: LaunchableApp) {
         val isHome = homePackages().contains(app.packageName)
         val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
+        val dockAction = if (pinnedPackages().contains(app.packageName)) "Lepas dari dock" else "Sematkan ke dock"
         val options = arrayOf(
             "Buka sebagai jendela",
             "Buka layar penuh",
@@ -1203,7 +1272,8 @@ class MainActivity : Activity() {
             "Pindahkan ke layar lain",
             "Info aplikasi",
             "Buka di Play Store",
-            "Copot pemasangan"
+            "Copot pemasangan",
+            "$dockAction · batas 15 aplikasi"
         )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
@@ -1233,6 +1303,7 @@ class MainActivity : Activity() {
                 6 -> openAppInfo(app)
                 7 -> openPlayStore(app)
                 8 -> uninstallApp(app)
+                9 -> togglePinned(app)
             }
         }.setNegativeButton("Batal", null).show()
     }
@@ -1282,9 +1353,17 @@ class MainActivity : Activity() {
     }
     private fun togglePinned(app: LaunchableApp) {
         val current = pinnedPackages()
-        if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
+        if (current.contains(app.packageName)) {
+            current.remove(app.packageName)
+        } else {
+            if (current.size >= MAX_DOCK_APPS) {
+                Toast.makeText(this, "Dock maksimal $MAX_DOCK_APPS aplikasi. Lepas satu aplikasi terlebih dahulu.", Toast.LENGTH_LONG).show()
+                return
+            }
+            current.add(app.packageName)
+        }
         savePinned(current)
-        Toast.makeText(this, if (current.contains(app.packageName)) "${app.label} disematkan" else "${app.label} dilepas", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, if (current.contains(app.packageName)) "${app.label} disematkan ke dock" else "${app.label} dilepas dari dock", Toast.LENGTH_SHORT).show()
         rebuildPinnedViews()
     }
 
@@ -1300,7 +1379,7 @@ class MainActivity : Activity() {
     }
 
     private fun savePinned(packages: List<String>) {
-        preferences.edit().putString(KEY_PINNED, packages.distinct().joinToString("\n")).apply()
+        preferences.edit().putString(KEY_PINNED, packages.distinct().take(MAX_DOCK_APPS).joinToString("\n")).apply()
         if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false) && Settings.canDrawOverlays(this)) {
             startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
         }
@@ -1544,13 +1623,16 @@ class MainActivity : Activity() {
         val current = pinnedPackages().toMutableSet()
         val names = apps.map { it.label }.toTypedArray()
         val checked = apps.map { current.contains(it.packageName) }.toBooleanArray()
-        AlertDialog.Builder(this).setTitle("Aplikasi di dock")
-            .setMultiChoiceItems(names, checked) { _, which, isChecked ->
+        AlertDialog.Builder(this).setTitle("Aplikasi di dock · maksimal $MAX_DOCK_APPS")
+            .setMultiChoiceItems(names, checked) { dialog, which, isChecked ->
                 val pkg = apps[which].packageName
-                if (isChecked) current.add(pkg) else current.remove(pkg)
+                if (isChecked && !current.contains(pkg) && current.size >= MAX_DOCK_APPS) {
+                    (dialog as? AlertDialog)?.listView?.setItemChecked(which, false)
+                    Toast.makeText(this, "Dock maksimal $MAX_DOCK_APPS aplikasi", Toast.LENGTH_SHORT).show()
+                } else if (isChecked) current.add(pkg) else current.remove(pkg)
             }
             .setPositiveButton("Simpan") { _, _ ->
-                val ordered = apps.map { it.packageName }.filter { current.contains(it) }
+                val ordered = apps.map { it.packageName }.filter { current.contains(it) }.take(MAX_DOCK_APPS)
                 savePinned(ordered)
                 rebuildPinnedViews()
             }
@@ -2214,6 +2296,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
+        private const val MAX_DOCK_APPS = 15
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_LAST_HOME_PAGE = "last_home_screen_page"
