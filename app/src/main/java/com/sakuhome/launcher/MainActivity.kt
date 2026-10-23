@@ -54,6 +54,11 @@ class MainActivity : Activity() {
     private lateinit var shellView: LinearLayout
     private lateinit var startPanel: LinearLayout
     private lateinit var startScrim: View
+    private lateinit var windowScrim: View
+    private lateinit var windowStartPanel: LinearLayout
+    private lateinit var windowSearchField: EditText
+    private lateinit var windowStartGrid: GridView
+    private lateinit var windowStartAdapter: AppGridAdapter
     private lateinit var startGrid: GridView
     private lateinit var widgetStrip: LinearLayout
     private lateinit var appWidgetHost: AppWidgetHost
@@ -69,6 +74,7 @@ class MainActivity : Activity() {
 
     private var apps: List<LaunchableApp> = emptyList()
     private var searchQuery = ""
+    private var windowSearchQuery = ""
     private var drawerListMode = false
     private var homePage = 0
     private var homePageLabel: TextView? = null
@@ -204,7 +210,8 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android; retained for broad device compatibility")
     override fun onBackPressed() {
-        if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
+        if (::windowStartPanel.isInitialized && windowStartPanel.visibility == View.VISIBLE) hideWindowStartPanel()
+        else if (::startPanel.isInitialized && startPanel.visibility == View.VISIBLE) hideStartPanel()
         else super.onBackPressed()
     }
 
@@ -488,6 +495,20 @@ class MainActivity : Activity() {
             bottomMargin = dp(82)
         })
         startPanel.visibility = View.GONE
+
+        // Dedicated window-mode Start menu. Its app clicks always request native Android freeform.
+        windowScrim = View(this).apply {
+            setBackgroundColor(if (isDarkTheme) 0x66070B12 else 0x440E1522)
+            alpha = 0f
+            visibility = View.GONE
+            setOnClickListener { hideWindowStartPanel() }
+        }
+        rootFrame.addView(windowScrim, FrameLayout.LayoutParams(-1, -1))
+        windowStartPanel = buildWindowStartPanel()
+        rootFrame.addView(windowStartPanel, FrameLayout.LayoutParams(panelWidth, dp(panelHeight), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(82)
+        })
+        windowStartPanel.visibility = View.GONE
         setContentView(rootFrame)
         updateClock()
     }
@@ -505,6 +526,10 @@ class MainActivity : Activity() {
             contentDescription = "Buka App Library"
             setOnClickListener { toggleStartPanel() }
         }, LinearLayout.LayoutParams(dp(44), -1))
+        dock.addView(chipButton("▱", cardSurface, primaryText, 16).apply {
+            contentDescription = "Buka Start menu mode jendela"
+            setOnClickListener { showWindowStartPanel() }
+        }, LinearLayout.LayoutParams(dp(40), -1).apply { marginStart = dp(5) })
 
         dock.addView(View(this).apply {
             setBackgroundColor(Color.argb(if (isDarkTheme) 100 else 65, primaryText shr 16 and 0xff, primaryText shr 8 and 0xff, primaryText and 0xff))
@@ -652,6 +677,122 @@ class MainActivity : Activity() {
         if (startPanel.visibility == View.VISIBLE) hideStartPanel() else showStartPanel()
     }
 
+    private fun buildWindowStartPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(14))
+            background = if (liquidGlass) glassSurface(30) else rounded(if (isDarkTheme) Color.rgb(20, 29, 45) else Color.rgb(248, 251, 255), 30)
+            elevation = dp(20).toFloat()
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = "Window Start"
+            textSize = 21f
+            setTextColor(primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        header.addView(TextView(this).apply {
+            text = "FREEFORM"
+            textSize = 9f
+            letterSpacing = 0.08f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER
+            background = rounded(cardSurface, 12)
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+        }, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(7) })
+        header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
+            setOnClickListener { hideWindowStartPanel() }
+        }, LinearLayout.LayoutParams(dp(38), dp(38)))
+        panel.addView(header)
+        panel.addView(TextView(this).apply {
+            text = "Pilih aplikasi untuk meminta jendela bebas Android. Dukungan bergantung pada ROM dan aplikasi."
+            textSize = 11f
+            setTextColor(secondaryText)
+            setPadding(dp(2), dp(2), dp(2), dp(7))
+        }, LinearLayout.LayoutParams(-1, -2))
+        windowSearchField = EditText(this).apply {
+            hint = "Cari aplikasi untuk jendela"
+            textSize = 14f
+            setSingleLine(true)
+            setTextColor(primaryText)
+            setHintTextColor(secondaryText)
+            setPadding(dp(15), 0, dp(15), 0)
+            background = rounded(cardSurface, 24)
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            contentDescription = "Cari aplikasi untuk mode jendela"
+        }
+        panel.addView(windowSearchField, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
+        windowStartGrid = GridView(this).apply {
+            numColumns = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 5 else 4
+            verticalSpacing = dp(7)
+            horizontalSpacing = dp(7)
+            stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            setSelector(ColorDrawable(Color.TRANSPARENT))
+            isVerticalScrollBarEnabled = false
+            isSmoothScrollbarEnabled = true
+        }
+        windowStartAdapter = AppGridAdapter(isStartMenu = true, windowMode = true)
+        windowStartGrid.adapter = windowStartAdapter
+        windowStartGrid.setOnItemClickListener { _, _, position, _ ->
+            windowStartAdapter.getItemOrNull(position)?.let { launch(it, asFreeform = true) }
+        }
+        windowStartGrid.setOnItemLongClickListener { _, _, position, _ ->
+            windowStartAdapter.getItemOrNull(position)?.let { showAppMenu(it) }
+            true
+        }
+        panel.addView(windowStartGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+        windowSearchField.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                windowSearchQuery = s?.toString()?.trim().orEmpty()
+                if (::windowStartAdapter.isInitialized) windowStartAdapter.notifyDataSetChanged()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        return panel
+    }
+
+    private fun showWindowStartPanel() {
+        if (!::windowStartPanel.isInitialized) return
+        hideStartPanel()
+        windowStartPanel.animate().cancel()
+        windowScrim.animate().cancel()
+        windowStartPanel.visibility = View.VISIBLE
+        windowScrim.visibility = View.VISIBLE
+        windowScrim.bringToFront()
+        windowStartPanel.bringToFront()
+        windowSearchField.setText("")
+        windowSearchQuery = ""
+        windowStartAdapter.notifyDataSetChanged()
+        windowStartPanel.alpha = 0f
+        windowStartPanel.translationY = dp(18).toFloat()
+        windowStartPanel.scaleX = 0.985f
+        windowStartPanel.scaleY = 0.985f
+        windowScrim.alpha = 0f
+        windowScrim.animate().alpha(1f).setDuration(160).start()
+        windowStartPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(220).setInterpolator(DecelerateInterpolator(1.5f)).start()
+    }
+
+    private fun hideWindowStartPanel() {
+        if (!::windowStartPanel.isInitialized || windowStartPanel.visibility != View.VISIBLE) return
+        windowStartPanel.animate().cancel()
+        windowScrim.animate().cancel()
+        windowStartPanel.animate().alpha(0f).translationY(dp(12).toFloat()).setDuration(150)
+            .withEndAction {
+                windowStartPanel.visibility = View.GONE
+                windowStartPanel.alpha = 1f
+                windowStartPanel.translationY = 0f
+                windowScrim.visibility = View.GONE
+                windowScrim.alpha = 0f
+            }.start()
+        windowScrim.animate().alpha(0f).setDuration(140).start()
+        windowSearchField.hideKeyboard()
+    }
+
     private fun showStartPanel() {
         if (!::startPanel.isInitialized) return
         if (startPanel.visibility == View.VISIBLE) return
@@ -724,7 +865,8 @@ class MainActivity : Activity() {
     private fun visibleApps(isStartMenu: Boolean): List<LaunchableApp> {
         val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
         val base = apps.filterNot { hidden.contains(it.packageName) }
-        return if (searchQuery.isBlank()) base else base.filter { it.label.contains(searchQuery, ignoreCase = true) }
+        val query = if (isStartMenu) searchQuery else searchQuery
+        return if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
     }
 
     private fun loadApps(): List<LaunchableApp> {
@@ -780,6 +922,7 @@ class MainActivity : Activity() {
         if (::pinnedAdapter.isInitialized) pinnedAdapter.notifyDataSetChanged()
         if (::desktopCanvas.isInitialized && freeIconPlacement) renderFreeIcons()
         if (::startAdapter.isInitialized) startAdapter.notifyDataSetChanged()
+        if (::windowStartAdapter.isInitialized) windowStartAdapter.notifyDataSetChanged()
         // When the bottom taskbar is hidden, there is no dock view to rebuild.
         if (preferences.getBoolean(KEY_HIDE_TASKBAR, false)) return
         // Rebuild only the dock; keep the open Start panel and its scroll position intact.
@@ -839,7 +982,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
+    private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
@@ -1742,7 +1885,7 @@ class MainActivity : Activity() {
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
-    private inner class AppGridAdapter(private val isStartMenu: Boolean) : BaseAdapter() {
+    private inner class AppGridAdapter(private val isStartMenu: Boolean, private val windowMode: Boolean = false) : BaseAdapter() {
         // Cache the visible rows. GridView calls getCount/getItem repeatedly while scrolling;
         // rebuilding/filtering the whole app list for every recycled cell causes jank on low-RAM devices.
         private var items: List<LaunchableApp> = emptyList()
@@ -1752,7 +1895,12 @@ class MainActivity : Activity() {
         }
 
         private fun refreshItems() {
-            items = if (isStartMenu) visibleApps(true) else homeApps()
+            items = if (isStartMenu) {
+                val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
+                val base = apps.filterNot { hidden.contains(it.packageName) }
+                val query = if (windowMode) windowSearchQuery else searchQuery
+                if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
+            } else homeApps()
         }
 
         override fun notifyDataSetChanged() {
@@ -1806,7 +1954,7 @@ class MainActivity : Activity() {
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
             cell.findViewById<TextView>(android.R.id.text1).visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
-            cell.setOnClickListener { launch(app) }
+            cell.setOnClickListener { launch(app, asFreeform = windowMode) }
             cell.setOnLongClickListener {
                 if (isStartMenu) {
                     // Keep drawer long-press as an app-action menu (uninstall, app info,
