@@ -280,242 +280,254 @@ class MainActivity : Activity() {
         window.navigationBarColor = backgroundTop
         applyStatusBarPreference()
 
-        rootFrame = FrameLayout(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                intArrayOf(backgroundTop, backgroundBottom)
-            )
-        }
+        rootFrame = FrameLayout(this)
         loadWallpaper()?.let { bitmap ->
             rootFrame.addView(ImageView(this).apply {
                 setImageBitmap(bitmap)
                 scaleType = ImageView.ScaleType.CENTER_CROP
             }, FrameLayout.LayoutParams(-1, -1))
-            rootFrame.addView(View(this).apply {
-                setBackgroundColor(if (isDarkTheme) 0x550D1420 else 0x260D1420)
-            }, FrameLayout.LayoutParams(-1, -1))
+        } ?: run {
+            rootFrame.setBackgroundColor(backgroundBottom)
         }
+        rootFrame.addView(View(this).apply {
+            setBackgroundColor(if (isDarkTheme) 0x44091424 else 0x220D1420)
+        }, FrameLayout.LayoutParams(-1, -1))
+
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(12))
+            setPadding(dp(12), dp(5), dp(12), dp(8))
         }
         shellView = shell
 
-        // Compact macOS-inspired menu bar: app identity on the left, status/time on the right.
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(5), dp(7), dp(5))
-            background = if (liquidGlass) glassSurface(17) else rounded(dockSurface, 17)
+            setPadding(dp(10), dp(3), dp(8), dp(3))
+            background = if (liquidGlass) glassSurface(12) else rounded(backgroundTop, 12)
             elevation = dp(3).toFloat()
         }
         topBar.addView(TextView(this).apply {
-            text = ""
-            textSize = 21f
+            text = "⚙"
+            textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
-            contentDescription = "Saku menu"
+            contentDescription = "Pengaturan Saku"
             setOnClickListener { showSettings() }
-        }, LinearLayout.LayoutParams(dp(30), dp(32)))
+        }, LinearLayout.LayoutParams(dp(35), dp(30)))
         topBar.addView(TextView(this).apply {
-            text = "Saku"
+            text = "▦  Aplikasi"
             textSize = 13f
-            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD))
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
             gravity = Gravity.CENTER_VERTICAL
-            setOnClickListener { showSettings() }
-        }, LinearLayout.LayoutParams(-2, dp(32)).apply { marginStart = dp(3) })
-        val statusSpacer = View(this)
-        topBar.addView(statusSpacer, LinearLayout.LayoutParams(0, 1, 1f))
+            setOnClickListener { showStartPanel() }
+        }, LinearLayout.LayoutParams(-2, dp(30)))
+        topBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        topBar.addView(TextView(this).apply {
+            text = "◉   ᛒ   ▰"
+            textSize = 13f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(10) })
         dateText = TextView(this).apply {
-            textSize = 10.5f
+            textSize = 11f
             setTextColor(primaryText)
             gravity = Gravity.CENTER_VERTICAL
-            maxLines = 1
         }
         clockText = TextView(this).apply {
             textSize = 11f
-            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
             setTextColor(primaryText)
             gravity = Gravity.CENTER_VERTICAL
-            includeFontPadding = false
         }
-        topBar.addView(TextView(this).apply {
-            text = "⌁"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(secondaryText)
-            contentDescription = "Status koneksi"
-        }, LinearLayout.LayoutParams(dp(22), dp(30)))
         topBar.addView(dateText, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(8) })
-        topBar.addView(clockText, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(8) })
-        topBar.addView(chipButton("⚙", cardSurface, primaryText, 12).apply {
-            contentDescription = "Pengaturan Saku"
-            setOnClickListener { showSettings() }
-        }, LinearLayout.LayoutParams(dp(32), dp(32)))
-        shell.addView(topBar, LinearLayout.LayoutParams(-1, -2))
+        topBar.addView(clockText, LinearLayout.LayoutParams(-2, dp(30)))
+        shell.addView(topBar, LinearLayout.LayoutParams(-1, dp(32)))
 
-        val pageControls = LinearLayout(this).apply {
+        val workspace = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), dp(13), dp(5), dp(10))
-        }
-        pageControls.addView(TextView(this).apply {
-            text = "Layar Utama"
-            textSize = 10f
-            letterSpacing = 0.12f
-            setTextColor(secondaryText)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        pageControls.addView(chipButton("‹", cardSurface, primaryText, 12).apply {
-            setOnClickListener { showHomePage(homePage - 1) }
-        }, LinearLayout.LayoutParams(dp(34), dp(30)))
-        homePageLabel = TextView(this).apply {
-            text = "${homePage + 1} / ${homePageCount()}"
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-        }
-        pageControls.addView(homePageLabel, LinearLayout.LayoutParams(dp(54), -2))
-        pageControls.addView(chipButton("›", cardSurface, primaryText, 12).apply {
-            setOnClickListener { showHomePage(homePage + 1) }
-        }, LinearLayout.LayoutParams(dp(34), dp(30)))
-        pageControls.addView(chipButton("+", accent, Color.WHITE, 12).apply {
-            contentDescription = "Buat layar utama baru"
-            setOnClickListener { addHomePage() }
-        }, LinearLayout.LayoutParams(dp(34), dp(30)).apply { marginStart = dp(6) })
-        shell.addView(pageControls)
-
-        // App search removed from the home screen as requested.
-        widgetStrip = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(2), 0, dp(4))
-        }
-        shell.addView(widgetStrip, LinearLayout.LayoutParams(-1, -2))
-        desktopGrid = GridView(this).apply {
-            numColumns = preferences.getInt(KEY_HOME_GRID_COLUMNS, if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 4)
-            verticalSpacing = dp(13)
-            horizontalSpacing = dp(9)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setSelector(ColorDrawable(Color.TRANSPARENT))
-            isVerticalScrollBarEnabled = false
-            clipToPadding = false
-            setPadding(0, dp(4), 0, dp(4))
-        }
-        pinnedAdapter = AppGridAdapter(isStartMenu = false)
-        desktopGrid.adapter = pinnedAdapter
-        desktopGrid.setOnDragListener { grid, event ->
-            when (event.action) {
-                android.view.DragEvent.ACTION_DRAG_STARTED -> {
-                    isDraggingHomeIcon = true
-                    event.clipDescription?.hasMimeType("text/plain") == true
-                }
-                android.view.DragEvent.ACTION_DRAG_ENTERED -> { grid.alpha = 0.88f; true }
-                android.view.DragEvent.ACTION_DRAG_EXITED -> { grid.alpha = 1f; true }
-                android.view.DragEvent.ACTION_DROP -> {
-                    grid.alpha = 1f
-                    val sourcePackage = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
-                    val targetPosition = (grid as GridView).pointToPosition(event.x.toInt(), event.y.toInt())
-                    val order = homePackages()
-                    val from = order.indexOf(sourcePackage)
-                    val targetPackage = pinnedAdapter.getItemOrNull(targetPosition)?.packageName
-                    val targetIndex = if (targetPackage != null) order.indexOf(targetPackage) else -1
-                    val knownPackage = sourcePackage?.let { pkg -> apps.any { it.packageName == pkg } } == true
-                    if (knownPackage) {
-                        // A drawer icon can be dropped onto the desktop to add it; an existing
-                        // desktop icon can be dropped to reorder it. Dropping on empty space appends.
-                        val moving = if (from >= 0) order.removeAt(from) else sourcePackage!!
-                        val insertAt = if (targetIndex >= 0) targetIndex.coerceAtMost(order.size) else order.size
-                        order.add(insertAt, moving)
-                        saveHomePackages(order)
-                        pinnedAdapter.notifyDataSetChanged()
-                        Toast.makeText(this@MainActivity, if (from >= 0) "Posisi ikon diperbarui" else "Aplikasi ditambahkan ke layar utama", Toast.LENGTH_SHORT).show()
-                    }
-                    true
-                }
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { grid.alpha = 1f; isDraggingHomeIcon = false; true }
-                else -> true
-            }
-        }
-        var downX = 0f
-        var downY = 0f
-        desktopGrid.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; false }
-                android.view.MotionEvent.ACTION_UP -> {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (!isDraggingHomeIcon && kotlin.math.abs(dx) > dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                        showHomePage(homePage + if (dx < 0) 1 else -1)
-                        true
-                    } else false
-                }
-                else -> false
-            }
-        }
-        val desktopArea = FrameLayout(this)
-        desktopArea.addView(desktopGrid, FrameLayout.LayoutParams(-1, -1))
-        desktopCanvas = FrameLayout(this).apply {
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            visibility = if (freeIconPlacement) View.VISIBLE else View.GONE
+            setPadding(0, dp(30), 0, dp(8))
             clipChildren = false
             clipToPadding = false
-            setOnDragListener { canvas, event ->
-                when (event.action) {
-                    android.view.DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("text/plain") == true
-                    android.view.DragEvent.ACTION_DRAG_ENTERED -> { canvas.alpha = 0.9f; true }
-                    android.view.DragEvent.ACTION_DRAG_EXITED -> { canvas.alpha = 1f; true }
-                    android.view.DragEvent.ACTION_DROP -> {
-                        canvas.alpha = 1f
-                        val pkg = event.localState as? String ?: event.clipData?.getItemAt(0)?.text?.toString()
-                        val app = apps.firstOrNull { it.packageName == pkg }
-                        if (app != null) {
-                            val size = dp((iconSizeDp + 8).coerceAtLeast(36))
-                            val x = (event.x - size / 2f).coerceIn(0f, (canvas.width - size).coerceAtLeast(0).toFloat())
-                            val y = (event.y - size / 2f).coerceIn(0f, (canvas.height - size).coerceAtLeast(0).toFloat())
-                            val positions = freeIconPositions()
-                            positions[pkg!!] = (if (canvas.width > 0) x / canvas.width else 0.5f).toString() + "," + (if (canvas.height > 0) y / canvas.height else 0.5f).toString()
-                            saveFreeIconPositions(positions)
-                            if (!homePackages().contains(pkg)) { val order = homePackages(); order.add(pkg!!); saveHomePackages(order) }
-                            renderFreeIcons()
-                            Toast.makeText(this@MainActivity, "Ikon dipindahkan ke posisi baru", Toast.LENGTH_SHORT).show()
-                        }
-                        true
-                    }
-                    android.view.DragEvent.ACTION_DRAG_ENDED -> { canvas.alpha = 1f; true }
-                    else -> true
-                }
-            }
         }
-        desktopArea.addView(desktopCanvas, FrameLayout.LayoutParams(-1, -1))
-        shell.addView(desktopArea, LinearLayout.LayoutParams(-1, 0, 1f))
-        desktopGrid.visibility = if (freeIconPlacement) View.GONE else View.VISIBLE
-        if (freeIconPlacement) desktopCanvas.post { renderFreeIcons() }
 
-        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
-            shell.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply {
-                topMargin = dp(10)
+        // Permanent left application library, matching the reference desktop layout.
+        startPanel = buildStartPanel().apply {
+            elevation = dp(15).toFloat()
+            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+        }
+        startPanel.visibility = View.VISIBLE
+        startPanel.findViewWithTag<View>("unused")
+        workspace.addView(startPanel, LinearLayout.LayoutParams(0, -1, 0.39f).apply { marginEnd = dp(16) })
+
+        val rightColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP
+        }
+        val topWidgets = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+        }
+        fun card(title: String, radius: Int = 18): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(15), dp(13), dp(15), dp(13))
+            background = if (liquidGlass) glassSurface(radius) else rounded(cardSurface, radius)
+            elevation = dp(8).toFloat()
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                textSize = 12f
+                setTextColor(primaryText)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        val timeCard = card("◷  WAKTU")
+        timeCard.addView(TextView(this).apply {
+            text = "14:32"
+            textSize = 35f
+            setTextColor(primaryText)
+            setTypeface(null, android.graphics.Typeface.NORMAL)
+            tag = "saku_big_clock"
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        timeCard.addView(TextView(this).apply {
+            text = java.text.SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(java.util.Date())
+            textSize = 12f
+            setTextColor(secondaryText)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
+        topWidgets.addView(timeCard, LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) })
+
+        val weatherCard = card("☀  CUACA")
+        weatherCard.addView(TextView(this).apply {
+            text = "Cuaca lokal"
+            textSize = 21f
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(13) })
+        weatherCard.addView(TextView(this).apply {
+            text = "Informasi cuaca belum tersedia"
+            textSize = 10f
+            setTextColor(secondaryText)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        topWidgets.addView(weatherCard, LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) })
+
+        val systemCard = card("▣  Sistem")
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memory = android.app.ActivityManager.MemoryInfo().also { activityManager.getMemoryInfo(it) }
+        val totalRamGb = memory.totalMem / (1024.0 * 1024.0 * 1024.0)
+        val availableRamGb = memory.availMem / (1024.0 * 1024.0 * 1024.0)
+        systemCard.addView(TextView(this).apply {
+            text = "RAM tersedia  %.1f / %.1f GB".format(Locale.US, availableRamGb, totalRamGb)
+            textSize = 11f
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        val totalStorage = stat.totalBytes / (1024.0 * 1024.0 * 1024.0)
+        val freeStorage = stat.availableBytes / (1024.0 * 1024.0 * 1024.0)
+        systemCard.addView(TextView(this).apply {
+            text = "Penyimpanan  %.1f / %.1f GB".format(Locale.US, totalStorage - freeStorage, totalStorage)
+            textSize = 11f
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
+        topWidgets.addView(systemCard, LinearLayout.LayoutParams(0, dp(125), 1f))
+        rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
+
+        val shortcuts = card("▦  Pintasan")
+        val shortcutGrid = GridLayout(this).apply { columnCount = 2 }
+        fun shortcut(label: String, symbol: String, action: () -> Unit) {
+            shortcutGrid.addView(TextView(this).apply {
+                text = "$symbol  $label"
+                textSize = 12f
+                gravity = Gravity.CENTER_VERTICAL
+                setTextColor(primaryText)
+                setPadding(dp(10), dp(10), dp(8), dp(10))
+                background = rounded(cardSurface, 12)
+                setOnClickListener { action() }
+            }, GridLayout.LayoutParams().apply {
+                width = 0
+                height = dp(40)
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins(dp(3), dp(4), dp(3), dp(2))
             })
         }
-        rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
-        startScrim = View(this).apply {
-            setBackgroundColor(if (isDarkTheme) 0x66070B12 else 0x440E1522)
-            alpha = 0f
-            visibility = View.GONE
-            setOnClickListener { hideStartPanel() }
-        }
-        rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
-        startPanel = buildStartPanel()
-        val screenHeightDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).toInt()
-        val panelHeight = (screenHeightDp - 190).coerceIn(300, 580)
-        val panelWidth = minOf(resources.displayMetrics.widthPixels - dp(28), dp(500))
-        rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, dp(panelHeight), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(82)
-        })
-        startPanel.visibility = View.GONE
+        shortcut("Home", "⌂") { performHome() }
+        shortcut("Dokumen", "▤") { openStorage(android.os.Environment.DIRECTORY_DOCUMENTS) }
+        shortcut("Unduhan", "↓") { openStorage(android.os.Environment.DIRECTORY_DOWNLOADS) }
+        shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
+        shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
 
-        // The freeform-only Start menu is launched from FloatingDockService, not from the desktop dock.
-        setContentView(rootFrame)
+        val notes = card("🗒  Catatan Cepat")
+        val noteField = EditText(this).apply {
+            hint = "Tulis catatan di sini..."
+            textSize = 12f
+            setTextColor(primaryText)
+            setHintTextColor(secondaryText)
+            minLines = 3
+            maxLines = 5
+            gravity = Gravity.TOP
+            setPadding(dp(2), dp(8), dp(2), dp(2))
+            setBackgroundColor(Color.TRANSPARENT)
+            setText(preferences.getString("quick_note_text", "• Fokus hari ini:\n  - Selesaikan proyek\n  - Baca buku 30 menit\n  - Olahraga ringan").orEmpty())
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    preferences.edit().putString("quick_note_text", s?.toString().orEmpty()).apply()
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
+        notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        rightColumn.addView(notes, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
+        workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 0.61f))
+        shell.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        bottom.addView(chipButton("⌂", cardSurface, primaryText, 19).apply {
+            contentDescription = "Kembali ke layar utama Android"
+            setOnClickListener { performHome() }
+        }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(12) })
+        if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
+            bottom.addView(buildDock(), LinearLayout.LayoutParams(0, dp(60), 1f).apply {
+                marginStart = dp(100)
+                marginEnd = dp(100)
+            })
+        }
+        shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
+        rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+
+        // Legacy home-grid objects remain initialized for app-management features, but the
+        // new dashboard uses the permanent app library instead of the old icon canvas.
+        desktopGrid = GridView(this)
+        desktopCanvas = FrameLayout(this)
+        widgetStrip = LinearLayout(this)
+        startScrim = View(this).apply { visibility = View.GONE }
+        startPanel.visibility = View.VISIBLE
         updateClock()
+    }
+
+    private fun performHome() {
+        try {
+            startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tidak bisa membuka Home Android", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openStorage(directory: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).setDataAndType(
+                android.net.Uri.parse("content://com.android.externalstorage.documents/root/primary"),
+                "*/*"
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_GET_CONTENT).setType("*/*").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Tidak bisa membuka penyimpanan", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun buildDock(): View {
