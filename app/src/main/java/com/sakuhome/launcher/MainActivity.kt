@@ -372,6 +372,13 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
+        // Long-press an empty workspace area to restore movable dashboard panels.
+        workspace.isLongClickable = true
+        workspace.setOnLongClickListener {
+            showPanelResetMenu()
+            true
+        }
+
         // The app library is a full-screen page, not a permanently docked side window.
         val rightColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -520,6 +527,11 @@ class MainActivity : Activity() {
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        shell.isLongClickable = true
+        shell.setOnLongClickListener {
+            showPanelResetMenu()
+            true
+        }
         applyLauncherTypography(rootFrame)
 
         // Legacy home-grid objects remain initialized for app-management features, but the
@@ -551,6 +563,26 @@ class MainActivity : Activity() {
         }
         setContentView(rootFrame)
         updateClock()
+    }
+
+    private fun showPanelResetMenu() {
+        AlertDialog.Builder(this)
+            .setTitle("Atur posisi panel")
+            .setMessage("Kembalikan posisi Waktu, Cuaca, dan Pintasan ke posisi awal?")
+            .setPositiveButton("Reset posisi") { _, _ ->
+                preferences.edit()
+                    .remove("dashboard_panel_time_x_dp")
+                    .remove("dashboard_panel_time_y_dp")
+                    .remove("dashboard_panel_weather_x_dp")
+                    .remove("dashboard_panel_weather_y_dp")
+                    .remove("dashboard_panel_shortcuts_x_dp")
+                    .remove("dashboard_panel_shortcuts_y_dp")
+                    .apply()
+                Toast.makeText(this, "Posisi panel direset. Buka ulang halaman launcher untuk menerapkan posisi awal.", Toast.LENGTH_LONG).show()
+                buildScreen()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     /**
