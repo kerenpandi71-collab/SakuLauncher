@@ -543,13 +543,19 @@ class MainActivity : Activity() {
         }
         rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         if (landscapeLayout) {
-            // KDE-like permanent Start panel on the left in landscape only.
-            // Portrait retains the existing full-screen Start overlay behavior.
-            val panelWidth = (resources.displayMetrics.widthPixels * 0.34f).toInt()
-                .coerceIn(dp(175), dp(270))
-            workspace.addView(startPanel, 0, LinearLayout.LayoutParams(panelWidth, -1).apply {
-                marginEnd = dp(12)
+            // Keep the permanent landscape App Library anchored to the root frame.
+            // Putting it inside the horizontal workspace let parent measurement and
+            // panel translations shift it right or leave half the workspace uncovered.
+            val screenWidth = rootFrame.width.takeIf { it > 0 }
+                ?: resources.displayMetrics.widthPixels
+            val panelWidth = (screenWidth * 0.34f).toInt()
+                .coerceIn(dp(200), (screenWidth - dp(24)).coerceAtLeast(dp(200)))
+            rootFrame.addView(startPanel, FrameLayout.LayoutParams(panelWidth, -1, Gravity.START).apply {
+                topMargin = dp(44)
+                bottomMargin = dp(76)
+                marginStart = dp(12)
             })
+            startPanel.bringToFront()
         } else {
             rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
         }
