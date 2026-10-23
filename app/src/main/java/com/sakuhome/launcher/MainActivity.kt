@@ -346,8 +346,9 @@ class MainActivity : Activity() {
         topBar.addView(clockText, LinearLayout.LayoutParams(-2, dp(30)))
         shell.addView(topBar, LinearLayout.LayoutParams(-1, dp(32)))
 
+        val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val workspace = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (landscapeLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(30), 0, dp(8))
             clipChildren = false
@@ -388,7 +389,7 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
-        topWidgets.addView(timeCard, LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) })
+        topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(8) })
 
         val weatherCard = card("☀  CUACA")
         weatherCard.addView(TextView(this).apply {
@@ -401,7 +402,7 @@ class MainActivity : Activity() {
             textSize = 10f
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
-        topWidgets.addView(weatherCard, LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) })
+        topWidgets.addView(weatherCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
 
         val systemCard = card("▣  Sistem")
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -421,8 +422,8 @@ class MainActivity : Activity() {
             textSize = 11f
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
-        topWidgets.addView(systemCard, LinearLayout.LayoutParams(0, dp(125), 1f))
-        rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
+        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
+        rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
         val shortcuts = card("▦  Pintasan")
         val shortcutGrid = android.widget.GridLayout(this).apply { columnCount = 2 }
@@ -447,7 +448,7 @@ class MainActivity : Activity() {
         shortcut("Unduhan", "↓") { openStorage(android.os.Environment.DIRECTORY_DOWNLOADS) }
         shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp( if (landscapeLayout) 14 else 8) })
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -470,18 +471,15 @@ class MainActivity : Activity() {
             })
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-        rightColumn.addView(notes, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
-        workspace.addView(rightColumn, LinearLayout.LayoutParams(-1, -1))
+        rightColumn.addView(notes, if (landscapeLayout) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) } else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        workspace.addView(rightColumn, if (landscapeLayout) LinearLayout.LayoutParams(-1, -1) else LinearLayout.LayoutParams(-1, -2))
         shell.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        bottom.addView(chipButton("⌂", cardSurface, primaryText, 19).apply {
-            contentDescription = "Kembali ke layar utama Android"
-            setOnClickListener { performHome() }
-        }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(12) })
+        // Home is provided by the movable overlay button; no duplicate fixed Home button here.
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             bottom.addView(buildDock(), LinearLayout.LayoutParams(0, dp(60), 1f).apply {
                 marginStart = dp(100)
@@ -490,6 +488,7 @@ class MainActivity : Activity() {
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        applyLauncherTypography(rootFrame)
 
         // Legacy home-grid objects remain initialized for app-management features, but the
         // new dashboard uses the permanent app library instead of the old icon canvas.
@@ -510,6 +509,22 @@ class MainActivity : Activity() {
         rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
         setContentView(rootFrame)
         updateClock()
+    }
+
+    private fun applyLauncherTypography(view: View) {
+        val base = appFontSizeSp.toFloat()
+        val family = appFontFamily
+        fun visit(node: View) {
+            if (node is TextView) {
+                val scale = (node.textSize / resources.displayMetrics.scaledDensity).coerceIn(9f, 36f) / 14f
+                node.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (base * scale).coerceIn(9f, 36f))
+                node.typeface = android.graphics.Typeface.create(family, if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            }
+            if (node is android.view.ViewGroup) {
+                for (i in 0 until node.childCount) visit(node.getChildAt(i))
+            }
+        }
+        visit(view)
     }
 
     private fun performHome() {
