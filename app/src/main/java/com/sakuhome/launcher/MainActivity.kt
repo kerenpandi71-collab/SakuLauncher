@@ -8,6 +8,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.widget.SeekBar
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -357,7 +358,6 @@ class MainActivity : Activity() {
             background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
         }
         startPanel.visibility = View.VISIBLE
-        startPanel.findViewWithTag<View>("unused")
         workspace.addView(startPanel, LinearLayout.LayoutParams(0, -1, 0.39f).apply { marginEnd = dp(16) })
 
         val rightColumn = LinearLayout(this).apply {
@@ -430,7 +430,7 @@ class MainActivity : Activity() {
         rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
 
         val shortcuts = card("▦  Pintasan")
-        val shortcutGrid = GridLayout(this).apply { columnCount = 2 }
+        val shortcutGrid = android.widget.GridLayout(this).apply { columnCount = 2 }
         fun shortcut(label: String, symbol: String, action: () -> Unit) {
             shortcutGrid.addView(TextView(this).apply {
                 text = "$symbol  $label"
@@ -440,10 +440,10 @@ class MainActivity : Activity() {
                 setPadding(dp(10), dp(10), dp(8), dp(10))
                 background = rounded(cardSurface, 12)
                 setOnClickListener { action() }
-            }, GridLayout.LayoutParams().apply {
+            }, android.widget.GridLayout.LayoutParams().apply {
                 width = 0
                 height = dp(40)
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
                 setMargins(dp(3), dp(4), dp(3), dp(2))
             })
         }
