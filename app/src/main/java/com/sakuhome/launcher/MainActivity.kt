@@ -1492,7 +1492,7 @@ class MainActivity : Activity() {
             }
             list.addView(group, LinearLayout.LayoutParams(-1, -2))
         }
-        scroll.addView(list, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(list, android.view.ViewGroup.LayoutParams(-1, -2))
         container.addView(scroll, LinearLayout.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.58f).toInt()))
         dialog = AlertDialog.Builder(this)
             .setView(container)
