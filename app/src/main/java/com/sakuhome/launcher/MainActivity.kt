@@ -540,10 +540,7 @@ class MainActivity : Activity() {
         fun visit(node: View) {
             if (node is TextView && node.tag != "saku_big_clock") {
                 // Keep each view's original size as its baseline so rebuilds never compound scaling.
-                val original = (node.getTag(R.id.saku_typography_base_size) as? Float)
-                    ?: (node.textSize / resources.displayMetrics.scaledDensity).also {
-                        node.setTag(R.id.saku_typography_base_size, it)
-                    }
+                val original = node.textSize / resources.displayMetrics.scaledDensity
                 val scale = (original / 14f).coerceIn(0.65f, 2.2f)
                 node.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (base * scale).coerceIn(9f, 36f))
                 val style = if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
