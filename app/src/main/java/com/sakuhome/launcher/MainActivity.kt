@@ -394,6 +394,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, -2))
         }
         val timeCard = card("◷  WAKTU")
+        enablePanelDragging(timeCard, "time")
         timeCard.addView(TextView(this).apply {
             text = "14:32"
             textSize = 35f
