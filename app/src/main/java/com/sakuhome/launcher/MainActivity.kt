@@ -943,14 +943,16 @@ class MainActivity : Activity() {
             val flat = component.flattenToString() ?: return false
             val pkg = shellQuote(component.packageName)
             val command = "settings put global enable_freeform_support 1; " +
-                "settings put global force_resizable_activities 1; " +
-                "settings put global force_desktop_mode_on_external_displays 1; " +
-                "am start -W --user current --windowingMode 5 " +
+                // force_resizable_activities belongs to Secure, not Global.
+                "settings put secure force_resizable_activities 1; " +
+                "launch_output=\$(am start -W --user current --windowingMode 5 " +
                 "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
-                "-n ${shellQuote(flat)}; " +
-                "sleep 1; " +
-                "dumpsys activity activities | grep -B 24 -A 5 ${pkg} | " +
-                "grep -E 'windowingMode=(5|freeform)'"
+                "-n ${shellQuote(flat)} 2>&1); " +
+                "launch_code=\$?; " +
+                "sleep 2; " +
+                "task_dump=\$(dumpsys activity activities | grep -F -B 28 -A 10 ${pkg}); " +
+                "printf 'launch_exit=%s\\n%s\\n---TASK DUMP---\\n%s\\n' \"\$launch_code\" \"\$launch_output\" \"\$task_dump\"; " +
+                "printf '%s' \"\$task_dump\" | grep -Ei 'windowingMode[=: ]+5|mWindowingMode=5|windowingMode=freeform'";
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             val output = java.io.ByteArrayOutputStream()
             val error = java.io.ByteArrayOutputStream()
@@ -970,7 +972,7 @@ class MainActivity : Activity() {
             val verified = process.exitValue() == 0 &&
                 !stdout.contains("Error:", true) &&
                 !stderr.contains("Exception", true) &&
-                (stdout.contains("windowingMode=5", true) || stdout.contains("windowingMode=freeform", true))
+                (stdout.contains("windowingMode=5", true) || stdout.contains("mWindowingMode=5", true) || stdout.contains("windowingMode: 5", true) || stdout.contains("windowingMode=freeform", true))
             android.util.Log.i(
                 "SakuFreeform",
                 "root launch exit=${process.exitValue()} verified=$verified out=$stdout err=$stderr"
