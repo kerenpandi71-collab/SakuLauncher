@@ -195,6 +195,10 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        // Restore the user's landscape preference whenever the launcher process starts.
+        requestedOrientation = if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false))
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         drawerListMode = preferences.getBoolean(KEY_DRAWER_LIST_MODE, false)
         appWidgetHost = AppWidgetHost(this, APP_WIDGET_HOST_ID)
         homePage = preferences.getInt(KEY_LAST_HOME_PAGE, 0).coerceIn(0, homePageCount() - 1)
