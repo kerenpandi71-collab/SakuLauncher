@@ -34,6 +34,7 @@ import android.widget.Toast
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
     private var dockView: View? = null
+    private var homeButtonView: View? = null
     private var startOverlayView: View? = null
     private var startOverlayParams: WindowManager.LayoutParams? = null
     private var startOverlayListMode = false
@@ -192,6 +193,9 @@ class FloatingDockService : Service() {
                 else -> false
             }
         }
+        // Keep a separate Home control attached independently so it does not disappear
+        // when the navigation popup is dismissed. It can be disabled in launcher settings.
+        showPersistentHomeButton()
         // Attach the assistant ball to WindowManager; without this it is created but never visible.
         try {
             windowManager.addView(ball, params)
@@ -201,6 +205,49 @@ class FloatingDockService : Service() {
             dockView = null
             android.util.Log.e("SakuDock", "Gagal menampilkan Bola Asisten", e)
             Toast.makeText(this, "Bola Asisten gagal muncul: " + (e.message ?: "overlay error"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showPersistentHomeButton() {
+        homeButtonView?.let { return }
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_HOME_BUTTON_VISIBLE, true)) return
+        val dark = prefs.getBoolean(KEY_DARK_THEME, true)
+        val button = TextView(this).apply {
+            text = "⌂"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            contentDescription = "Tombol Home selalu tampil"
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245)))
+                setStroke(dp(1), Color.argb(160, 255, 255, 255))
+            }
+            elevation = dp(16).toFloat()
+            setOnClickListener {
+                viewHaptic(this)
+                Thread({
+                    try { Runtime.getRuntime().exec(arrayOf("su", "-c", "input keyevent 3")).waitFor() }
+                    catch (e: Exception) { android.util.Log.w("SakuDock", "Home key injection failed", e) }
+                }, "saku-home-key").start()
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            dp(48), dp(48), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.RIGHT
+            x = dp(18)
+            y = dp(84)
+        }
+        try {
+            windowManager.addView(button, params)
+            homeButtonView = button
+            android.util.Log.i("SakuDock", "Tombol Home persisten ditampilkan")
+        } catch (e: Exception) {
+            android.util.Log.e("SakuDock", "Gagal menampilkan tombol Home persisten", e)
         }
     }
 
@@ -609,6 +656,10 @@ class FloatingDockService : Service() {
             try { windowManager.removeView(view) } catch (_: Exception) { }
         }
         dockView = null
+        homeButtonView?.let { view ->
+            try { windowManager.removeView(view) } catch (_: Exception) { }
+        }
+        homeButtonView = null
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
@@ -641,6 +692,7 @@ class FloatingDockService : Service() {
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_DARK_THEME = "dark_theme"
+        private const val KEY_HOME_BUTTON_VISIBLE = "floating_home_button_visible"
         private const val KEY_TRANSPARENCY = "dock_transparency"
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
