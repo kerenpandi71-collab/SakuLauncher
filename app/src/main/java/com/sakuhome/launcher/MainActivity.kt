@@ -405,7 +405,6 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(8) })
-        enablePanelLayoutControls(timeCard, "clock")
 
         val weatherCard = card("☀  CUACA")
         weatherCard.addView(TextView(this).apply {
@@ -419,7 +418,6 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
         topWidgets.addView(weatherCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
-        enablePanelLayoutControls(weatherCard, "weather")
 
         val systemCard = card("▣  Sistem")
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -440,7 +438,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
         topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
-        enablePanelLayoutControls(systemCard, "system")
+
         rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
         val shortcuts = card("▦  Pintasan")
@@ -467,7 +465,6 @@ class MainActivity : Activity() {
         shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp( if (landscapeLayout) 14 else 8) })
-        enablePanelLayoutControls(shortcuts, "shortcuts")
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -491,7 +488,7 @@ class MainActivity : Activity() {
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
         rightColumn.addView(notes, if (landscapeLayout) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) } else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        enablePanelLayoutControls(notes, "notes")
+
         workspace.addView(rightColumn, if (landscapeLayout) {
             LinearLayout.LayoutParams(0, -1, 1f)
         } else {
@@ -562,169 +559,6 @@ class MainActivity : Activity() {
             }
         }
         visit(view)
-    }
-
-    /**
-     * Long-press a dashboard panel to reorder it among its siblings and resize it.
-     * Dimensions and order are stored per panel so the desktop arrangement survives rebuilds.
-     */
-    private fun enableFreePanelDrag(panel: View, key: String, enabled: Boolean) {
-        val enabledKey = "dashboard_panel_free_drag_$key"
-        val xKey = "dashboard_panel_free_x_$key"
-        val yKey = "dashboard_panel_free_y_$key"
-        preferences.edit().putBoolean(enabledKey, enabled).apply()
-        panel.setOnTouchListener(if (!enabled) null else View.OnTouchListener { view, event ->
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    view.tag = floatArrayOf(event.rawX, event.rawY, view.translationX, view.translationY)
-                    false
-                }
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    val state = view.tag as? FloatArray ?: return@OnTouchListener false
-                    val dx = event.rawX - state[0]
-                    val dy = event.rawY - state[1]
-                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) {
-                        view.translationX = state[2] + dx
-                        view.translationY = state[3] + dy
-                        true
-                    } else false
-                }
-                android.view.MotionEvent.ACTION_UP -> {
-                    preferences.edit().putFloat(xKey, view.translationX).putFloat(yKey, view.translationY).apply()
-                    false
-                }
-                else -> false
-            }
-        })
-        if (enabled) {
-            panel.translationX = preferences.getFloat(xKey, panel.translationX)
-            panel.translationY = preferences.getFloat(yKey, panel.translationY)
-            Toast.makeText(this, "Geser panel untuk mengatur posisinya", Toast.LENGTH_SHORT).show()
-        } else {
-            panel.translationX = 0f
-            panel.translationY = 0f
-            preferences.edit().remove(xKey).remove(yKey).apply()
-            Toast.makeText(this, "Posisi bebas panel dimatikan", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun enablePanelLayoutControls(panel: View, key: String) {
-        panel.isLongClickable = true
-        panel.setOnLongClickListener {
-            val options = arrayOf("Aktifkan geser bebas", "Nonaktifkan geser bebas", "Geser ke atas/kiri", "Geser ke bawah/kanan", "Lebih lebar", "Lebih sempit", "Lebih tinggi", "Lebih pendek", "Reset ukuran")
-            AlertDialog.Builder(this)
-                .setTitle("Atur panel")
-                .setItems(options) { _, selected ->
-                    val parent = panel.parent as? LinearLayout ?: return@setItems
-                    val index = parent.indexOfChild(panel)
-                    when (selected) {
-                        0, 1 -> {
-                            enableFreePanelDrag(panel, key, selected == 0)
-                        }
-                        2, 3 -> {
-                            val target = if (selected == 2) index - 1 else index + 1
-                            if (target in 0 until parent.childCount) {
-                                val lp = panel.layoutParams
-                                parent.removeView(panel)
-                                parent.addView(panel, target, lp)
-                            }
-                        }
-                        4, 5, 6, 7 -> {
-                            val widthKey = "dashboard_panel_width_$key"
-                            val heightKey = "dashboard_panel_height_$key"
-                            val lp = panel.layoutParams as? LinearLayout.LayoutParams ?: return@setItems
-                            val currentWidth = if (lp.width > 0) lp.width else dp(210)
-                            val currentHeight = if (lp.height > 0) lp.height else dp(125)
-                            val newWidth = when (selected) {
-                                4 -> (currentWidth + dp(24)).coerceAtMost(dp(700))
-                                5 -> (currentWidth - dp(24)).coerceAtLeast(dp(110))
-                                else -> currentWidth
-                            }
-                            val newHeight = when (selected) {
-                                6 -> (currentHeight + dp(20)).coerceAtMost(dp(520))
-                                7 -> (currentHeight - dp(20)).coerceAtLeast(dp(70))
-                                else -> currentHeight
-                            }
-                            preferences.edit().putInt(widthKey, newWidth).putInt(heightKey, newHeight).apply()
-                            lp.width = newWidth
-                            lp.height = newHeight
-                            lp.weight = 0f
-                            panel.layoutParams = lp
-                        }
-                        8 -> {
-                            preferences.edit().remove("dashboard_panel_width_$key").remove("dashboard_panel_height_$key").apply()
-                            buildScreen()
-                        }
-                    }
-                    Toast.makeText(this, "Panel diatur", Toast.LENGTH_SHORT).show()
-                }.setNegativeButton("Batal", null).show()
-            true
-        }
-        val width = preferences.getInt("dashboard_panel_width_$key", 0)
-        val height = preferences.getInt("dashboard_panel_height_$key", 0)
-        val lp = panel.layoutParams as? LinearLayout.LayoutParams
-        if (lp != null) {
-            if (width > 0) { lp.width = width; lp.weight = 0f }
-            if (height > 0) lp.height = height
-            panel.layoutParams = lp
-        }
-        if (preferences.getBoolean("dashboard_panel_drag_${key}", false)) enableFreePanelDrag(panel, key, true)
-    }
-
-    private fun enableFreePanelDrag(panel: View, key: String, enabled: Boolean) {
-        val orientationKey = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
-        val xKey = "dashboard_panel_x_${key}_${orientationKey}"
-        val yKey = "dashboard_panel_y_${key}_${orientationKey}"
-        val handle = (panel as? ViewGroup)?.getChildAt(0) ?: panel
-        preferences.edit().putBoolean("dashboard_panel_drag_${key}", enabled).apply()
-        if (!enabled) {
-            handle.setOnTouchListener(null)
-            panel.translationX = 0f
-            panel.translationY = 0f
-            preferences.edit().remove(xKey).remove(yKey).apply()
-            return
-        }
-        panel.translationX = preferences.getFloat(xKey, 0f)
-        panel.translationY = preferences.getFloat(yKey, 0f)
-        var downX = 0f
-        var downY = 0f
-        var startX = 0f
-        var startY = 0f
-        var moved = false
-        handle.setOnTouchListener { _, event ->
-            val parent = panel.parent as? ViewGroup ?: return@setOnTouchListener false
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX
-                    downY = event.rawY
-                    startX = panel.translationX
-                    startY = panel.translationY
-                    moved = false
-                    true
-                }
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - downX
-                    val dy = event.rawY - downY
-                    if (kotlin.math.abs(dx) > dp(4) || kotlin.math.abs(dy) > dp(4)) moved = true
-                    if (moved) {
-                        val minX = -panel.left.toFloat()
-                        val maxX = (parent.width - panel.width - panel.left).toFloat()
-                        val minY = -panel.top.toFloat()
-                        val maxY = (parent.height - panel.height - panel.top).toFloat()
-                        panel.translationX = (startX + dx).coerceIn(minX, maxX.coerceAtLeast(minX))
-                        panel.translationY = (startY + dy).coerceIn(minY, maxY.coerceAtLeast(minY))
-                    }
-                    true
-                }
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                    if (moved) {
-                        preferences.edit().putFloat(xKey, panel.translationX).putFloat(yKey, panel.translationY).apply()
-                    }
-                    true
-                }
-                else -> false
-            }
-        }
     }
 
     private fun performHome() {
