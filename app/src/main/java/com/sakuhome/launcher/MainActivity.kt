@@ -381,7 +381,7 @@ class MainActivity : Activity() {
             gravity = Gravity.TOP
         }
         val topWidgets = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (landscapeLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.TOP
         }
         fun card(title: String, radius: Int = 18): LinearLayout = LinearLayout(this).apply {
