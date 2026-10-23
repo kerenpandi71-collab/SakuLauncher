@@ -789,6 +789,41 @@ class MainActivity : Activity() {
         shellView.addView(buildDock(), LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(10) })
     }
 
+    private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+
+    /** Prefer the Android Activity Manager shell so the system receives an explicit
+     * freeform windowing-mode request; fall back to ActivityOptions if root is unavailable. */
+    private fun tryLaunchFreeformAsRoot(component: android.content.ComponentName, bounds: Rect): Boolean {
+        return try {
+            val flat = component.flattenToString() ?: return false
+            val command = "am start --user current --windowingMode 5 " +
+                "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
+                "-n ${shellQuote(flat)}"
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val output = java.io.ByteArrayOutputStream()
+            val error = java.io.ByteArrayOutputStream()
+            val outThread = Thread { process.inputStream.use { it.copyTo(output) } }
+            val errThread = Thread { process.errorStream.use { it.copyTo(error) } }
+            outThread.start()
+            errThread.start()
+            if (!process.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                android.util.Log.w("SakuFreeform", "Root freeform launch timed out")
+                return false
+            }
+            outThread.join(250)
+            errThread.join(250)
+            val stdout = output.toString("UTF-8")
+            val stderr = error.toString("UTF-8")
+            android.util.Log.i("SakuFreeform", "root am start exit=${process.exitValue()} out=$stdout err=$stderr")
+            process.exitValue() == 0 && !stdout.contains("Error:", true) &&
+                !stderr.contains("Exception", true) && !stderr.contains("Error", true)
+        } catch (e: Exception) {
+            android.util.Log.w("SakuFreeform", "Root launch unavailable; trying ActivityOptions", e)
+            false
+        }
+    }
+
     private fun launch(app: LaunchableApp, asFreeform: Boolean = true) {
         hideStartPanel()
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
@@ -819,6 +854,11 @@ class MainActivity : Activity() {
             val right = (width - margin).coerceAtLeast(left + dp(240))
             val bottom = (height - dp(72)).coerceAtLeast(top + dp(240))
             val bounds = Rect(left, top, right, bottom)
+            val component = launchIntent.component
+            if (component != null && tryLaunchFreeformAsRoot(component, bounds)) {
+                Toast.makeText(this, "Permintaan jendela bebas dikirim ke Android", Toast.LENGTH_SHORT).show()
+                return
+            }
             val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
             var windowModeRequested = false
             try {
