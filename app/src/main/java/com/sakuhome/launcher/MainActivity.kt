@@ -400,17 +400,19 @@ class MainActivity : Activity() {
         enablePanelDragging(timeCard, "time")
         timeCard.addView(TextView(this).apply {
             text = "14:32"
-            textSize = 35f
+            textSize = 33f
+            includeFontPadding = false
+            gravity = Gravity.CENTER_VERTICAL
             setTextColor(primaryText)
             setTypeface(null, android.graphics.Typeface.NORMAL)
             tag = "saku_big_clock"
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(5) })
         timeCard.addView(TextView(this).apply {
             text = java.text.SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(java.util.Date())
             textSize = 12f
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
-        topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(8) })
+        topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(104)).apply { bottomMargin = dp(8) })
 
         val weatherCard = card("☀  CUACA")
         enablePanelDragging(weatherCard, "weather")
@@ -424,7 +426,11 @@ class MainActivity : Activity() {
             textSize = 10f
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
-        topWidgets.addView(weatherCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 0.9f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
+        if (landscapeLayout) {
+            rightColumn.addView(weatherCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        } else {
+            topWidgets.addView(weatherCard, LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
+        }
 
         val systemCard = card("▣  Sistem")
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -444,7 +450,7 @@ class MainActivity : Activity() {
             textSize = 11f
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
-        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(125), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
+        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
 
         rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
@@ -472,10 +478,9 @@ class MainActivity : Activity() {
         shortcut("Unduhan", "↓") { openStorage(android.os.Environment.DIRECTORY_DOWNLOADS) }
         shortcut("Sampah", "▧") { Toast.makeText(this, "Pengelola sampah belum tersedia di Android", Toast.LENGTH_SHORT).show() }
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        // Pintasan hanya ditampilkan di portrait; landscape dibuat lebih lega.
-        if (!landscapeLayout) {
-            rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        }
+        // In landscape, stack shortcuts in the right-side column instead of squeezing them
+        // between the clock and system cards.
+        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -498,10 +503,9 @@ class MainActivity : Activity() {
             })
         }
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-        // Catatan tetap tersedia dan tersimpan di portrait, tetapi disembunyikan di landscape.
-        if (!landscapeLayout) {
-            rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        }
+        // Keep quick notes visible in both orientations; the landscape column can scroll
+        // vertically with its parent content rather than clipping the card.
+        rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         workspace.addView(rightColumn, if (landscapeLayout) {
             LinearLayout.LayoutParams(0, -1, 1f)
