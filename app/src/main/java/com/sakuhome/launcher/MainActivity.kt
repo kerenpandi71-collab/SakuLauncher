@@ -503,6 +503,7 @@ class MainActivity : Activity() {
         widgetStrip = LinearLayout(this)
         startScrim = View(this).apply { visibility = View.GONE }
         startPanel.visibility = View.VISIBLE
+        setContentView(rootFrame)
         updateClock()
     }
 
