@@ -553,6 +553,7 @@ class FloatingDockService : Service() {
     override fun onDestroy() {
         removeDock()
         removeStartOverlay()
+        removeNavigationOverlay()
         if (isForeground) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
         }
