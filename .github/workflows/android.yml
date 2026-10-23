@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feature/assistant-ball-window-launch-mode"]
   pull_request:
     branches: ["main"]
 
