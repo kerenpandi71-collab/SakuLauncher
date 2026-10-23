@@ -181,7 +181,7 @@ class FloatingDockService : Service() {
                             openSettingsShortcuts()
                         } else {
                             lastTapAt = now
-                            val single = Runnable { toggleStartOverlay(); pendingSingleTap = null }
+                            val single = Runnable { showQuickShortcutsOverlay(); pendingSingleTap = null }
                             pendingSingleTap = single
                             gestureHandler.postDelayed(single, 320L)
                         }
@@ -209,10 +209,19 @@ class FloatingDockService : Service() {
     }
 
     private fun openSettingsShortcuts() {
-        showSettingsOverlay()
+        try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("SakuDock", "Unable to open launcher settings", e)
+            Toast.makeText(this, "Pengaturan SakuLauncher gagal dibuka", Toast.LENGTH_SHORT).show()
+        }
     }
 
-    private fun showSettingsOverlay() {
+    private fun showQuickShortcutsOverlay() {
         removeSettingsOverlay()
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val dark = prefs.getBoolean(KEY_DARK_THEME, true)
@@ -292,9 +301,8 @@ class FloatingDockService : Service() {
             }
         }
         panel.orientation = LinearLayout.VERTICAL
-        panel.addView(navButton("⌂  Home", "Home", 3), LinearLayout.LayoutParams(dp(112), dp(44)).apply { bottomMargin = dp(6) })
-        panel.addView(navButton("‹  Kembali", "Kembali", 4), LinearLayout.LayoutParams(dp(112), dp(44)))
-        val p = WindowManager.LayoutParams(dp(128), dp(104), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        panel.addView(navButton("⌂  Home", "Home", 3), LinearLayout.LayoutParams(dp(112), dp(44)))
+        val p = WindowManager.LayoutParams(dp(128), dp(56), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply {
             gravity = Gravity.TOP or Gravity.LEFT
             x = (resources.displayMetrics.widthPixels - dp(160)).coerceAtLeast(0)
