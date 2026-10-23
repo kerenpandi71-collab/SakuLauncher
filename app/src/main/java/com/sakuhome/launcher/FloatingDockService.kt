@@ -37,6 +37,7 @@ class FloatingDockService : Service() {
     private var startOverlayView: View? = null
     private var startOverlayParams: WindowManager.LayoutParams? = null
     private var startOverlayListMode = false
+    private var navigationOverlayView: View? = null
     private var isForeground = false
 
     override fun onCreate() {
@@ -127,25 +128,38 @@ class FloatingDockService : Service() {
                 .coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
         }
 
+        val gestureHandler = android.os.Handler(android.os.Looper.getMainLooper())
         var downRawX = 0f
         var downRawY = 0f
         var downX = 0
         var downY = 0
         var dragged = false
+        var longPressed = false
+        var lastTapAt = 0L
+        var pendingSingleTap: Runnable? = null
+        val longPressAction = Runnable {
+            if (!dragged) {
+                longPressed = true
+                viewHaptic(ball)
+                showNavigationOverlay()
+            }
+        }
         ball.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    downRawX = event.rawX
-                    downRawY = event.rawY
-                    downX = params.x
-                    downY = params.y
-                    dragged = false
+                    downRawX = event.rawX; downRawY = event.rawY
+                    downX = params.x; downY = params.y
+                    dragged = false; longPressed = false
+                    gestureHandler.postDelayed(longPressAction, android.view.ViewConfiguration.getLongPressTimeout().toLong())
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - downRawX).toInt()
                     val dy = (event.rawY - downRawY).toInt()
-                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) dragged = true
+                    if (kotlin.math.abs(dx) > dp(7) || kotlin.math.abs(dy) > dp(7)) {
+                        dragged = true
+                        gestureHandler.removeCallbacks(longPressAction)
+                    }
                     if (dragged) {
                         params.x = (downX + dx).coerceIn(0, (resources.displayMetrics.widthPixels - dp(58)).coerceAtLeast(0))
                         params.y = (downY + dy).coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
@@ -154,26 +168,85 @@ class FloatingDockService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    gestureHandler.removeCallbacks(longPressAction)
                     if (dragged) {
                         prefs.edit().putInt(KEY_ASSISTANT_X, params.x).putInt(KEY_ASSISTANT_Y, params.y).apply()
-                    } else {
-                        view.performClick()
+                    } else if (!longPressed) {
+                        val now = android.os.SystemClock.uptimeMillis()
+                        if (now - lastTapAt <= 320L) {
+                            pendingSingleTap?.let { gestureHandler.removeCallbacks(it) }
+                            pendingSingleTap = null
+                            lastTapAt = 0L
+                            openSettingsShortcuts()
+                        } else {
+                            lastTapAt = now
+                            val single = Runnable { toggleStartOverlay(); pendingSingleTap = null }
+                            pendingSingleTap = single
+                            gestureHandler.postDelayed(single, 320L)
+                        }
                     }
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> true
+                MotionEvent.ACTION_CANCEL -> { gestureHandler.removeCallbacks(longPressAction); true }
                 else -> false
             }
         }
-        ball.setOnClickListener { toggleStartOverlay() }
-        try {
-            windowManager.addView(ball, params)
-            dockView = ball
-        } catch (e: Exception) {
-            android.util.Log.e("SakuDock", "Unable to attach assistant ball", e)
-            Toast.makeText(this, "Bola asisten gagal ditampilkan: " + e.message, Toast.LENGTH_LONG).show()
-            stopSelf()
+    }
+
+    private fun viewHaptic(view: View) {
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    private fun openSettingsShortcuts() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
         }
+        try { startActivity(intent) } catch (e: Exception) {
+            Toast.makeText(this, "Tidak bisa membuka pintasan pengaturan Saku", Toast.LENGTH_SHORT).show()
+            android.util.Log.w("SakuDock", "Settings shortcut failed", e)
+        }
+    }
+
+    private fun showNavigationOverlay() {
+        removeNavigationOverlay()
+        val dark = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, true)
+        val fg = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val bg = if (dark) Color.argb(245, 24, 31, 46) else Color.argb(245, 247, 249, 253)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            background = GradientDrawable().apply { setColor(bg); cornerRadius = dp(28).toFloat(); setStroke(dp(1), Color.argb(100,255,255,255)) }
+            elevation = dp(18).toFloat()
+        }
+        fun navButton(label: String, description: String, keyCode: Int): TextView = TextView(this).apply {
+            text = label; textSize = 22f; gravity = Gravity.CENTER; setTextColor(fg)
+            contentDescription = description
+            background = rounded(Color.argb(38,255,255,255), 22)
+            setOnClickListener {
+                viewHaptic(this)
+                Thread({
+                    try { Runtime.getRuntime().exec(arrayOf("su", "-c", "input keyevent $keyCode")).waitFor() }
+                    catch (e: Exception) { android.util.Log.w("SakuDock", "Navigation key injection failed", e) }
+                }, "saku-nav-key").start()
+                removeNavigationOverlay()
+            }
+        }
+        panel.addView(navButton("⌂", "Home", 3), LinearLayout.LayoutParams(dp(58), dp(48)).apply { marginEnd = dp(8) })
+        panel.addView(navButton("‹", "Kembali", 4), LinearLayout.LayoutParams(dp(58), dp(48)))
+        val p = WindowManager.LayoutParams(dp(142), dp(64), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = (resources.displayMetrics.widthPixels - dp(160)).coerceAtLeast(0)
+            y = (resources.displayMetrics.heightPixels / 2).coerceIn(0, (resources.displayMetrics.heightPixels - dp(80)).coerceAtLeast(0))
+        }
+        try { windowManager.addView(panel, p); navigationOverlayView = panel }
+        catch (e: Exception) { android.util.Log.e("SakuDock", "Navigation overlay failed", e) }
+    }
+
+    private fun removeNavigationOverlay() {
+        navigationOverlayView?.let { try { windowManager.removeView(it) } catch (_: Exception) {} }
+        navigationOverlayView = null
     }
 
     private fun toggleStartOverlay() {
@@ -269,7 +342,7 @@ class FloatingDockService : Service() {
                     val row = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                         setPadding(dp(8), dp(6), dp(8), dp(6))
-                        setOnClickListener { launchAppFreeform(app) }
+                        setOnClickListener { launchAppFullscreen(app) }
                     }
                     row.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(42), dp(42)))
                     row.addView(TextView(this).apply {
@@ -326,6 +399,15 @@ class FloatingDockService : Service() {
         } catch (e: Exception) {
             android.util.Log.e("SakuDock", "Unable to attach Start overlay", e)
             Toast.makeText(this, "Start overlay gagal dibuka: " + e.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun launchAppFullscreen(app: AppInfo) {
+        val launch = packageManager.getLaunchIntentForPackage(app.packageName) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        try { startActivity(launch) } catch (e: Exception) {
+            android.util.Log.e("SakuDock", "Fullscreen launch failed for " + app.packageName, e)
+            Toast.makeText(this, "Gagal membuka " + app.label, Toast.LENGTH_SHORT).show()
         }
     }
 
