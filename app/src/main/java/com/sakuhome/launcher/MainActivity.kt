@@ -619,6 +619,62 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun enableFreePanelDrag(panel: View, key: String, enabled: Boolean) {
+        val orientationKey = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+        val xKey = "dashboard_panel_x_${key}_${orientationKey}"
+        val yKey = "dashboard_panel_y_${key}_${orientationKey}"
+        val handle = (panel as? ViewGroup)?.getChildAt(0) ?: panel
+        preferences.edit().putBoolean("dashboard_panel_drag_${key}", enabled).apply()
+        if (!enabled) {
+            handle.setOnTouchListener(null)
+            panel.translationX = 0f
+            panel.translationY = 0f
+            preferences.edit().remove(xKey).remove(yKey).apply()
+            return
+        }
+        panel.translationX = preferences.getFloat(xKey, 0f)
+        panel.translationY = preferences.getFloat(yKey, 0f)
+        var downX = 0f
+        var downY = 0f
+        var startX = 0f
+        var startY = 0f
+        var moved = false
+        handle.setOnTouchListener { _, event ->
+            val parent = panel.parent as? ViewGroup ?: return@setOnTouchListener false
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startX = panel.translationX
+                    startY = panel.translationY
+                    moved = false
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (kotlin.math.abs(dx) > dp(4) || kotlin.math.abs(dy) > dp(4)) moved = true
+                    if (moved) {
+                        val minX = -panel.left.toFloat()
+                        val maxX = (parent.width - panel.width - panel.left).toFloat()
+                        val minY = -panel.top.toFloat()
+                        val maxY = (parent.height - panel.height - panel.top).toFloat()
+                        panel.translationX = (startX + dx).coerceIn(minX, maxX.coerceAtLeast(minX))
+                        panel.translationY = (startY + dy).coerceIn(minY, maxY.coerceAtLeast(minY))
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    if (moved) {
+                        preferences.edit().putFloat(xKey, panel.translationX).putFloat(yKey, panel.translationY).apply()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
     private fun performHome() {
         try {
             startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -747,35 +803,18 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, dp(38), 1f))
-        drawerGridButton = chipButton("▦", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 18f
-            setOnClickListener { setDrawerLayout(listMode = false) }
-            contentDescription = "Tampilan grid"
+        drawerGridButton = chipButton("←", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 22f
+            setOnClickListener { setDrawerLayout(listMode = !drawerListMode) }
+            contentDescription = "Ganti tampilan aplikasi sebelumnya"
         }
-        drawerListButton = chipButton("☷", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 18f
-            setOnClickListener { setDrawerLayout(listMode = true) }
-            contentDescription = "Tampilan daftar"
-        }
-        drawerLaunchModeButton = chipButton(
-            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "▣" else "□",
-            if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) accent else cardSurface,
-            primaryText, 11
-        ).apply {
-            textSize = 18f
-            setOnClickListener {
-                val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
-                preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
-                text = if (windowMode) "▣" else "□"
-                background = rounded(if (windowMode) accent else cardSurface, 15)
-                contentDescription = if (windowMode) "Mode jendela aktif; ketuk untuk layar penuh" else "Mode layar penuh aktif; ketuk untuk jendela"
-                Toast.makeText(this@MainActivity, if (windowMode) "Aplikasi dibuka sebagai jendela" else "Aplikasi dibuka layar penuh", Toast.LENGTH_SHORT).show()
-            }
-            contentDescription = if (preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) "Mode jendela" else "Mode layar penuh"
+        drawerListButton = chipButton("→", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 22f
+            setOnClickListener { setDrawerLayout(listMode = !drawerListMode) }
+            contentDescription = "Ganti tampilan aplikasi berikutnya"
         }
         filters.addView(drawerGridButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerLaunchModeButton, LinearLayout.LayoutParams(dp(38), dp(38)))
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(38), dp(38)))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
@@ -2305,7 +2344,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS_NAME = "saku_dock_settings"
         private const val KEY_PINNED = "pinned_packages_order"
-        private const val MAX_DOCK_APPS = 15
+        private const val MAX_DOCK_APPS = 30
         private const val KEY_HOME_APPS = "home_screen_packages"
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_LAST_HOME_PAGE = "last_home_screen_page"
