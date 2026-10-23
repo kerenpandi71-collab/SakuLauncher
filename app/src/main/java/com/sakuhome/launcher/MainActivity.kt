@@ -585,8 +585,8 @@ class MainActivity : Activity() {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> handler.removeCallbacks(showMenu)
             }
-            // Keep normal taps and child controls working.
-            false
+            // Consume only touches dispatched to this empty parent area so UP can cancel the timer.
+            true
         }
     }
 
