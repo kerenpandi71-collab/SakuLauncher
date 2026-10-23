@@ -566,11 +566,27 @@ class MainActivity : Activity() {
         panel.translationX = preferences.getFloat(keyX, 0f) * density
         panel.translationY = preferences.getFloat(keyY, 0f) * density
         handle.contentDescription = "Tekan dan geser untuk memindahkan panel ${panelName}"
+
+        // Allow panels to travel outside their original row/column and across the full launcher.
+        var ancestor: View? = panel.parent as? View
+        while (ancestor != null) {
+            if (ancestor is ViewGroup) {
+                ancestor.clipChildren = false
+                ancestor.clipToPadding = false
+            }
+            if (ancestor === rootFrame) break
+            ancestor = ancestor.parent as? View
+        }
+
         handle.setOnTouchListener(object : View.OnTouchListener {
             private var downRawX = 0f
             private var downRawY = 0f
             private var startX = 0f
             private var startY = 0f
+            private var startScreenX = 0
+            private var startScreenY = 0
+            private var parentScreenX = 0
+            private var parentScreenY = 0
             private var dragging = false
 
             override fun onTouch(view: View, event: MotionEvent): Boolean {
@@ -580,6 +596,14 @@ class MainActivity : Activity() {
                         downRawY = event.rawY
                         startX = panel.translationX
                         startY = panel.translationY
+                        val panelLocation = IntArray(2)
+                        val parentLocation = IntArray(2)
+                        panel.getLocationOnScreen(panelLocation)
+                        (panel.parent as? View)?.getLocationOnScreen(parentLocation)
+                        startScreenX = panelLocation[0]
+                        startScreenY = panelLocation[1]
+                        parentScreenX = parentLocation[0]
+                        parentScreenY = parentLocation[1]
                         dragging = false
                         return true
                     }
@@ -593,15 +617,17 @@ class MainActivity : Activity() {
                             panel.elevation = dp(24).toFloat()
                         }
                         if (dragging) {
-                            val parentView = panel.parent as? View
-                            val parentWidth = parentView?.width ?: rootFrame.width
-                            val parentHeight = parentView?.height ?: rootFrame.height
-                            val minX = -panel.left.toFloat()
-                            val maxX = (parentWidth - panel.right).toFloat()
-                            val minY = -panel.top.toFloat()
-                            val maxY = (parentHeight - panel.bottom).toFloat()
-                            panel.translationX = (startX + dx).coerceIn(minX, maxX)
-                            panel.translationY = (startY + dy).coerceIn(minY, maxY)
+                            val rootLocation = IntArray(2)
+                            rootFrame.getLocationOnScreen(rootLocation)
+                            val minScreenX = rootLocation[0].toFloat()
+                            val minScreenY = rootLocation[1].toFloat()
+                            val maxScreenX = (rootLocation[0] + rootFrame.width - panel.width).toFloat()
+                            val maxScreenY = (rootLocation[1] + rootFrame.height - panel.height).toFloat()
+                            val targetScreenX = (startScreenX + dx).coerceIn(minScreenX, maxScreenX.coerceAtLeast(minScreenX))
+                            val targetScreenY = (startScreenY + dy).coerceIn(minScreenY, maxScreenY.coerceAtLeast(minScreenY))
+                            // Convert full-screen coordinates back into this panel's parent's translation space.
+                            panel.translationX = targetScreenX - parentScreenX - panel.left
+                            panel.translationY = targetScreenY - parentScreenY - panel.top
                         }
                         return true
                     }
