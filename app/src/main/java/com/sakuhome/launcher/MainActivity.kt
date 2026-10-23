@@ -955,7 +955,9 @@ class MainActivity : Activity() {
                 // force_resizable_activities belongs to Secure, not Global.
                 "settings put secure force_resizable_activities 1; " +
                 "launch_output=\$(am start -W --user current --windowingMode 5 " +
-                "--activity-bounds ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom} " +
+                // Android 15's am start parser does not support --activity-bounds.
+                // Let ActivityTaskManager choose initial bounds; ActivityOptions below is the
+                // compatibility path for launch bounds on builds where root launch is not verified.
                 "-n ${shellQuote(flat)} 2>&1); " +
                 "launch_code=\$?; " +
                 "sleep 2; " +
