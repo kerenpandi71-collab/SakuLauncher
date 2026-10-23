@@ -65,7 +65,7 @@ class FloatingDockService : Service() {
         if (isForeground) return
         val channelId = "saku_floating_dock"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Dock mengambang Saku", NotificationManager.IMPORTANCE_LOW).apply {
+            val channel = NotificationChannel(channelId, "Bola Asisten Saku", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Menjaga dock Saku tetap tersedia di atas aplikasi"
                 setShowBadge(false)
             }
@@ -82,7 +82,7 @@ class FloatingDockService : Service() {
         val notification = builder
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentTitle("Saku Dock aktif")
-            .setContentText("Dock mengambang siap digunakan")
+            .setContentText("Bola Asisten siap digunakan")
             .setContentIntent(openPending)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Matikan dock", stopPending)
