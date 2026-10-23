@@ -365,7 +365,7 @@ class MainActivity : Activity() {
 
         val landscapeLayout = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val workspace = LinearLayout(this).apply {
-            orientation = if (landscapeLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(30), 0, dp(8))
             clipChildren = false
@@ -412,7 +412,18 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(secondaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
-        topWidgets.addView(timeCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1.05f).apply { marginEnd = dp(10) } else LinearLayout.LayoutParams(-1, dp(104)).apply { bottomMargin = dp(8) })
+        if (landscapeLayout) {
+            topWidgets.addView(timeCard, LinearLayout.LayoutParams(0, dp(142), 1.05f).apply { marginEnd = dp(10) })
+        } else {
+            // Portrait-only dashboard: the large clock belongs to the left column.
+            timeCard.minimumHeight = dp(142)
+            timeCard.addView(TextView(this).apply {
+                text = "Langkah kecil hari ini, membawa hasil besar esok."
+                textSize = 11f
+                setTextColor(secondaryText)
+                setPadding(0, dp(7), 0, 0)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
 
         val weatherCard = card("☀  CUACA")
         enablePanelDragging(weatherCard, "weather")
@@ -507,11 +518,26 @@ class MainActivity : Activity() {
         // vertically with its parent content rather than clipping the card.
         rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
-        workspace.addView(rightColumn, if (landscapeLayout) {
-            LinearLayout.LayoutParams(0, -1, 1f)
+        if (!landscapeLayout) {
+            val portraitLeftColumn = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.TOP
+                clipChildren = false
+                clipToPadding = false
+            }
+            portraitLeftColumn.addView(timeCard, LinearLayout.LayoutParams(-1, dp(156)).apply { bottomMargin = dp(8) })
+            // Portrait app library stays in its own column; landscape panel behavior is unchanged.
+            startPanel = buildStartPanel().apply {
+                elevation = dp(20).toFloat()
+                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+                visibility = View.VISIBLE
+            }
+            portraitLeftColumn.addView(startPanel, LinearLayout.LayoutParams(-1, 0, 1f))
+            workspace.addView(portraitLeftColumn, LinearLayout.LayoutParams(0, -1, 1.02f).apply { marginEnd = dp(7) })
+            workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 0.98f))
         } else {
-            LinearLayout.LayoutParams(-1, -2)
-        })
+            workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 1f))
+        }
         shell.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val bottom = LinearLayout(this).apply {
@@ -547,9 +573,7 @@ class MainActivity : Activity() {
         }
         rootFrame.addView(startScrim, FrameLayout.LayoutParams(-1, -1))
         if (landscapeLayout) {
-            // Keep the permanent landscape App Library anchored to the root frame.
-            // Putting it inside the horizontal workspace let parent measurement and
-            // panel translations shift it right or leave half the workspace uncovered.
+            // Preserve the existing landscape App Library placement exactly.
             val screenWidth = rootFrame.width.takeIf { it > 0 }
                 ?: resources.displayMetrics.widthPixels
             val panelWidth = (screenWidth * 0.34f).toInt()
@@ -560,8 +584,6 @@ class MainActivity : Activity() {
                 marginStart = dp(12)
             })
             startPanel.bringToFront()
-        } else {
-            rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1))
         }
         setContentView(rootFrame)
         updateClock()
