@@ -1287,6 +1287,7 @@ class MainActivity : Activity() {
             "◉  Sembunyikan aplikasi · ${hiddenPackages().size}",
             "＋  Tambahkan widget",
             "⌘  Bola Asisten · $overlayState",
+            "⌂  Tombol Home mengambang · ${if (preferences.getBoolean(KEY_HOME_BUTTON_VISIBLE, true)) "Selalu tampil" else "Disembunyikan"}",
             "▤  Kelola aplikasi Bola Asisten · $pinnedState",
             "☾  Mode tampilan · $themeState",
             "✦  Warna aksen",
@@ -1322,25 +1323,33 @@ class MainActivity : Activity() {
                     5 -> manageHiddenApps()
                     6 -> pickWidget()
                     7 -> toggleOverlay()
-                    8 -> managePins()
-                    9 -> toggleTheme()
-                    10 -> chooseAccent()
-                    11 -> chooseWallpaper()
-                    12 -> resetWallpaper()
-                    13 -> showPermissionInfo()
-                    14 -> chooseHomeGrid()
-                    15 -> {
+                    8 -> {
+                        val visible = !preferences.getBoolean(KEY_HOME_BUTTON_VISIBLE, true)
+                        preferences.edit().putBoolean(KEY_HOME_BUTTON_VISIBLE, visible).apply()
+                        if (preferences.getBoolean(KEY_OVERLAY_ENABLED, false)) {
+                            startService(Intent(this, FloatingDockService::class.java).setAction(FloatingDockService.ACTION_REFRESH))
+                        }
+                        Toast.makeText(this, if (visible) "Tombol Home selalu tampil diaktifkan" else "Tombol Home disembunyikan", Toast.LENGTH_SHORT).show()
+                    }
+                    9 -> managePins()
+                    10 -> toggleTheme()
+                    11 -> chooseAccent()
+                    12 -> chooseWallpaper()
+                    13 -> resetWallpaper()
+                    14 -> showPermissionInfo()
+                    15 -> chooseHomeGrid()
+                    16 -> {
                         val windowMode = !preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)
                         preferences.edit().putBoolean(KEY_APP_LAUNCH_WINDOW, windowMode).apply()
                         Toast.makeText(this, if (windowMode) "Mode pembukaan aplikasi: Jendela" else "Mode pembukaan aplikasi: Layar penuh", Toast.LENGTH_SHORT).show()
                     }
-                    16 -> chooseDrawerGrid()
-                    17 -> showProcessManager()
-                    18 -> {
+                    17 -> chooseDrawerGrid()
+                    18 -> showProcessManager()
+                    19 -> {
                         preferences.edit().putBoolean(KEY_HIDE_DRAWER_LABELS, !hideDrawerLabels).apply()
                         buildScreen()
                     }
-                    19 -> {
+                    20 -> {
                         try {
                             startActivity(Intent().setClassName(this, "io.github.jqssun.displayextend.MainActivity"))
                         } catch (e: Exception) {
@@ -1348,7 +1357,7 @@ class MainActivity : Activity() {
                             Toast.makeText(this, "Display Extend belum bisa dibuka: ${e.message}", Toast.LENGTH_LONG).show()
                         }
                     }
-                    20 -> {
+                    21 -> {
                         preferences.edit().putBoolean(KEY_HIDE_STATUS_BAR, !preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)).apply()
                         buildScreen()
                         Toast.makeText(this, if (preferences.getBoolean(KEY_HIDE_STATUS_BAR, false)) "Status bar disembunyikan" else "Status bar ditampilkan", Toast.LENGTH_SHORT).show()
@@ -2076,6 +2085,7 @@ class MainActivity : Activity() {
         private const val KEY_HOME_PAGE_COUNT = "home_screen_page_count"
         private const val KEY_LAST_HOME_PAGE = "last_home_screen_page"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+        private const val KEY_HOME_BUTTON_VISIBLE = "floating_home_button_visible"
         private const val KEY_OVERLAY_PENDING = "overlay_pending"
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_ACCENT = "accent_color"
