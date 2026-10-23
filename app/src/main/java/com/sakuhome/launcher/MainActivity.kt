@@ -1319,7 +1319,7 @@ class MainActivity : Activity() {
             "Info aplikasi",
             "Buka di Play Store",
             "Copot pemasangan",
-            "$dockAction · batas 15 aplikasi"
+            "$dockAction · batas 30 aplikasi"
         )
         AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
             when (which) {
