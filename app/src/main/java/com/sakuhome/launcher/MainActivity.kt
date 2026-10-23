@@ -264,8 +264,14 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        try { appWidgetHost.stopListening() } catch (_: Exception) { }
-        startSearchField.hideKeyboard()
+        // onPause can run before buildScreen() creates the drawer search field
+        // (for example, when Android pauses the launcher during startup).
+        try {
+            if (::appWidgetHost.isInitialized) appWidgetHost.stopListening()
+        } catch (_: Exception) { }
+        if (::startSearchField.isInitialized) {
+            try { startSearchField.hideKeyboard() } catch (_: Exception) { }
+        }
     }
 
     private fun buildScreen() {
