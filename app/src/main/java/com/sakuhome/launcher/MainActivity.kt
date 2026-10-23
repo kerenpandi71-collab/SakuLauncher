@@ -372,12 +372,8 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
-        // Long-press an empty workspace area to restore movable dashboard panels.
-        workspace.isLongClickable = true
-        workspace.setOnLongClickListener {
-            showPanelResetMenu()
-            true
-        }
+        // Reset menu requires a deliberate long press on an empty area.
+        installPanelResetLongPress(workspace)
 
         // The app library is a full-screen page, not a permanently docked side window.
         val rightColumn = LinearLayout(this).apply {
@@ -527,11 +523,7 @@ class MainActivity : Activity() {
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
         rootFrame.addView(shell, FrameLayout.LayoutParams(-1, -1))
-        shell.isLongClickable = true
-        shell.setOnLongClickListener {
-            showPanelResetMenu()
-            true
-        }
+        installPanelResetLongPress(shell)
         applyLauncherTypography(rootFrame)
 
         // Legacy home-grid objects remain initialized for app-management features, but the
@@ -565,20 +557,61 @@ class MainActivity : Activity() {
         updateClock()
     }
 
+    private fun installPanelResetLongPress(target: View) {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val longPressTimeout = 900L
+        var downX = 0f
+        var downY = 0f
+        var triggered = false
+        val showMenu = Runnable {
+            triggered = true
+            showPanelResetMenu()
+        }
+        target.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    triggered = false
+                    handler.removeCallbacks(showMenu)
+                    handler.postDelayed(showMenu, longPressTimeout)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+                    if (kotlin.math.abs(event.x - downX) > slop ||
+                        kotlin.math.abs(event.y - downY) > slop) {
+                        handler.removeCallbacks(showMenu)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> handler.removeCallbacks(showMenu)
+            }
+            // Keep normal taps and child controls working.
+            false
+        }
+    }
+
+    private fun panelPositionKey(panelName: String, axis: String): String {
+        val orientationSuffix = if (resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+        return "dashboard_panel_${panelName}_${axis}_${orientationSuffix}_dp"
+    }
+
     private fun showPanelResetMenu() {
+        val orientationName = if (resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
         AlertDialog.Builder(this)
             .setTitle("Atur posisi panel")
-            .setMessage("Kembalikan posisi Waktu, Cuaca, dan Pintasan ke posisi awal?")
+            .setMessage("Reset posisi Waktu, Cuaca, dan Pintasan untuk mode ${orientationName} saja?")
             .setPositiveButton("Reset posisi") { _, _ ->
                 preferences.edit()
-                    .remove("dashboard_panel_time_x_dp")
-                    .remove("dashboard_panel_time_y_dp")
-                    .remove("dashboard_panel_weather_x_dp")
-                    .remove("dashboard_panel_weather_y_dp")
-                    .remove("dashboard_panel_shortcuts_x_dp")
-                    .remove("dashboard_panel_shortcuts_y_dp")
+                    .remove(panelPositionKey("time", "x"))
+                    .remove(panelPositionKey("time", "y"))
+                    .remove(panelPositionKey("weather", "x"))
+                    .remove(panelPositionKey("weather", "y"))
+                    .remove(panelPositionKey("shortcuts", "x"))
+                    .remove(panelPositionKey("shortcuts", "y"))
                     .apply()
-                Toast.makeText(this, "Posisi panel direset. Buka ulang halaman launcher untuk menerapkan posisi awal.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Posisi panel mode ${orientationName} direset.", Toast.LENGTH_SHORT).show()
                 buildScreen()
             }
             .setNegativeButton("Batal", null)
@@ -593,8 +626,8 @@ class MainActivity : Activity() {
     private fun enablePanelDragging(panel: View, panelName: String) {
         val handle = (panel as? ViewGroup)?.getChildAt(0) ?: return
         val density = resources.displayMetrics.density
-        val keyX = "dashboard_panel_${panelName}_x_dp"
-        val keyY = "dashboard_panel_${panelName}_y_dp"
+        val keyX = panelPositionKey(panelName, "x")
+        val keyY = panelPositionKey(panelName, "y")
         panel.translationX = preferences.getFloat(keyX, 0f) * density
         panel.translationY = preferences.getFloat(keyY, 0f) * density
         handle.contentDescription = "Tekan dan geser untuk memindahkan panel ${panelName}"
