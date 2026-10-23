@@ -14,6 +14,10 @@ import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.MotionEvent
+import android.widget.ScrollView
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
@@ -29,6 +33,9 @@ import android.widget.Toast
 class FloatingDockService : Service() {
     private lateinit var windowManager: WindowManager
     private var dockView: View? = null
+    private var startOverlayView: View? = null
+    private var startOverlayParams: WindowManager.LayoutParams? = null
+    private var startOverlayListMode = false
     private var isForeground = false
 
     override fun onCreate() {
@@ -48,7 +55,7 @@ class FloatingDockService : Service() {
             return START_NOT_STICKY
         }
         startAsForeground()
-        if (intent?.action == ACTION_REFRESH) removeDock()
+        if (intent?.action == ACTION_REFRESH) { removeDock(); removeStartOverlay() }
         if (dockView == null) showDock()
         return START_STICKY
     }
@@ -117,7 +124,7 @@ class FloatingDockService : Service() {
             setTextColor(if (darkTheme) Color.WHITE else Color.rgb(24, 31, 48))
             background = rounded(accentColor, 17)
             contentDescription = "Buka Start"
-            setOnClickListener { openFreeformStartMenu() }
+            setOnClickListener { toggleStartOverlay() }
         }
         dock.addView(startButton, LinearLayout.LayoutParams(dp(43), dp(46)))
         dock.addView(View(this).apply {
@@ -212,10 +219,208 @@ class FloatingDockService : Service() {
         }
     }
 
-    /**
-     * Open the dedicated Start menu as a separate Android FREEFORM task.
-     * Use the root launch path first, then fall back to ActivityOptions.
-     */
+
+    private fun toggleStartOverlay() {
+        if (startOverlayView != null) removeStartOverlay() else showStartOverlay()
+    }
+
+    private fun showStartOverlay() {
+        if (startOverlayView != null || !Settings.canDrawOverlays(this)) return
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dark = prefs.getBoolean(KEY_DARK_THEME, true)
+        val fg = if (dark) Color.WHITE else Color.rgb(24, 31, 48)
+        val muted = if (dark) Color.rgb(180, 193, 214) else Color.rgb(75, 88, 109)
+        val accent = prefs.getInt(KEY_ACCENT, Color.rgb(110, 151, 245))
+        val surface = if (dark) Color.argb(246, 24, 31, 46) else Color.argb(246, 247, 249, 253)
+        val apps = loadApps().sortedBy { it.label.lowercase() }
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(surface)
+                setStroke(dp(1), Color.argb(100, 255, 255, 255))
+                cornerRadius = dp(24).toFloat()
+            }
+            elevation = dp(18).toFloat()
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(3), dp(2), dp(8))
+        }
+        val title = TextView(this).apply {
+            text = "Aplikasi"
+            textSize = 18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(fg)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(title, LinearLayout.LayoutParams(0, dp(40), 1f))
+        val gridButton = TextView(this).apply {
+            text = "▦"; textSize = 22f; gravity = Gravity.CENTER; setTextColor(fg)
+        }
+        val listButton = TextView(this).apply {
+            text = "☷"; textSize = 22f; gravity = Gravity.CENTER; setTextColor(fg)
+        }
+        header.addView(gridButton, LinearLayout.LayoutParams(dp(42), dp(40)))
+        header.addView(listButton, LinearLayout.LayoutParams(dp(42), dp(40)).apply { marginStart = dp(4) })
+        outer.addView(header)
+        header.setOnTouchListener(object : View.OnTouchListener {
+            var downX = 0f; var downY = 0f; var startX = 0; var startY = 0
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                val p = startOverlayParams ?: return false
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX; downY = event.rawY; startX = p.x; startY = p.y
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        p.x = (startX + event.rawX - downX).toInt().coerceIn(0, (resources.displayMetrics.widthPixels - p.width).coerceAtLeast(0))
+                        p.y = (startY + event.rawY - downY).toInt().coerceIn(0, (resources.displayMetrics.heightPixels - dp(80)).coerceAtLeast(0))
+                        try { windowManager.updateViewLayout(outer, p) } catch (_: Exception) {}
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        prefs.edit().putInt(KEY_START_X, p.x).putInt(KEY_START_Y, p.y).apply()
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+        val search = EditText(this).apply {
+            hint = "Cari aplikasi"; textSize = 14f; setSingleLine(true)
+            setTextColor(fg); setHintTextColor(muted); setPadding(dp(12), 0, dp(12), 0)
+            background = rounded(if (dark) Color.rgb(43, 52, 69) else Color.rgb(230, 235, 244), 14)
+        }
+        outer.addView(search, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(8) })
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val listContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(listContainer)
+        outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        fun render(query: String = search.text?.toString().orEmpty()) {
+            listContainer.removeAllViews()
+            val shown = apps.filter { it.label.contains(query, true) || it.packageName.contains(query, true) }
+            if (startOverlayListMode) {
+                shown.forEach { app ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(8), dp(6), dp(8), dp(6))
+                        setOnClickListener { launchAppFreeform(app) }
+                    }
+                    row.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(42), dp(42)))
+                    row.addView(TextView(this).apply {
+                        text = app.label; textSize = 14f; setTextColor(fg); gravity = Gravity.CENTER_VERTICAL; maxLines = 1
+                    }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(10) })
+                    listContainer.addView(row, LinearLayout.LayoutParams(-1, dp(54)))
+                }
+            } else {
+                shown.chunked(4).forEach { rowApps ->
+                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                    rowApps.forEach { app ->
+                        val cell = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                            setPadding(dp(3), dp(7), dp(3), dp(7))
+                            setOnClickListener { launchAppFreeform(app) }
+                        }
+                        cell.addView(ImageView(this).apply { setImageDrawable(app.icon); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(42), dp(42)))
+                        cell.addView(TextView(this).apply {
+                            text = app.label; textSize = 10f; setTextColor(fg); gravity = Gravity.CENTER
+                            maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+                        }, LinearLayout.LayoutParams(-1, dp(30)))
+                        row.addView(cell, LinearLayout.LayoutParams(0, dp(82), 1f))
+                    }
+                    repeat(4 - rowApps.size) { row.addView(View(this), LinearLayout.LayoutParams(0, dp(82), 1f)) }
+                    listContainer.addView(row, LinearLayout.LayoutParams(-1, dp(82)))
+                }
+            }
+            title.text = "Aplikasi · " + shown.size
+            gridButton.background = rounded(if (!startOverlayListMode) accent else Color.TRANSPARENT, 12)
+            listButton.background = rounded(if (startOverlayListMode) accent else Color.TRANSPARENT, 12)
+        }
+        gridButton.setOnClickListener { startOverlayListMode = false; render() }
+        listButton.setOnClickListener { startOverlayListMode = true; render() }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render(s?.toString().orEmpty()) }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        render("")
+        val width = (resources.displayMetrics.widthPixels - dp(28)).coerceAtMost(dp(420))
+        val height = (resources.displayMetrics.heightPixels * 0.68f).toInt().coerceAtLeast(dp(260))
+        val params = WindowManager.LayoutParams(
+            width, height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = prefs.getInt(KEY_START_X, dp(14)).coerceIn(0, (resources.displayMetrics.widthPixels - width).coerceAtLeast(0))
+            y = prefs.getInt(KEY_START_Y, dp(100)).coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
+        }
+        try {
+            windowManager.addView(outer, params)
+            startOverlayView = outer
+            startOverlayParams = params
+        } catch (e: Exception) {
+            android.util.Log.e("SakuDock", "Unable to attach Start overlay", e)
+            Toast.makeText(this, "Start overlay gagal dibuka: " + e.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun launchAppFreeform(app: AppInfo) {
+        val launch = packageManager.getLaunchIntentForPackage(app.packageName) ?: return
+        val component = launch.component
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        val width = resources.displayMetrics.widthPixels
+        val height = resources.displayMetrics.heightPixels
+        val bounds = Rect(dp(24), dp(64), width - dp(24), height - dp(84))
+        Thread({
+            var launched = false
+            try {
+                if (component != null) {
+                    val cmd = "settings put global enable_freeform_support 1; " +
+                        "settings put secure force_resizable_activities 1; " +
+                        "am start -W --user current --windowingMode 5 --activity-multiple-task " +
+                        "--activity-bounds " + bounds.left + "," + bounds.top + "," + bounds.right + "," + bounds.bottom +
+                        " -n " + component.packageName + "/" + component.className
+                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+                    val output = java.io.ByteArrayOutputStream()
+                    val errors = java.io.ByteArrayOutputStream()
+                    val ot = Thread { process.inputStream.use { it.copyTo(output) } }
+                    val et = Thread { process.errorStream.use { it.copyTo(errors) } }
+                    ot.start(); et.start()
+                    if (process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                        ot.join(200); et.join(200)
+                        val out = output.toString("UTF-8") + errors.toString("UTF-8")
+                        launched = process.exitValue() == 0 && out.contains("Status: ok", true) && !out.contains("Error:", true)
+                        android.util.Log.i("SakuDock", "freeform launch " + app.packageName + ": " + out)
+                    } else process.destroyForcibly()
+                }
+            } catch (e: Exception) { android.util.Log.w("SakuDock", "root freeform launch failed", e) }
+            if (!launched) {
+                try {
+                    val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+                    try {
+                        val method = ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                        method.isAccessible = true
+                        method.invoke(options, 5)
+                    } catch (_: Exception) {}
+                    startActivity(launch, options.toBundle())
+                } catch (e: Exception) {
+                    android.util.Log.e("SakuDock", "freeform launch failed for " + app.packageName, e)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        Toast.makeText(this@FloatingDockService, "Gagal membuka " + app.label + " sebagai jendela", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }, "saku-app-freeform").start()
+    }
+
+    private fun removeStartOverlay() {
+        startOverlayView?.let { try { windowManager.removeView(it) } catch (_: Exception) {} }
+        startOverlayView = null
+        startOverlayParams = null
+    }
+
     private fun openFreeformStartMenu() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
@@ -302,6 +507,7 @@ class FloatingDockService : Service() {
 
     override fun onDestroy() {
         removeDock()
+        removeStartOverlay()
         if (isForeground) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
         }
@@ -325,5 +531,7 @@ class FloatingDockService : Service() {
         private const val KEY_ICON_SIZE = "app_icon_size_dp"
         private const val KEY_HIDDEN_APPS = "hidden_app_packages"
         private const val KEY_LIQUID_GLASS = "liquid_glass_enabled"
+        private const val KEY_START_X = "floating_start_x"
+        private const val KEY_START_Y = "floating_start_y"
     }
 }
