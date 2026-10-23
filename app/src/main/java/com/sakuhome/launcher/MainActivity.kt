@@ -983,7 +983,11 @@ class MainActivity : Activity() {
     }
 
     private fun launch(app: LaunchableApp, asFreeform: Boolean = false) {
-        hideStartPanel()
+        if (asFreeform && ::windowStartPanel.isInitialized && windowStartPanel.visibility == View.VISIBLE) {
+            hideWindowStartPanel()
+        } else {
+            hideStartPanel()
+        }
         val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (launchIntent == null) {
             Toast.makeText(this, "Aplikasi tidak dapat dibuka", Toast.LENGTH_SHORT).show()
