@@ -2043,7 +2043,7 @@ class MainActivity : Activity() {
             cell.findViewById<TextView>(android.R.id.text1).text = app.label
             cell.findViewById<TextView>(android.R.id.text1).visibility = if (if (isStartMenu) hideDrawerLabels else hideLabels) View.GONE else View.VISIBLE
             cell.contentDescription = app.label
-            cell.setOnClickListener { launch(app, asFreeform = windowMode) }
+            cell.setOnClickListener { launch(app, asFreeform = windowMode || preferences.getBoolean(KEY_APP_LAUNCH_WINDOW, false)) }
             cell.setOnLongClickListener {
                 if (isStartMenu) {
                     // Keep drawer long-press as an app-action menu (uninstall, app info,
