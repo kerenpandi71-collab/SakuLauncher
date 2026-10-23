@@ -538,10 +538,16 @@ class MainActivity : Activity() {
         val base = appFontSizeSp.toFloat()
         val family = appFontFamily
         fun visit(node: View) {
-            if (node is TextView) {
-                val scale = (node.textSize / resources.displayMetrics.scaledDensity).coerceIn(9f, 36f) / 14f
+            if (node is TextView && node.tag != "saku_big_clock") {
+                // Keep each view's original size as its baseline so rebuilds never compound scaling.
+                val original = (node.getTag(R.id.saku_typography_base_size) as? Float)
+                    ?: (node.textSize / resources.displayMetrics.scaledDensity).also {
+                        node.setTag(R.id.saku_typography_base_size, it)
+                    }
+                val scale = (original / 14f).coerceIn(0.65f, 2.2f)
                 node.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (base * scale).coerceIn(9f, 36f))
-                node.typeface = android.graphics.Typeface.create(family, if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                val style = if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                node.typeface = android.graphics.Typeface.create(family, style)
             }
             if (node is android.view.ViewGroup) {
                 for (i in 0 until node.childCount) visit(node.getChildAt(i))
@@ -557,7 +563,7 @@ class MainActivity : Activity() {
     private fun enablePanelLayoutControls(panel: View, key: String) {
         panel.isLongClickable = true
         panel.setOnLongClickListener {
-            val options = arrayOf("Geser ke atas/kiri", "Geser ke bawah/kanan", "Lebih lebar", "Lebih sempit", "Lebih tinggi", "Lebih pendek", "Reset ukuran")
+            val options = arrayOf("Aktifkan geser bebas", "Nonaktifkan geser bebas", "Geser ke atas/kiri", "Geser ke bawah/kanan", "Lebih lebar", "Lebih sempit", "Lebih tinggi", "Lebih pendek", "Reset ukuran")
             AlertDialog.Builder(this)
                 .setTitle("Atur panel")
                 .setItems(options) { _, selected ->
@@ -565,27 +571,30 @@ class MainActivity : Activity() {
                     val index = parent.indexOfChild(panel)
                     when (selected) {
                         0, 1 -> {
-                            val target = if (selected == 0) index - 1 else index + 1
+                            enableFreePanelDrag(panel, key, selected == 0)
+                        }
+                        2, 3 -> {
+                            val target = if (selected == 2) index - 1 else index + 1
                             if (target in 0 until parent.childCount) {
                                 val lp = panel.layoutParams
                                 parent.removeView(panel)
                                 parent.addView(panel, target, lp)
                             }
                         }
-                        2, 3, 4, 5 -> {
+                        4, 5, 6, 7 -> {
                             val widthKey = "dashboard_panel_width_$key"
                             val heightKey = "dashboard_panel_height_$key"
                             val lp = panel.layoutParams as? LinearLayout.LayoutParams ?: return@setItems
                             val currentWidth = if (lp.width > 0) lp.width else dp(210)
                             val currentHeight = if (lp.height > 0) lp.height else dp(125)
                             val newWidth = when (selected) {
-                                2 -> (currentWidth + dp(24)).coerceAtMost(dp(700))
-                                3 -> (currentWidth - dp(24)).coerceAtLeast(dp(110))
+                                4 -> (currentWidth + dp(24)).coerceAtMost(dp(700))
+                                5 -> (currentWidth - dp(24)).coerceAtLeast(dp(110))
                                 else -> currentWidth
                             }
                             val newHeight = when (selected) {
-                                4 -> (currentHeight + dp(20)).coerceAtMost(dp(520))
-                                5 -> (currentHeight - dp(20)).coerceAtLeast(dp(70))
+                                6 -> (currentHeight + dp(20)).coerceAtMost(dp(520))
+                                7 -> (currentHeight - dp(20)).coerceAtLeast(dp(70))
                                 else -> currentHeight
                             }
                             preferences.edit().putInt(widthKey, newWidth).putInt(heightKey, newHeight).apply()
@@ -594,7 +603,7 @@ class MainActivity : Activity() {
                             lp.weight = 0f
                             panel.layoutParams = lp
                         }
-                        6 -> {
+                        8 -> {
                             preferences.edit().remove("dashboard_panel_width_$key").remove("dashboard_panel_height_$key").apply()
                             buildScreen()
                         }
@@ -1507,7 +1516,7 @@ class MainActivity : Activity() {
 
     private fun chooseFontSettings() {
         val families = arrayOf(
-            "System default" to "sans-serif",
+            "Roboto" to "sans-serif",
             "Roboto" to "sans-serif",
             "Roboto Condensed" to "sans-serif-condensed",
             "Serif" to "serif",
@@ -1687,10 +1696,13 @@ class MainActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
-    private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(if (isDarkTheme) Color.argb(158, 42, 55, 77) else Color.argb(172, 255, 255, 255))
+    private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        if (isDarkTheme) intArrayOf(Color.argb(188, 75, 91, 119), Color.argb(145, 27, 38, 57))
+        else intArrayOf(Color.argb(224, 255, 255, 255), Color.argb(178, 225, 236, 251))
+    ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(115, 220, 233, 255) else Color.argb(170, 255, 255, 255))
+        setStroke(dp(1), if (isDarkTheme) Color.argb(125, 220, 233, 255) else Color.argb(185, 255, 255, 255))
     }
 
     private fun hiddenPackages(): MutableSet<String> =
