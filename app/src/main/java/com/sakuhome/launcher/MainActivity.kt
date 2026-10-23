@@ -449,7 +449,7 @@ class MainActivity : Activity() {
                             val x = (event.x - size / 2f).coerceIn(0f, (canvas.width - size).coerceAtLeast(0).toFloat())
                             val y = (event.y - size / 2f).coerceIn(0f, (canvas.height - size).coerceAtLeast(0).toFloat())
                             val positions = freeIconPositions()
-                            positions[pkg] = (if (canvas.width > 0) x / canvas.width else 0.5f).toString() + "," + (if (canvas.height > 0) y / canvas.height else 0.5f).toString()
+                            positions[pkg!!] = (if (canvas.width > 0) x / canvas.width else 0.5f).toString() + "," + (if (canvas.height > 0) y / canvas.height else 0.5f).toString()
                             saveFreeIconPositions(positions)
                             if (!homePackages().contains(pkg)) { val order = homePackages(); order.add(pkg!!); saveHomePackages(order) }
                             renderFreeIcons()
