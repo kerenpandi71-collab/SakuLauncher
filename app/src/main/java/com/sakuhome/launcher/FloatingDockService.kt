@@ -356,6 +356,7 @@ class FloatingDockService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.CENTER; x = 0; y = 0 }
+        applySfStyleTypography(panel)
         try { windowManager.addView(panel, p); settingsOverlayView = panel }
         catch (e: Exception) { android.util.Log.e("SakuDock", "Settings overlay failed", e) }
     }
@@ -397,6 +398,7 @@ class FloatingDockService : Service() {
             x = (resources.displayMetrics.widthPixels - dp(160)).coerceAtLeast(0)
             y = (resources.displayMetrics.heightPixels / 2).coerceIn(0, (resources.displayMetrics.heightPixels - dp(80)).coerceAtLeast(0))
         }
+        applySfStyleTypography(panel)
         try { windowManager.addView(panel, p); navigationOverlayView = panel }
         catch (e: Exception) { android.util.Log.e("SakuDock", "Navigation overlay failed", e) }
     }
@@ -549,6 +551,7 @@ class FloatingDockService : Service() {
             x = prefs.getInt(KEY_START_X, dp(14)).coerceIn(0, (resources.displayMetrics.widthPixels - width).coerceAtLeast(0))
             y = prefs.getInt(KEY_START_Y, dp(100)).coerceIn(0, (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0))
         }
+        applySfStyleTypography(outer)
         try {
             windowManager.addView(outer, params)
             startOverlayView = outer
@@ -702,6 +705,26 @@ class FloatingDockService : Service() {
             try { windowManager.removeView(view) } catch (_: Exception) { }
         }
         homeButtonView = null
+    }
+
+    private fun applySfStyleTypography(root: View) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val size = prefs.getInt("app_font_size_sp", 14).coerceIn(10, 24).toFloat()
+        fun visit(view: View) {
+            if (view is TextView && view.tag != "saku_big_clock") {
+                val originalSp = view.textSize / resources.displayMetrics.scaledDensity
+                val scale = (originalSp / 14f).coerceIn(0.65f, 2.2f)
+                view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (size * scale).coerceIn(9f, 36f))
+                val family = android.graphics.Typeface.create("sans-serif", if (view.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                view.typeface = family
+                view.letterSpacing = 0.005f
+                view.includeFontPadding = false
+            }
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            }
+        }
+        visit(root)
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
