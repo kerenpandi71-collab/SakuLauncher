@@ -705,7 +705,22 @@ class FloatingDockService : Service() {
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
-        setColor(color)
+        val prefs = getSharedPreferences("saku_dock_settings", Context.MODE_PRIVATE)
+        val glassEnabled = prefs.getBoolean("liquid_glass_enabled", true)
+        val dark = prefs.getBoolean("dark_theme", true)
+        if (glassEnabled) {
+            colors = if (dark) intArrayOf(
+                Color.argb(120, 45, 55, 75),
+                Color.argb(80, 20, 30, 45)
+            ) else intArrayOf(
+                Color.argb(224, 255, 255, 255),
+                Color.argb(178, 225, 236, 251)
+            )
+            orientation = GradientDrawable.Orientation.TOP_BOTTOM
+            setStroke(dp(1), if (dark) Color.argb(110, 255, 255, 255) else Color.argb(185, 255, 255, 255))
+        } else {
+            setColor(color)
+        }
         cornerRadius = dp(radius).toFloat()
     }
 
