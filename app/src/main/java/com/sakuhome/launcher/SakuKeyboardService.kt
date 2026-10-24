@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.view.Gravity
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -57,7 +58,7 @@ class SakuKeyboardService : InputMethodService() {
             return root
         }
         addRow(root, if (symbols) listOf("1","2","3","4","5","6","7","8","9","0") else "qwertyuiop".map { it.toString() })
-        addRow(root, if (symbols) listOf("@","#","$","%","&","-","+","(",")","/") else "asdfghjkl".map { it.toString() }, sidePadding = 12)
+        addRow(root, if (symbols) listOf("@","#","$","%","&","-","+","(",")","/") else "asdfghjkl".map { it.toString() }, sidePadding = 6)
         val third = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -261,7 +262,7 @@ class SakuKeyboardService : InputMethodService() {
         text = label
         contentDescription = description
         gravity = Gravity.CENTER
-        textSize = if (label == "spasi") 12f else 18f
+        textSize = if (label == "spasi") 13f else 19f
         typeface = Typeface.create("sans-serif", if (special) Typeface.BOLD else Typeface.NORMAL)
         includeFontPadding = false
         setTextColor(if (special) (if (isDark()) Color.WHITE else Color.rgb(31, 37, 48)) else if (isDark()) Color.WHITE else Color.rgb(26, 30, 37))
@@ -331,7 +332,7 @@ class SakuKeyboardService : InputMethodService() {
     }
 
     private fun weighted(weight: Float) = LinearLayout.LayoutParams(0, -1, weight).apply {
-        setMargins(dp(2), dp(1), dp(2), dp(1))
+        setMargins(dp(1), dp(1), dp(1), dp(1))
     }
 
     private fun isDark(): Boolean =
