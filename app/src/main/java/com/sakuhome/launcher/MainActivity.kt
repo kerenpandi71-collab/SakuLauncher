@@ -719,12 +719,15 @@ class MainActivity : Activity() {
         desktopGrid = GridView(this)
         desktopCanvas = FrameLayout(this)
         widgetStrip = LinearLayout(this)
-        startPanel = buildStartPanel().apply {
-            elevation = dp(20).toFloat()
-            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-            visibility = View.GONE
-        }
         if (landscapeLayout) {
+            // Build the landscape panel here only. In portrait, startPanel is already
+            // attached to portraitLeftColumn above; rebuilding it here replaced the
+            // reference and left the visible dashboard panel permanently unreachable.
+            startPanel = buildStartPanel().apply {
+                elevation = dp(20).toFloat()
+                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+                visibility = View.GONE
+            }
             // Preserve the existing landscape App Library placement exactly.
             val screenWidth = rootFrame.width.takeIf { it > 0 }
                 ?: resources.displayMetrics.widthPixels
