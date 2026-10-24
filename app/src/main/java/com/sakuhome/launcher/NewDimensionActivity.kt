@@ -103,8 +103,8 @@ class NewDimensionActivity : Activity() {
         widgetParams.topMargin = dp(22)
         content.addView(widgets, widgetParams)
 
-        // Keep the app grid close to the widgets; avoid the oversized empty gap from the first draft.
-        content.addView(View(this), LinearLayout.LayoutParams(1, dp(22)))
+        // Keep the widgets at the top and anchor apps/dock toward the bottom of the screen.
+        content.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
         val grid = GridLayout(this).apply {
             columnCount = 4
@@ -176,21 +176,22 @@ class NewDimensionActivity : Activity() {
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = pill(Color.argb(150, 225, 235, 255), 38)
         }
-        val dockApps = listOf("com.android.dialer", "com.google.android.apps.messaging", "com.android.chrome", "com.android.camera2")
-        dockApps.forEach { pkg ->
-            val icon = try { pm.getApplicationIcon(pkg) } catch (_: Exception) { null }
+        val dockCandidates = (apps + launchables).distinctBy { it.second }
+            .filter { it.second != packageName }
+            .take(4)
+        dockCandidates.forEach { app ->
             val item = FrameLayout(this).apply {
                 background = pill(Color.argb(220, 247, 249, 255), 25)
                 setPadding(dp(11), dp(11), dp(11), dp(11))
             }
-            if (icon != null) item.addView(ImageView(this).apply {
-                setImageDrawable(icon)
+            item.addView(ImageView(this).apply {
+                setImageDrawable(app.third)
                 scaleType = ImageView.ScaleType.FIT_CENTER
             }, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER))
-            item.setOnClickListener { try { startActivity(pm.getLaunchIntentForPackage(pkg)) } catch (_: Exception) { } }
+            item.setOnClickListener { try { startActivity(pm.getLaunchIntentForPackage(app.second)) } catch (_: Exception) { } }
             val lp = LinearLayout.LayoutParams(0, dp(66), 1f)
-            lp.marginStart = dp(8)
-            lp.marginEnd = dp(8)
+            lp.marginStart = dp(5)
+            lp.marginEnd = dp(5)
             dock.addView(item, lp)
         }
         val dockParams = LinearLayout.LayoutParams(-1, dp(82))
