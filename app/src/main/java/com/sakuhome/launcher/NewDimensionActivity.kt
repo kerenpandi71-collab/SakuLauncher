@@ -182,22 +182,37 @@ class NewDimensionActivity : Activity() {
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = pill(Color.argb(150, 225, 235, 255), 38)
         }
-        val dockCandidates = (apps + launchables).distinctBy { it.second }
-            .filter { it.second != packageName }
-            .take(4)
-        dockCandidates.forEach { app ->
+        val dockPackages = listOf("com.android.dialer", "__APP_DRAWER__", "com.android.chrome", "com.android.settings")
+        dockPackages.forEach { pkg ->
             val item = FrameLayout(this).apply {
                 background = pill(Color.argb(220, 247, 249, 255), 25)
-                setPadding(dp(11), dp(11), dp(11), dp(11))
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                isClickable = true
+                isFocusable = true
             }
-            item.addView(ImageView(this).apply {
-                setImageDrawable(app.third)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER))
-            item.setOnClickListener { try { startActivity(pm.getLaunchIntentForPackage(app.second)) } catch (_: Exception) { } }
+            if (pkg == "__APP_DRAWER__") {
+                item.addView(TextView(this).apply {
+                    text = "⠿"
+                    textSize = 31f
+                    gravity = Gravity.CENTER
+                    setTextColor(blue)
+                }, FrameLayout.LayoutParams(-1, -1))
+                item.contentDescription = "Buka semua aplikasi"
+                item.setOnClickListener { showAppDrawer() }
+            } else {
+                val icon = try { pm.getApplicationIcon(pkg) } catch (_: Exception) { null }
+                if (icon != null) item.addView(ImageView(this).apply {
+                    setImageDrawable(icon)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }, FrameLayout.LayoutParams(-1, -1))
+                item.contentDescription = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+                item.setOnClickListener {
+                    try { startActivity(pm.getLaunchIntentForPackage(pkg)) } catch (_: Exception) { }
+                }
+            }
             val lp = LinearLayout.LayoutParams(0, dp(66), 1f)
             lp.marginStart = dp(5)
             lp.marginEnd = dp(5)
