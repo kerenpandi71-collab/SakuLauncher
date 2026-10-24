@@ -12,6 +12,10 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.EditText
+import android.text.TextWatcher
+import android.text.Editable
+import android.view.inputmethod.InputMethodManager
 
 /**
  * Saku Keyboard: lightweight native IME with a soft, iOS-inspired key layout.
@@ -21,6 +25,10 @@ class SakuKeyboardService : InputMethodService() {
     private var shifted = false
     private var symbols = false
     private var keyboardRoot: LinearLayout? = null
+    private var emojiMode = false
+    private var emojiCategory = 0
+    private var emojiSearch = ""
+    private var emojiSearchField: EditText? = null
 
     override fun onCreateInputView(): View {
         return buildKeyboard().also { keyboardRoot = it }
@@ -29,6 +37,7 @@ class SakuKeyboardService : InputMethodService() {
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         symbols = false
+        emojiMode = false
         shifted = attribute?.let {
             it.inputType and android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS != 0 ||
                 it.inputType and android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES != 0
@@ -44,6 +53,10 @@ class SakuKeyboardService : InputMethodService() {
             setBackgroundColor(if (isDark()) Color.rgb(34, 36, 41) else Color.rgb(218, 222, 229))
         }
         keyboardRoot = root
+        if (emojiMode) {
+            buildEmojiPicker(root)
+            return root
+        }
         addRow(root, if (symbols) listOf("1","2","3","4","5","6","7","8","9","0") else "qwertyuiop".map { it.toString() })
         addRow(root, if (symbols) listOf("@","#","$","%","&","-","+","(",")","/") else "asdfghjkl".map { it.toString() }, sidePadding = 12)
         val third = LinearLayout(this).apply {
@@ -75,7 +88,7 @@ class SakuKeyboardService : InputMethodService() {
             refreshKeyboard()
         }, weighted(1.45f))
         bottom.addView(key(",", special = true) { commit(",") }, weighted(0.8f))
-        bottom.addView(key("😊", special = true) { commit("😊") }, weighted(0.8f))
+        bottom.addView(key("😊", special = true, description = "Buka panel emoji") { emojiMode = true; emojiCategory = 0; emojiSearch = ""; refreshKeyboard() }, weighted(0.8f))
         bottom.addView(key("spasi", special = true, description = "Spasi") { commit(" ") }, weighted(4.2f))
         bottom.addView(key(".", special = true) { commit(".") }, weighted(0.8f))
         bottom.addView(key(actionLabel(), special = true, description = "Aksi berikutnya") {
@@ -83,6 +96,160 @@ class SakuKeyboardService : InputMethodService() {
         }, weighted(1.35f))
         root.addView(bottom, rowParams())
         return root
+    }
+
+
+    private data class EmojiGroup(val title: String, val icon: String, val values: List<String>)
+
+    private val emojiGroups = listOf(
+        EmojiGroup("Sering", "🕘", listOf("😂","❤️","🥹","😭","😍","🙏","😊","🤣","✨","🔥","👍","🥰","😘","😎","💕","🎉","🤔","😅","🙌","💯","👏","🤗","😴","💖")),
+        EmojiGroup("Wajah", "😀", listOf("😀","😃","😄","😁","😆","😅","😂","🤣","🥲","🥹","☺️","😊","😇","🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🫢","🫣","🤫","🤔","🫡","🤐","🤨","😐","😑","😶","🫥","😏","😒","🙄","😬","😮‍💨","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🥳","🥸","😎","🤓","🧐","😕","🫤","😟","🙁","☹️","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻","👽","👾","🤖","🎃")),
+        EmojiGroup("Orang", "👋", listOf("👋","🤚","🖐️","✋","🖖","🫱","🫲","🫳","🫴","👌","🤌","🤏","✌️","🤞","🫰","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","🫶","🤲","🙏","✍️","💅","🤳","💪","🦾","🦿","🦵","🦶","👂","🦻","👃","🧠","🫀","🫁","🦷","🦴","👀","👁️","👅","👄","🫦","👶","🧒","👦","👧","🧑","👨","👩","🧔","👱","👴","👵","🙍","🙎","🙅","🙆","💁","🙋","🧏","🙇","🤦","🤷","👮","🕵️","💂","🥷","👷","🫅","🤴","👸","👳","👲","🧕","🤵","👰","🤰","🫃","🫄","🤱","👼","🎅","🤶","🧑‍🎄","🦸","🦹","🧙","🧚","🧛","🧜","🧝","🧞","🧟","💆","💇","🚶","🧍","🧎","🏃","💃","🕺","🕴️","👯","🧖","🧗","🤺","🏇","⛷️","🏂","🏌️","🏄","🚣","🏊","⛹️","🏋️","🚴","🚵","🤸","🤼","🤽","🤾","🤹","🧘","🛀","🛌")),
+        EmojiGroup("Hewan", "🐻", listOf("🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐻‍❄️","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🙈","🙉","🙊","🐒","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🪱","🐛","🦋","🐌","🐞","🐜","🪰","🪲","🪳","🦟","🦗","🕷️","🦂","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬","🐳","🐋","🦈","🦭","🐊","🐅","🐆","🦓","🦍","🦧","🐘","🦛","🦏","🐪","🐫","🦒","🦘","🦬","🐃","🐂","🐄","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕","🐩","🦮","🐈","🐈‍⬛","🪶","🐓","🦃","🦚","🦜","🦢","🦩","🕊️","🐇","🦝","🦨","🦡","🦫","🦦","🦥","🐁","🐀","🐿️","🦔")),
+        EmojiGroup("Makanan", "🍕", listOf("🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🥦","🥬","🥒","🌶️","🫑","🌽","🥕","🫒","🧄","🧅","🥔","🍠","🫚","🥐","🥯","🍞","🥖","🥨","🧀","🥚","🍳","🧈","🥞","🧇","🥓","🥩","🍗","🍖","🌭","🍔","🍟","🍕","🫓","🥪","🥙","🧆","🌮","🌯","🫔","🥗","🥘","🫕","🥫","🍝","🍜","🍲","🍛","🍣","🍱","🥟","🦪","🍤","🍙","🍚","🍘","🍥","🥠","🥮","🍢","🍡","🍧","🍨","🍦","🥧","🧁","🍰","🎂","🍮","🍭","🍬","🍫","🍿","🍩","🍪","🌰","🥜","🫘","🍯","🥛","🍼","☕","🫖","🍵","🧃","🥤","🧋","🍶","🍺","🍻","🥂","🍷","🥃","🍸","🍹","🧉","🍾")),
+        EmojiGroup("Aktivitas", "⚽", listOf("⚽","🏀","🏈","⚾","🥎","🎾","🏐","🏉","🥏","🎱","🪀","🏓","🏸","🏒","🏑","🥍","🏏","🪃","🥅","⛳","🪁","🛝","🏹","🎣","🤿","🥊","🥋","🎽","🛹","🛼","🛷","⛸️","🥌","🎿","⛷️","🏂","🪂","🏋️","🤼","🤸","⛹️","🤺","🏇","🧘","🏄","🏊","🚴","🚵","🎮","🕹️","🎲","♟️","🎯","🎳","🎮","🧩","🎭","🎨","🧵","🪡","🧶","🎼","🎤","🎧","🎹","🥁","🪘","🎷","🎺","🪗","🎸","🪕","🎻","🪈","🎬","🎞️","📸","📷","🎥","📺","📻","🎙️","🎚️","🎛️","🧸","🪅","🎁","🎈","🎉","🎊","🎀","🎗️","🏆","🥇","🥈","🥉","🏅","🎖️","🪄","🪩")),
+        EmojiGroup("Perjalanan", "🚗", listOf("🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚐","🛻","🚚","🚛","🚜","🛵","🏍️","🛺","🚲","🛴","🛹","🛼","🚏","🛣️","🛤️","🛢️","⛽","🚨","🚥","🚦","🛑","🚧","⚓","🛟","⛵","🛶","🚤","🛳️","⛴️","🛥️","🚢","✈️","🛩️","🛫","🛬","🪂","💺","🚁","🚟","🚠","🚡","🛰️","🚀","🛸","🌍","🌎","🌏","🌐","🗺️","🗾","🧭","🏔️","⛰️","🌋","🗻","🏕️","🏖️","🏜️","🏝️","🏞️","🏟️","🏛️","🏗️","🧱","🪨","🪵","🛖","🏘️","🏚️","🏠","🏡","🏢","🏣","🏤","🏥","🏦","🏨","🏩","🏪","🏫","🏬","🏭","🏯","🏰","💒","🗼","🗽","⛪","🕌","🛕","🕍","⛩️","🕋","⛲","⛺","🌁","🌃","🌄","🌅","🌆","🌇","🌉","♨️","🎠","🛝","🎡","🎢","💈")),
+        EmojiGroup("Simbol", "💖", listOf("❤️","🩷","🧡","💛","💚","💙","🩵","💜","🤎","🖤","🩶","🤍","💔","❤️‍🔥","❤️‍🩹","❣️","💕","💞","💓","💗","💖","💘","💝","💟","☮️","✝️","☪️","🕉️","☸️","✡️","🔯","🕎","☯️","☦️","🛐","⛎","♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓","🆔","⚛️","🉑","☢️","☣️","📴","📳","🈶","🈚","🈸","🈺","🈷️","✴️","🆚","💮","🉐","㊙️","㊗️","🈴","🈵","🈹","🈲","🅰️","🅱️","🆎","🅾️","🆑","🅿️","🆘","❌","⭕","🚫","💯","💢","♨️","🚷","🚯","🚳","🚱","🔞","📵","🚭","❗","❕","❓","❔","‼️","⁉️","🔅","🔆","〽️","⚠️","🚸","🔱","⚜️","🔰","♻️","✅","❎","🌐","💠","Ⓜ️","🌀","💤","🏧","🚾","♿","🅿️","🛗","🈳","🈂️","🛂","🛃","🛄","🛅")),
+        EmojiGroup("Bendera", "🏳️", listOf("🏳️","🏴","🏁","🚩","🎌","🏴‍☠️","🇮🇩","🇺🇸","🇬🇧","🇯🇵","🇰🇷","🇨🇳","🇸🇬","🇲🇾","🇹🇭","🇵🇭","🇻🇳","🇦🇺","🇨🇦","🇫🇷","🇩🇪","🇮🇹","🇪🇸","🇧🇷","🇮🇳","🇵🇰","🇸🇦","🇹🇷","🇷🇺","🇺🇦","🇳🇿","🇿🇦"))
+    )
+
+    private fun buildEmojiPicker(root: LinearLayout) {
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(key("ABC", special = true, description = "Kembali ke huruf") {
+            emojiMode = false
+            refreshKeyboard()
+        }, LinearLayout.LayoutParams(dp(58), dp(42)))
+        val search = EditText(this).apply {
+            hint = "Cari emoji"
+            textSize = 15f
+            singleLine = true
+            setTextColor(if (isDark()) Color.WHITE else Color.BLACK)
+            setHintTextColor(if (isDark()) Color.LTGRAY else Color.DKGRAY)
+            setBackground(GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(if (isDark()) Color.rgb(65, 68, 76) else Color.WHITE)
+            })
+            setPadding(dp(12), 0, dp(8), 0)
+            setText(emojiSearch)
+        }
+        emojiSearchField = search
+        top.addView(search, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(6), 0, dp(6), 0) })
+        top.addView(key("⌫", special = true, description = "Hapus karakter") {
+            currentInputConnection?.deleteSurroundingText(1, 0)
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        root.addView(top, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(5) })
+
+        val categories = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        emojiGroups.forEachIndexed { index, group ->
+            categories.addView(key(group.icon, special = true, description = group.title) {
+                emojiCategory = index
+                emojiSearch = ""
+                refreshKeyboard()
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(1), 0, dp(1), 0) })
+        }
+        root.addView(categories, LinearLayout.LayoutParams(-1, dp(40)).apply { bottomMargin = dp(5) })
+
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 8
+            alignmentMode = android.widget.GridLayout.ALIGN_BOUNDS
+            useDefaultMargins = false
+        }
+        val query = emojiSearch.trim()
+        val source = if (query.isNotEmpty()) emojiGroups.flatMap { it.values }.distinct() else emojiGroups[emojiCategory].values
+        val shown = if (query.isNotEmpty()) {
+            val words = mapOf(
+                "senyum" to listOf("😊","😄","😁","🙂","🥰"),
+                "sedih" to listOf("😢","😭","🥹","☹️"),
+                "ketawa" to listOf("😂","🤣","😆","😅"),
+                "cinta" to listOf("❤️","😍","🥰","😘","💕","💖"),
+                "hati" to listOf("❤️","🩷","🧡","💛","💚","💙","💜","🖤","🤍"),
+                "marah" to listOf("😠","😡","🤬","💢"),
+                "makan" to listOf("🍚","🍜","🍕","🍔","🍟","🍎"),
+                "kucing" to listOf("🐱","😺","😸","😹","😻","😼","😽","🙀","😿","😾"),
+                "anjing" to listOf("🐶","🐕","🐩","🦮","🐕‍🦺"),
+                "lucu" to listOf("🥹","🥰","😂","🐱","🐼","✨"),
+                "api" to listOf("🔥","❤️‍🔥"),
+                "terima kasih" to listOf("🙏","🥹","❤️")
+            )
+            words.entries.firstOrNull { query.contains(it.key) }?.value ?: source
+        } else source
+        val filtered = shown.distinct().take(160)
+        filtered.forEach { emoji ->
+            val cell = TextView(this).apply {
+                text = emoji
+                textSize = 27f
+                gravity = Gravity.CENTER
+                contentDescription = "Emoji $emoji"
+                setOnClickListener {
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+                    currentInputConnection?.commitText(emoji, 1)
+                }
+            }
+            grid.addView(cell, android.widget.GridLayout.LayoutParams().apply {
+                width = 0
+                height = dp(43)
+                columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                setMargins(dp(1), dp(1), dp(1), dp(1))
+            })
+        }
+        val scroller = android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            addView(grid, android.widget.ScrollView.LayoutParams(-1, -2))
+        }
+        root.addView(scroller, LinearLayout.LayoutParams(-1, 0, 1f))
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                emojiSearch = s?.toString().orEmpty()
+                // Rebuild the grid while keeping the search field focus and keyboard visible.
+                val text = emojiSearch
+                val newSource = if (text.isBlank()) emojiGroups[emojiCategory].values else emojiGroups.flatMap { it.values }.distinct()
+                val newShown = if (text.isBlank()) newSource else {
+                    val matches = mapOf(
+                        "senyum" to listOf("😊","😄","😁","🙂","🥰"),
+                        "sedih" to listOf("😢","😭","🥹","☹️"),
+                        "ketawa" to listOf("😂","🤣","😆","😅"),
+                        "cinta" to listOf("❤️","😍","🥰","😘","💕","💖"),
+                        "hati" to listOf("❤️","🩷","🧡","💛","💚","💙","💜","🖤","🤍"),
+                        "marah" to listOf("😠","😡","🤬","💢"),
+                        "makan" to listOf("🍚","🍜","🍕","🍔","🍟","🍎"),
+                        "kucing" to listOf("🐱","😺","😸","😹","😻","😼","😽","🙀","😿","😾"),
+                        "anjing" to listOf("🐶","🐕","🐩","🦮","🐕‍🦺"),
+                        "lucu" to listOf("🥹","🥰","😂","🐱","🐼","✨"),
+                        "api" to listOf("🔥","❤️‍🔥"),
+                        "terima kasih" to listOf("🙏","🥹","❤️")
+                    )
+                    matches.entries.firstOrNull { text.contains(it.key) }?.value ?: newSource
+                }
+                val filtered = newShown.distinct().take(160)
+                grid.removeAllViews()
+                filtered.forEach { emoji ->
+                    val cell = TextView(this@SakuKeyboardService).apply {
+                        text = emoji
+                        textSize = 27f
+                        gravity = Gravity.CENTER
+                        contentDescription = "Emoji $emoji"
+                        setOnClickListener {
+                            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+                            currentInputConnection?.commitText(emoji, 1)
+                        }
+                    }
+                    grid.addView(cell, android.widget.GridLayout.LayoutParams().apply {
+                        width = 0
+                        height = dp(43)
+                        columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                        setMargins(dp(1), dp(1), dp(1), dp(1))
+                    })
+                }
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
     }
 
     private fun addRow(root: LinearLayout, labels: List<String>, sidePadding: Int = 0) {
