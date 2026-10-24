@@ -226,7 +226,7 @@ class SakuKeyboardService : InputMethodService() {
                 grid.removeAllViews()
                 filtered.forEach { emoji ->
                     val cell = TextView(this@SakuKeyboardService).apply {
-                        text = emoji
+                        setText(emoji)
                         textSize = 27f
                         gravity = Gravity.CENTER
                         contentDescription = "Emoji $emoji"
