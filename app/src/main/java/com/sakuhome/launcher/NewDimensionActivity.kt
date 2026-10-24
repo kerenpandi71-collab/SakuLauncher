@@ -35,9 +35,10 @@ class NewDimensionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        window.statusBarColor = Color.rgb(112, 151, 237)
-        window.navigationBarColor = Color.rgb(70, 112, 204)
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        window.navigationBarColor = Color.rgb(53, 91, 177)
+        // Hide the system status bar completely: no clock, battery, signal or notification indicators.
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         buildDimension()
     }
 
@@ -49,18 +50,9 @@ class NewDimensionActivity : Activity() {
         )
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(8), dp(22), dp(12))
+            setPadding(dp(22), dp(18), dp(22), dp(12))
         }
         root.addView(content, FrameLayout.LayoutParams(-1, -1))
-
-        val topBar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            orientation = LinearLayout.HORIZONTAL
-        }
-        val time = text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()), 15f, Color.WHITE, true)
-        topBar.addView(time, LinearLayout.LayoutParams(0, dp(36), 1f))
-        topBar.addView(text("◆  ▰ 100%", 14f, Color.WHITE, true))
-        content.addView(topBar)
 
         val search = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -74,7 +66,7 @@ class NewDimensionActivity : Activity() {
         search.addView(text("Telusuri", 16f, mutedInk, false), LinearLayout.LayoutParams(0, dp(54), 1f))
         search.addView(text("🎙   ◉", 20f, blue, true))
         val searchParams = LinearLayout.LayoutParams(-1, dp(58))
-        searchParams.topMargin = dp(22)
+        searchParams.topMargin = dp(4)
         content.addView(search, searchParams)
         search.setOnClickListener {
             try {
@@ -108,11 +100,11 @@ class NewDimensionActivity : Activity() {
         weatherParams.leftMargin = dp(12)
         widgets.addView(weatherCard, weatherParams)
         val widgetParams = LinearLayout.LayoutParams(-1, dp(130))
-        widgetParams.topMargin = dp(34)
+        widgetParams.topMargin = dp(22)
         content.addView(widgets, widgetParams)
 
-        // Deliberate open space mirrors the reference composition and keeps the home uncluttered.
-        content.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        // Keep the app grid close to the widgets; avoid the oversized empty gap from the first draft.
+        content.addView(View(this), LinearLayout.LayoutParams(1, dp(22)))
 
         val grid = GridLayout(this).apply {
             columnCount = 4
@@ -201,8 +193,8 @@ class NewDimensionActivity : Activity() {
             lp.marginEnd = dp(8)
             dock.addView(item, lp)
         }
-        val dockParams = LinearLayout.LayoutParams(-1, dp(86))
-        dockParams.topMargin = dp(8)
+        val dockParams = LinearLayout.LayoutParams(-1, dp(82))
+        dockParams.topMargin = dp(4)
         content.addView(dock, dockParams)
         setContentView(root)
     }
