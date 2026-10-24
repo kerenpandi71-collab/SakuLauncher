@@ -2317,11 +2317,23 @@ class MainActivity : Activity() {
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        if (isDarkTheme) intArrayOf(Color.argb(188, 75, 91, 119), Color.argb(145, 27, 38, 57))
-        else intArrayOf(Color.argb(224, 255, 255, 255), Color.argb(178, 225, 236, 251))
+        if (isDarkTheme) intArrayOf(
+            Color.argb(120, 45, 55, 75),  // Lebih transparan di atas agar wallpaper terlihat
+            Color.argb(80, 20, 30, 45)    // Lebih gelap tipis di bawah
+        )
+        else intArrayOf(
+            Color.argb(224, 255, 255, 255),
+            Color.argb(178, 225, 236, 251)
+        )
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(125, 220, 233, 255) else Color.argb(185, 255, 255, 255))
+        setStroke(
+            dp(1),
+            if (isDarkTheme)
+                Color.argb(90, 255, 255, 255) // Garis tepi putih tipis dan lembut ala pantulan kaca
+            else
+                Color.argb(185, 255, 255, 255)
+        )
     }
 
     private fun hiddenPackages(): MutableSet<String> =
