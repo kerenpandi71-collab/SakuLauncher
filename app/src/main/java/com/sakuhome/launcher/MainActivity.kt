@@ -1690,49 +1690,153 @@ class MainActivity : Activity() {
         val isHome = homePackages().contains(app.packageName)
         val homeAction = if (isHome) "Hapus dari layar utama" else "Tambahkan ke layar utama"
         val dockAction = if (pinnedPackages().contains(app.packageName)) "Lepas dari dock" else "Sematkan ke dock"
-        val options = arrayOf(
-            "Buka sebagai jendela",
-            "Buka layar penuh",
-            homeAction,
-            "Pindah posisi ke kiri",
-            "Pindah posisi ke kanan",
-            "Pindahkan ke layar lain",
-            "Info aplikasi",
-            "Buka di Play Store",
-            "Copot pemasangan",
-            "$dockAction · batas 30 aplikasi"
+        val options = listOf(
+            "▣" to "Buka sebagai jendela",
+            "⛶" to "Buka layar penuh",
+            "⌂" to homeAction,
+            "←" to "Pindah posisi ke kiri",
+            "→" to "Pindah posisi ke kanan",
+            "▤" to "Pindahkan ke layar lain",
+            "ⓘ" to "Info aplikasi",
+            "↗" to "Buka di Play Store",
+            "⊖" to "Copot pemasangan",
+            "◇" to "$dockAction · batas 30 aplikasi"
         )
-        AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
-            when (which) {
-                0 -> launch(app, asFreeform = true)
-                1 -> launch(app, asFreeform = false)
-                2 -> {
-                    val current = homePackages()
-                    if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
-                    saveHomePackages(current)
-                    pinnedAdapter.notifyDataSetChanged()
-                    Toast.makeText(this, if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama", Toast.LENGTH_SHORT).show()
-                }
-                3 -> moveHomeApp(app, -1)
-                4 -> moveHomeApp(app, 1)
-                5 -> {
-                    val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
-                    if (pages.isEmpty()) {
-                        addHomePage()
-                        moveHomeAppToPage(app, homePage)
-                    } else {
-                        AlertDialog.Builder(this).setTitle("Pindahkan ke layar").setItems(pages) { _, selected ->
-                            val target = (0 until homePageCount()).filter { it != homePage }[selected]
-                            moveHomeAppToPage(app, target)
-                        }.setNegativeButton("Batal", null).show()
-                    }
-                }
-                6 -> openAppInfo(app)
-                7 -> openPlayStore(app)
-                8 -> uninstallApp(app)
-                9 -> togglePinned(app)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(12))
+            background = glassSurface(28)
+        }
+        val heading = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(10), dp(8), dp(16))
+        }
+        val appIcon = ImageView(this).apply {
+            setImageDrawable(app.icon)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        heading.addView(appIcon, LinearLayout.LayoutParams(dp(46), dp(46)))
+        val title = TextView(this).apply {
+            text = app.label
+            textSize = 19f
+            setTextColor(primaryText)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            maxLines = 2
+            setPadding(dp(14), 0, 0, 0)
+        }
+        heading.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(heading)
+        options.forEachIndexed { index, option ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = rounded(if (index == 8) Color.argb(34, 255, 70, 70) else Color.argb(24, accent), 18)
+                isClickable = true
+                isFocusable = true
             }
-        }.setNegativeButton("Batal", null).show()
+            val symbol = TextView(this).apply {
+                text = option.first
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(if (index == 8) Color.rgb(255, 105, 105) else accent)
+            }
+            row.addView(symbol, LinearLayout.LayoutParams(dp(34), dp(34)))
+            val label = TextView(this).apply {
+                text = option.second
+                textSize = 14f
+                setTextColor(if (index == 8) Color.rgb(255, 125, 125) else primaryText)
+                setPadding(dp(10), 0, 0, 0)
+            }
+            row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.setOnClickListener {
+                menuDialog.dismiss()
+                when (index) {
+                    0 -> launch(app, asFreeform = true)
+                    1 -> launch(app, asFreeform = false)
+                    2 -> {
+                        val current = homePackages()
+                        if (current.contains(app.packageName)) current.remove(app.packageName) else current.add(app.packageName)
+                        saveHomePackages(current)
+                        pinnedAdapter.notifyDataSetChanged()
+                        showLiquidToast(if (current.contains(app.packageName)) "Ditambahkan ke layar utama" else "Dihapus dari layar utama")
+                    }
+                    3 -> moveHomeApp(app, -1)
+                    4 -> moveHomeApp(app, 1)
+                    5 -> {
+                        val pages = (0 until homePageCount()).filter { it != homePage }.map { "Layar ${it + 1}" }.toTypedArray()
+                        if (pages.isEmpty()) {
+                            addHomePage()
+                            moveHomeAppToPage(app, homePage)
+                        } else {
+                            AlertDialog.Builder(this@MainActivity).setTitle("Pindahkan ke layar").setItems(pages) { _, selected ->
+                                val target = (0 until homePageCount()).filter { it != homePage }[selected]
+                                moveHomeAppToPage(app, target)
+                            }.setNegativeButton("Batal", null).show()
+                        }
+                    }
+                    6 -> openAppInfo(app)
+                    7 -> openPlayStore(app)
+                    8 -> uninstallApp(app)
+                    9 -> togglePinned(app)
+                }
+            }
+            content.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(7)
+            })
+        }
+        val cancel = TextView(this).apply {
+            text = "Batal"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            background = rounded(Color.argb(42, accent), 20)
+            setPadding(dp(16), dp(13), dp(16), dp(13))
+            setOnClickListener { menuDialog.dismiss() }
+        }
+        content.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(4)
+        })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            setPadding(0, 0, 0, 0)
+            addView(content)
+            background = glassSurface(28)
+        }
+        menuDialog = android.app.Dialog(this).apply {
+            window?.setBackgroundDrawableResource(android.R.color.transparent)
+            setContentView(scroll)
+            window?.setBackgroundDrawableResource(android.R.color.transparent)
+            window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt().coerceAtMost(dp(420)), ViewGroup.LayoutParams.WRAP_CONTENT)
+            window?.setDimAmount(0.34f)
+            window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setOnShowListener {
+                window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt().coerceAtMost(dp(420)), ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+        }
+        menuDialog.show()
+    }
+
+    private var menuDialog: android.app.Dialog? = null
+
+    private fun showLiquidToast(message: String) {
+        val toastView = TextView(this).apply {
+            text = message
+            textSize = 14f
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            background = glassSurface(24)
+            elevation = dp(12).toFloat()
+        }
+        android.widget.Toast(this).apply {
+            duration = android.widget.Toast.LENGTH_SHORT
+            view = toastView
+            setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, dp(72))
+            show()
+        }
     }
 
     private fun openAppInfo(app: LaunchableApp) {
