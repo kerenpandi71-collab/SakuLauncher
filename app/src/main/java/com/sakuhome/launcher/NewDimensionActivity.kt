@@ -185,7 +185,8 @@ class NewDimensionActivity : Activity() {
             setPadding(dp(10), dp(8), dp(10), dp(8))
             background = pill(Color.argb(150, 225, 235, 255), 38)
         }
-        val dockPackages = listOf("com.android.dialer", "__APP_DRAWER__", "com.android.chrome", "com.android.settings")
+        // Five evenly weighted dock slots: phone, messages, app drawer, browser and settings.
+        val dockPackages = listOf("PHONE_APP", "MESSAGES_APP", "__APP_DRAWER__", "com.android.chrome", "com.android.settings")
         dockPackages.forEach { pkg ->
             val item = FrameLayout(this).apply {
                 background = pill(Color.argb(220, 247, 249, 255), 25)
@@ -203,14 +204,32 @@ class NewDimensionActivity : Activity() {
                 item.contentDescription = "Buka semua aplikasi"
                 item.setOnClickListener { showAppDrawer() }
             } else {
-                val icon = try { pm.getApplicationIcon(pkg) } catch (_: Exception) { null }
+                val candidates = when (pkg) {
+                    "PHONE_APP" -> listOf("com.google.android.dialer", "com.android.dialer")
+                    "MESSAGES_APP" -> listOf("com.google.android.apps.messaging", "com.android.messaging")
+                    else -> listOf(pkg)
+                }
+                val resolvedPackage = candidates.firstOrNull { candidate ->
+                    try { pm.getApplicationInfo(candidate, 0); true } catch (_: Exception) { false }
+                }
+                val icon = resolvedPackage?.let { candidate ->
+                    try { pm.getApplicationIcon(candidate) } catch (_: Exception) { null }
+                }
                 if (icon != null) item.addView(ImageView(this).apply {
                     setImageDrawable(icon)
                     scaleType = ImageView.ScaleType.FIT_CENTER
                 }, FrameLayout.LayoutParams(-1, -1))
-                item.contentDescription = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+                item.contentDescription = resolvedPackage?.let { candidate ->
+                    try { pm.getApplicationLabel(pm.getApplicationInfo(candidate, 0)).toString() } catch (_: Exception) { candidate }
+                } ?: when (pkg) {
+                    "PHONE_APP" -> "Telepon"
+                    "MESSAGES_APP" -> "Pesan"
+                    else -> pkg
+                }
                 item.setOnClickListener {
-                    try { startActivity(pm.getLaunchIntentForPackage(pkg)) } catch (_: Exception) { }
+                    if (resolvedPackage != null) {
+                        try { startActivity(pm.getLaunchIntentForPackage(resolvedPackage)) } catch (_: Exception) { }
+                    }
                 }
             }
             val lp = LinearLayout.LayoutParams(0, dp(66), 1f)
@@ -258,8 +277,8 @@ class NewDimensionActivity : Activity() {
             background = pill(Color.WHITE, 28)
         }
         val searchParams = LinearLayout.LayoutParams(-1, dp(54))
-        searchParams.topMargin = dp(12)
-        searchParams.bottomMargin = dp(12)
+        searchParams.topMargin = dp(8)
+        searchParams.bottomMargin = dp(16)
         root.addView(search, searchParams)
 
         val scroll = ScrollView(this)
@@ -297,11 +316,13 @@ class NewDimensionActivity : Activity() {
                     setPadding(dp(13), dp(13), dp(13), dp(13))
                 }
                 cell.addView(icon, LinearLayout.LayoutParams(dp(62), dp(62)))
+                // One-line labels prevent long app names from colliding with neighboring rows.
                 cell.addView(text(app.first, 11f, ink, false).apply {
                     gravity = Gravity.CENTER
-                    maxLines = 2
+                    maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(-1, dp(34)))
+                    includeFontPadding = false
+                }, LinearLayout.LayoutParams(-1, dp(24)))
                 cell.setOnClickListener {
                     try { startActivity(packageManager.getLaunchIntentForPackage(app.second)) } catch (_: Exception) { }
                 }
