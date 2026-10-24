@@ -918,8 +918,17 @@ class MainActivity : Activity() {
                 val original = node.textSize / resources.displayMetrics.scaledDensity
                 val scale = (original / 14f).coerceIn(0.65f, 2.2f)
                 node.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (base * scale).coerceIn(9f, 36f))
-                val style = if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                val existingStyle = if (node.typeface?.isBold == true) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                // SF-style: use Android's clean sans family, slightly tightened tracking, and
+                // preserve strong hierarchy for labels that were already bold in the layout.
+                val style = when {
+                    existingStyle == android.graphics.Typeface.BOLD -> android.graphics.Typeface.BOLD
+                    node.textSize / resources.displayMetrics.scaledDensity >= 17f -> android.graphics.Typeface.NORMAL
+                    else -> android.graphics.Typeface.NORMAL
+                }
                 node.typeface = android.graphics.Typeface.create(family, style)
+                node.letterSpacing = if (family == "sans-serif") 0.005f else 0f
+                node.includeFontPadding = false
             }
             if (node is android.view.ViewGroup) {
                 for (i in 0 until node.childCount) visit(node.getChildAt(i))
@@ -2125,7 +2134,7 @@ class MainActivity : Activity() {
 
     private fun chooseFontSettings() {
         val families = arrayOf(
-            "Roboto" to "sans-serif",
+            "SF Style (Rekomendasi)" to "sans-serif",
             "Roboto" to "sans-serif",
             "Roboto Condensed" to "sans-serif-condensed",
             "Serif" to "serif",
