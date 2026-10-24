@@ -29,6 +29,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -92,6 +93,10 @@ class MainActivity : Activity() {
     private var windowSearchQuery = ""
     private var drawerListMode = false
     private var groupAppsByColor = false
+    private var systemFpsText: TextView? = null
+    private var systemFpsFrameCount = 0
+    private var systemFpsWindowStartNanos = 0L
+    private var systemFpsCallback: Choreographer.FrameCallback? = null
     private var homePage = 0
     private var homePageLabel: TextView? = null
     private var pageTransitionInProgress = false
@@ -282,9 +287,11 @@ class MainActivity : Activity() {
             updateClock()
         }
         reconcileOverlay()
+        startSystemFpsMonitor()
     }
 
     override fun onPause() {
+        stopSystemFpsMonitor()
         super.onPause()
         // onPause can run before buildScreen() creates the drawer search field
         // (for example, when Android pauses the launcher during startup).
@@ -294,6 +301,41 @@ class MainActivity : Activity() {
         if (::startSearchField.isInitialized) {
             try { startSearchField.hideKeyboard() } catch (_: Exception) { }
         }
+    }
+
+    private fun startSystemFpsMonitor() {
+        if (systemFpsCallback != null || systemFpsText == null) return
+        systemFpsFrameCount = 0
+        systemFpsWindowStartNanos = 0L
+        val callback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                val target = systemFpsText
+                if (target == null || isFinishing || isDestroyed) {
+                    systemFpsCallback = null
+                    return
+                }
+                if (systemFpsWindowStartNanos == 0L) systemFpsWindowStartNanos = frameTimeNanos
+                systemFpsFrameCount++
+                val elapsed = frameTimeNanos - systemFpsWindowStartNanos
+                if (elapsed >= 1_000_000_000L) {
+                    val fps = (systemFpsFrameCount * 1_000_000_000.0 / elapsed).toInt()
+                    val hz = if (android.os.Build.VERSION.SDK_INT >= 30) display?.refreshRate ?: 60f else windowManager.defaultDisplay.refreshRate
+                    target.text = "FPS launcher ~${fps.coerceAtMost(hz.toInt() + 2)}  ·  Layar ${"%.0f".format(Locale.US, hz)} Hz"
+                    systemFpsFrameCount = 0
+                    systemFpsWindowStartNanos = frameTimeNanos
+                }
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+        systemFpsCallback = callback
+        Choreographer.getInstance().postFrameCallback(callback)
+    }
+
+    private fun stopSystemFpsMonitor() {
+        systemFpsCallback?.let { Choreographer.getInstance().removeFrameCallback(it) }
+        systemFpsCallback = null
+        systemFpsFrameCount = 0
+        systemFpsWindowStartNanos = 0L
     }
 
     private fun buildScreen() {
@@ -529,21 +571,33 @@ class MainActivity : Activity() {
         val memory = android.app.ActivityManager.MemoryInfo().also { activityManager.getMemoryInfo(it) }
         val totalRamGb = memory.totalMem / (1024.0 * 1024.0 * 1024.0)
         val availableRamGb = memory.availMem / (1024.0 * 1024.0 * 1024.0)
-        systemCard.addView(TextView(this).apply {
-            text = "RAM tersedia  %.1f / %.1f GB".format(Locale.US, availableRamGb, totalRamGb)
-            textSize = 13f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
         val totalStorage = stat.totalBytes / (1024.0 * 1024.0 * 1024.0)
         val freeStorage = stat.availableBytes / (1024.0 * 1024.0 * 1024.0)
-        systemCard.addView(TextView(this).apply {
-            text = "Penyimpanan  %.1f / %.1f GB".format(Locale.US, totalStorage - freeStorage, totalStorage)
-            textSize = 13f
-            setTypeface(null, android.graphics.Typeface.BOLD)
+        val batteryIntent = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val batteryLevel = batteryIntent?.getIntExtra("level", -1) ?: -1
+        val batteryScale = batteryIntent?.getIntExtra("scale", 100) ?: 100
+        val batteryPercent = if (batteryLevel >= 0 && batteryScale > 0) batteryLevel * 100 / batteryScale else -1
+        val refreshHz = if (android.os.Build.VERSION.SDK_INT >= 30) display?.refreshRate ?: 60f else windowManager.defaultDisplay.refreshRate
+        fun systemInfoLine(initialText: String): TextView = TextView(this).apply {
+            text = initialText
+            textSize = 10.5f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
             setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+        systemCard.addView(systemInfoLine("RAM tersedia  %.1f / %.1f GB".format(Locale.US, availableRamGb, totalRamGb)),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        systemCard.addView(systemInfoLine("Penyimpanan terpakai  %.1f / %.1f GB".format(Locale.US, totalStorage - freeStorage, totalStorage)),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+        systemFpsText = systemInfoLine("FPS launcher: mengukur…  ·  Layar %.0f Hz".format(Locale.US, refreshHz))
+        systemCard.addView(systemFpsText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+        systemCard.addView(systemInfoLine("Android ${android.os.Build.VERSION.RELEASE}  ·  ${android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "ABI tidak diketahui"}"),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+        val batteryAndUptime = if (batteryPercent >= 0) "Baterai $batteryPercent%" else "Baterai tidak diketahui"
+        val uptimeMinutes = android.os.SystemClock.elapsedRealtime() / 60000L
+        systemCard.addView(systemInfoLine("$batteryAndUptime  ·  Aktif ${uptimeMinutes / 60}j ${uptimeMinutes % 60}m"),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
         topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
