@@ -36,7 +36,6 @@ class NewDimensionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        ThemeManager.setUIStyle(this, ThemeManager.STYLE_AOSP_MATERIAL3)
         window.navigationBarColor = Color.rgb(53, 91, 177)
         // Hide the system status bar completely: no clock, battery, signal or notification indicators.
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
