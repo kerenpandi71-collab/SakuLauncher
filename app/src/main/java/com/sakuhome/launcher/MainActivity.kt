@@ -1814,7 +1814,6 @@ class MainActivity : Activity() {
             window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setOnShowListener {
                 window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt().coerceAtMost(dp(420)), ViewGroup.LayoutParams.WRAP_CONTENT)
-                applyLiquidGlassWindow(window, blurRadiusDp = 22, dimAmount = 0.24f)
             }
         }
         menuDialog?.show()
@@ -2053,7 +2052,6 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92f).toInt().coerceAtMost(dp(620)), (resources.displayMetrics.heightPixels * 0.84f).toInt())
-            applyLiquidGlassWindow(dialog.window, blurRadiusDp = 26, dimAmount = 0.20f)
         }
         dialog.show()
     }
@@ -2317,62 +2315,13 @@ class MainActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
-    /**
-     * Requests real system backdrop blur for dialog windows on Android 12+.
-     * Blur is controlled by Android/ROM and may be disabled by the system; the
-     * translucent neutral glass surfaces remain the lightweight fallback.
-     */
-    private fun applyLiquidGlassWindow(
-        targetWindow: android.view.Window?,
-        blurRadiusDp: Int = 24,
-        dimAmount: Float = 0.22f
-    ) {
-        val target = targetWindow ?: return
-        target.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        target.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        target.setDimAmount(dimAmount)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val params = target.attributes
-            try {
-                if (windowManager.isCrossWindowBlurEnabled) {
-                    target.setBackgroundBlurRadius(dp(blurRadiusDp))
-                    params.setBlurBehindRadius(dp((blurRadiusDp * 0.8f).toInt()))
-                    target.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                } else {
-                    target.setBackgroundBlurRadius(0)
-                    params.setBlurBehindRadius(0)
-                    target.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                }
-            } catch (error: Exception) {
-                // Some vendor builds expose the API but do not support it reliably.
-                target.setBackgroundBlurRadius(0)
-                params.setBlurBehindRadius(0)
-                target.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                android.util.Log.w("SakuLiquidGlass", "System backdrop blur unavailable; using translucent fallback", error)
-            }
-            target.attributes = params
-        }
-    }
-
-    /**
-     * Lightweight neutral glass fallback. Real system blur is requested separately
-     * for dialog windows; these colors avoid the previous blue-black slab appearance.
-     * Text and app icons remain separate, crisp foreground views.
-     */
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (isDarkTheme) intArrayOf(
-            Color.argb(218, 105, 111, 122),
-            Color.argb(208, 67, 72, 82),
-            Color.argb(214, 35, 38, 45)
-        ) else intArrayOf(
-            Color.argb(218, 255, 255, 255),
-            Color.argb(202, 246, 248, 251),
-            Color.argb(194, 225, 230, 238)
-        )
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        if (isDarkTheme) intArrayOf(Color.argb(188, 75, 91, 119), Color.argb(145, 27, 38, 57))
+        else intArrayOf(Color.argb(224, 255, 255, 255), Color.argb(178, 225, 236, 251))
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(150, 245, 247, 252) else Color.argb(205, 255, 255, 255))
+        setStroke(dp(1), if (isDarkTheme) Color.argb(125, 220, 233, 255) else Color.argb(185, 255, 255, 255))
     }
 
     private fun hiddenPackages(): MutableSet<String> =
@@ -2879,31 +2828,9 @@ class MainActivity : Activity() {
      * translucent layered treatment instead of falling back to flat AOSP blocks.
      * Keep a faint tint from the requested color so selected states remain recognizable.
      */
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
-        val radius = dp(radiusDp).toFloat()
-        if (!liquidGlass) return GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = radius
-        }
-        // Keep the selected accent as a subtle colored refraction, not a gray opaque slab.
-        val tint = Color.argb(if (isDarkTheme) 48 else 34, Color.red(color), Color.green(color), Color.blue(color))
-        val top = if (isDarkTheme) Color.rgb(105, 151, 220) else Color.rgb(255, 255, 255)
-        val bottom = if (isDarkTheme) Color.rgb(22, 42, 78) else Color.rgb(218, 237, 255)
-        fun blend(base: Int, overlay: Int): Int {
-            val a = Color.alpha(overlay) / 255f
-            return Color.rgb(
-                (Color.red(base) * (1f - a) + Color.red(overlay) * a).toInt(),
-                (Color.green(base) * (1f - a) + Color.green(overlay) * a).toInt(),
-                (Color.blue(base) * (1f - a) + Color.blue(overlay) * a).toInt()
-            )
-        }
-        return GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(blend(top, tint), blend(bottom, tint))
-        ).apply {
-            cornerRadius = radius
-            setStroke(dp(1), if (isDarkTheme) Color.argb(165, 215, 234, 255) else Color.argb(225, 255, 255, 255))
-        }
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(radiusDp).toFloat()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
