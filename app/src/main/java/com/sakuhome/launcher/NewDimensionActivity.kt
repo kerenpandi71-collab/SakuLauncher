@@ -1,6 +1,7 @@
 package com.sakuhome.launcher
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -35,6 +36,7 @@ class NewDimensionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        ThemeManager.setUIStyle(this, ThemeManager.STYLE_AOSP_MATERIAL3)
         window.navigationBarColor = Color.rgb(53, 91, 177)
         // Hide the system status bar completely: no clock, battery, signal or notification indicators.
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -64,7 +66,15 @@ class NewDimensionActivity : Activity() {
         }
         search.addView(text("G", 32f, Color.rgb(66, 133, 244), true), LinearLayout.LayoutParams(dp(45), dp(54)))
         search.addView(text("Telusuri", 16f, mutedInk, false), LinearLayout.LayoutParams(0, dp(54), 1f))
-        search.addView(text("🎙   ◉", 20f, blue, true))
+        search.addView(text("🎙", 19f, blue, true))
+        val styleButton = text("⋮", 25f, blue, true).apply {
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(10), 0, dp(2), 0)
+            setOnClickListener { showDimensionStyleChooser() }
+        }
+        search.addView(styleButton, LinearLayout.LayoutParams(dp(28), dp(54)))
         val searchParams = LinearLayout.LayoutParams(-1, dp(58))
         searchParams.topMargin = dp(4)
         content.addView(search, searchParams)
@@ -198,6 +208,23 @@ class NewDimensionActivity : Activity() {
         dockParams.topMargin = dp(4)
         content.addView(dock, dockParams)
         setContentView(root)
+    }
+
+    private fun showDimensionStyleChooser() {
+        val styles = arrayOf("AOSP Material 3 · New Dimension", "SakuLauncher · Gaya utama")
+        AlertDialog.Builder(this)
+            .setTitle("Gaya antarmuka")
+            .setSingleChoiceItems(styles, ThemeManager.getUIStyle(this)) { dialog, which ->
+                ThemeManager.setUIStyle(this, which)
+                dialog.dismiss()
+                if (which == ThemeManager.STYLE_SAKU) {
+                    finish()
+                } else {
+                    buildDimension()
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     private fun text(value: String, size: Float, color: Int, medium: Boolean): TextView =
