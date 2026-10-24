@@ -8,6 +8,8 @@ import android.view.Gravity
 import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
+import android.view.MotionEvent
+import android.widget.PopupWindow
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
@@ -29,6 +31,7 @@ class SakuKeyboardService : InputMethodService() {
     private var emojiCategory = 0
     private var emojiSearch = ""
     private var emojiSearchField: EditText? = null
+    private var activeKeyPreview: PopupWindow? = null
 
     override fun onCreateInputView(): View {
         return buildKeyboard().also { keyboardRoot = it }
@@ -190,7 +193,7 @@ class SakuKeyboardService : InputMethodService() {
                             currentInputConnection?.commitText(emoji, 1)
                 }
             }
-            grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
+            grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(2), dp(1), dp(2), dp(1)) })
         }
         val scroller = android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -279,10 +282,59 @@ class SakuKeyboardService : InputMethodService() {
         }
         isFocusable = true
         isClickable = true
-        setOnClickListener {
-            action()
+        setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.alpha = 0.82f
+                    if (!special && label.length == 1 && label[0].isLetter()) {
+                        showKeyPreview(view, label)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.alpha = 1f
+                    dismissKeyPreview()
+                }
+            }
+            false
         }
+        setOnClickListener { action() }
         setPadding(dp(1), 0, dp(1), 0)
+    }
+
+    private fun showKeyPreview(anchor: View, value: String) {
+        dismissKeyPreview()
+        val preview = TextView(this).apply {
+            text = value
+            gravity = Gravity.CENTER
+            textSize = 30f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(if (isDark()) Color.WHITE else Color.rgb(26, 30, 37))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(13).toFloat()
+                setColor(if (isDark()) Color.rgb(76, 80, 89) else Color.WHITE)
+                setStroke(dp(1), if (isDark()) Color.rgb(110, 115, 126) else Color.rgb(185, 191, 201))
+            }
+            elevation = dp(6).toFloat()
+        }
+        val popup = PopupWindow(preview, dp(52), dp(54), false).apply {
+            isTouchable = false
+            isFocusable = false
+            isOutsideTouchable = false
+            elevation = dp(6).toFloat()
+        }
+        activeKeyPreview = popup
+        try {
+            popup.showAsDropDown(anchor, 0, -anchor.height - dp(56))
+        } catch (_: Exception) {
+            activeKeyPreview = null
+            popup.dismiss()
+        }
+    }
+
+    private fun dismissKeyPreview() {
+        activeKeyPreview?.dismiss()
+        activeKeyPreview = null
     }
 
     private fun commit(value: String) {
