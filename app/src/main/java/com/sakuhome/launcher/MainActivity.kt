@@ -2317,11 +2317,18 @@ class MainActivity : Activity() {
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        if (isDarkTheme) intArrayOf(Color.argb(202, 104, 121, 150), Color.argb(156, 25, 36, 55))
-        else intArrayOf(Color.argb(235, 255, 255, 255), Color.argb(190, 218, 232, 250))
+        if (isDarkTheme) intArrayOf(
+            Color.argb(238, 65, 111, 190),
+            Color.argb(224, 28, 58, 112),
+            Color.argb(218, 12, 25, 54)
+        ) else intArrayOf(
+            Color.argb(246, 255, 255, 255),
+            Color.argb(232, 224, 242, 255),
+            Color.argb(222, 190, 224, 255)
+        )
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(145, 229, 240, 255) else Color.argb(215, 255, 255, 255))
+        setStroke(dp(1), if (isDarkTheme) Color.argb(205, 190, 222, 255) else Color.argb(235, 255, 255, 255))
     }
 
     private fun hiddenPackages(): MutableSet<String> =
@@ -2834,9 +2841,9 @@ class MainActivity : Activity() {
             setColor(color)
             cornerRadius = radius
         }
-        val tint = Color.argb(if (isDarkTheme) 44 else 30, Color.red(color), Color.green(color), Color.blue(color))
-        val top = if (isDarkTheme) Color.rgb(87, 103, 130) else Color.rgb(255, 255, 255)
-        val bottom = if (isDarkTheme) Color.rgb(31, 43, 63) else Color.rgb(224, 235, 249)
+        val tint = Color.argb(if (isDarkTheme) 66 else 48, Color.red(color), Color.green(color), Color.blue(color))
+        val top = if (isDarkTheme) Color.rgb(76, 126, 205) else Color.rgb(255, 255, 255)
+        val bottom = if (isDarkTheme) Color.rgb(17, 34, 75) else Color.rgb(198, 226, 255)
         fun blend(base: Int, overlay: Int): Int {
             val a = Color.alpha(overlay) / 255f
             return Color.rgb(
@@ -2850,7 +2857,7 @@ class MainActivity : Activity() {
             intArrayOf(blend(top, tint), blend(bottom, tint))
         ).apply {
             cornerRadius = radius
-            setStroke(dp(1), if (isDarkTheme) Color.argb(105, 225, 237, 255) else Color.argb(190, 255, 255, 255))
+            setStroke(dp(1), if (isDarkTheme) Color.argb(190, 190, 222, 255) else Color.argb(240, 255, 255, 255))
         }
     }
 
