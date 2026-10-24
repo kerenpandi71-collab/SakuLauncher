@@ -1974,6 +1974,7 @@ class MainActivity : Activity() {
             "▣  Display Extend · Virtual Display",
             "▰  Status bar Android · $hideStatusBarState",
             "↔  Orientasi layar · ${if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false)) "Landscape" else "Ikuti sistem"}",
+            "✦  New Dimension · AOSP Material 3",
         )
 
         val backgroundColor = if (isDarkTheme) Color.rgb(22, 25, 34) else Color.rgb(242, 245, 251)
@@ -2005,7 +2006,8 @@ class MainActivity : Activity() {
             "APLIKASI & WIDGET" to (5..9),
             "GAYA PERSONAL" to (10..14),
             "TATA LETAK" to (15..19),
-            "SISTEM & DISPLAY" to (20..23)
+            "SISTEM & DISPLAY" to (20..23),
+            "DIMENSI TAMBAHAN" to (23..23)
         )
         lateinit var dialog: AlertDialog
         sections.forEach { (heading, indices) ->
@@ -2129,6 +2131,7 @@ class MainActivity : Activity() {
                     else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 recreate()
             }
+            23 -> startActivity(Intent(this, NewDimensionActivity::class.java))
         }
     }
 
