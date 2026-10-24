@@ -504,8 +504,8 @@ class MainActivity : Activity() {
         topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
-        installPortraitResize(weatherCard, "cuaca", 100, 76, 220)
-        installPortraitResize(systemCard, "sistem", 130, 100, 240)
+        installPortraitResize(weatherCard, "cuaca", 140, 125, 240)
+        installPortraitResize(systemCard, "sistem", 155, 138, 260)
 
         val shortcuts = card("▦  Pintasan")
         enablePanelDragging(shortcuts, "shortcuts")
@@ -539,7 +539,7 @@ class MainActivity : Activity() {
         // In landscape, stack shortcuts in the right-side column instead of squeezing them
         // between the clock and system cards.
         rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        installPortraitResize(shortcuts, "pintasan", 170, 120, 280)
+        installPortraitResize(shortcuts, "pintasan", 190, 175, 320)
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
@@ -565,7 +565,7 @@ class MainActivity : Activity() {
         // Keep quick notes visible in both orientations; the landscape column can scroll
         // vertically with its parent content rather than clipping the card.
         rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        installPortraitResize(notes, "catatan", 190, 130, 320)
+        installPortraitResize(notes, "catatan", 210, 150, 360)
 
         if (!landscapeLayout) {
             val portraitLeftColumn = LinearLayout(this).apply {
