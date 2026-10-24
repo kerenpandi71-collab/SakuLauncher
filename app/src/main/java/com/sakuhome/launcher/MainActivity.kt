@@ -1751,7 +1751,7 @@ class MainActivity : Activity() {
             }
             row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             row.setOnClickListener {
-                menuDialog.dismiss()
+                menuDialog?.dismiss()
                 when (index) {
                     0 -> launch(app, asFreeform = true)
                     1 -> launch(app, asFreeform = false)
@@ -1793,7 +1793,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
             background = rounded(Color.argb(42, accent), 20)
             setPadding(dp(16), dp(13), dp(16), dp(13))
-            setOnClickListener { menuDialog.dismiss() }
+            setOnClickListener { menuDialog?.dismiss() }
         }
         content.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(4)
