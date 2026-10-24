@@ -2708,9 +2708,36 @@ class MainActivity : Activity() {
         isFocusable = true
     }
 
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(radiusDp).toFloat()
+    /**
+     * Central surface factory: when Liquid Glass is enabled, every component that uses
+     * rounded() (chips, controls, cards, menus and compact buttons) inherits the same
+     * translucent layered treatment instead of falling back to flat AOSP blocks.
+     * Keep a faint tint from the requested color so selected states remain recognizable.
+     */
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
+        val radius = dp(radiusDp).toFloat()
+        if (!liquidGlass) return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = radius
+        }
+        val tint = Color.argb(if (isDarkTheme) 44 else 30, Color.red(color), Color.green(color), Color.blue(color))
+        val top = if (isDarkTheme) Color.rgb(87, 103, 130) else Color.rgb(255, 255, 255)
+        val bottom = if (isDarkTheme) Color.rgb(31, 43, 63) else Color.rgb(224, 235, 249)
+        fun blend(base: Int, overlay: Int): Int {
+            val a = Color.alpha(overlay) / 255f
+            return Color.rgb(
+                (Color.red(base) * (1f - a) + Color.red(overlay) * a).toInt(),
+                (Color.green(base) * (1f - a) + Color.green(overlay) * a).toInt(),
+                (Color.blue(base) * (1f - a) + Color.blue(overlay) * a).toInt()
+            )
+        }
+        return GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(blend(top, tint), blend(bottom, tint))
+        ).apply {
+            cornerRadius = radius
+            setStroke(dp(1), if (isDarkTheme) Color.argb(105, 225, 237, 255) else Color.argb(190, 255, 255, 255))
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
