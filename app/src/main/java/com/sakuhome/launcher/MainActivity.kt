@@ -388,10 +388,16 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(15), dp(13), dp(15), dp(13))
             background = if (liquidGlass) glassSurface(radius) else rounded(cardSurface, radius)
-            elevation = dp(8).toFloat()
+            // A subtle outline keeps neighboring glass cards visually distinct.
+            foreground = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(radius).toFloat()
+                setStroke(dp(1), if (isDarkTheme) 0x557F9DBF else 0x66849AB5)
+            }
+            elevation = dp(5).toFloat()
             addView(TextView(this@MainActivity).apply {
                 text = title
-                textSize = 12f
+                textSize = 14f
                 setTextColor(primaryText)
                 setTypeface(null, android.graphics.Typeface.BOLD)
             }, LinearLayout.LayoutParams(-1, -2))
@@ -450,18 +456,20 @@ class MainActivity : Activity() {
         val availableRamGb = memory.availMem / (1024.0 * 1024.0 * 1024.0)
         systemCard.addView(TextView(this).apply {
             text = "RAM tersedia  %.1f / %.1f GB".format(Locale.US, availableRamGb, totalRamGb)
-            textSize = 11f
+            textSize = 13f
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
         val totalStorage = stat.totalBytes / (1024.0 * 1024.0 * 1024.0)
         val freeStorage = stat.availableBytes / (1024.0 * 1024.0 * 1024.0)
         systemCard.addView(TextView(this).apply {
             text = "Penyimpanan  %.1f / %.1f GB".format(Locale.US, totalStorage - freeStorage, totalStorage)
-            textSize = 11f
+            textSize = 13f
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
-        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, dp(92)))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, dp(100)).apply { topMargin = dp(8) })
 
         rightColumn.addView(topWidgets, if (landscapeLayout) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(-1, -2))
 
@@ -471,7 +479,8 @@ class MainActivity : Activity() {
         fun shortcut(label: String, symbol: String, action: () -> Unit) {
             shortcutGrid.addView(TextView(this).apply {
                 text = "$symbol  $label"
-                textSize = 12f
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.MEDIUM)
                 gravity = Gravity.CENTER_VERTICAL
                 setTextColor(primaryText)
                 setPadding(dp(10), dp(10), dp(8), dp(10))
@@ -491,12 +500,12 @@ class MainActivity : Activity() {
         shortcuts.addView(shortcutGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         // In landscape, stack shortcuts in the right-side column instead of squeezing them
         // between the clock and system cards.
-        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
             hint = "Tulis catatan di sini..."
-            textSize = 12f
+            textSize = 14f
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             minLines = 3
@@ -516,7 +525,7 @@ class MainActivity : Activity() {
         notes.addView(noteField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
         // Keep quick notes visible in both orientations; the landscape column can scroll
         // vertically with its parent content rather than clipping the card.
-        rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        rightColumn.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         if (!landscapeLayout) {
             val portraitLeftColumn = LinearLayout(this).apply {
@@ -896,18 +905,18 @@ class MainActivity : Activity() {
             setTextColor(secondaryText)
             gravity = Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, dp(38), 1f))
-        drawerGridButton = chipButton("←", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 22f
-            setOnClickListener { setDrawerLayout(listMode = !drawerListMode) }
-            contentDescription = "Ganti tampilan aplikasi sebelumnya"
+        drawerGridButton = chipButton("▦", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 20f
+            setOnClickListener { setDrawerLayout(listMode = false) }
+            contentDescription = "Tampilan grid aplikasi"
         }
-        drawerListButton = chipButton("→", if (!drawerListMode) accent else cardSurface, primaryText, 12).apply {
-            textSize = 22f
-            setOnClickListener { setDrawerLayout(listMode = !drawerListMode) }
-            contentDescription = "Ganti tampilan aplikasi berikutnya"
+        drawerListButton = chipButton("☷", if (drawerListMode) accent else cardSurface, primaryText, 12).apply {
+            textSize = 20f
+            setOnClickListener { setDrawerLayout(listMode = true) }
+            contentDescription = "Tampilan daftar aplikasi"
         }
-        filters.addView(drawerGridButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(38), dp(38)))
+        filters.addView(drawerGridButton, LinearLayout.LayoutParams(dp(40), dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(40), dp(38)))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
