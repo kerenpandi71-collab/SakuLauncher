@@ -673,6 +673,13 @@ class MainActivity : Activity() {
             }
             portraitLeftColumn.addView(timeCard, LinearLayout.LayoutParams(-1, dp(156)).apply { bottomMargin = dp(8) })
             installPortraitResize(timeCard, "time", 156, 142, 240)
+            // Restore the original compact Start Menu panel in the left dashboard column.
+            startPanel = buildStartPanel().apply {
+                elevation = dp(20).toFloat()
+                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+                visibility = View.GONE
+            }
+            portraitLeftColumn.addView(startPanel, LinearLayout.LayoutParams(-1, 0, 1f))
             workspace.addView(portraitLeftColumn, LinearLayout.LayoutParams(0, -1, 1.02f).apply { marginEnd = dp(7) })
             workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 0.98f))
         } else {
@@ -729,10 +736,6 @@ class MainActivity : Activity() {
                 marginStart = dp(12)
             })
             startPanel.bringToFront()
-        } else {
-            rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1).apply {
-                setMargins(dp(8), dp(8), dp(8), dp(8))
-            })
         }
         setContentView(rootFrame)
         updateClock()
@@ -1030,7 +1033,6 @@ class MainActivity : Activity() {
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
-        header.setOnTouchListener(startMenuSwipeListener(openOnSwipeUp = false, closeOnSwipeDown = true))
         panel.addView(header)
 
         startSearchField = EditText(this).apply {
