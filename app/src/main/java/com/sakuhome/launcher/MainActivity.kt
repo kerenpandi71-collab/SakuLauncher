@@ -431,6 +431,34 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, -2))
         }
 
+        // Portrait-only resize controls; landscape layout remains unchanged.
+        fun installPortraitResize(panel: LinearLayout, key: String, defaultHeightDp: Int, minHeightDp: Int, maxHeightDp: Int) {
+            if (landscapeLayout) return
+            val savedHeight = preferences.getInt("portrait_widget_height_" + key, defaultHeightDp).coerceIn(minHeightDp, maxHeightDp)
+            panel.minimumHeight = dp(savedHeight)
+            panel.layoutParams = panel.layoutParams?.apply { height = dp(savedHeight) }
+            panel.addView(TextView(this).apply {
+                text = "↕  Ubah ukuran"; textSize = 10f; gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                setTextColor(secondaryText); setPadding(0, dp(5), 0, 0)
+                contentDescription = "Ubah tinggi widget " + key
+                setOnClickListener {
+                    val currentHeight = preferences.getInt("portrait_widget_height_" + key, defaultHeightDp).coerceIn(minHeightDp, maxHeightDp)
+                    val seek = SeekBar(this@MainActivity).apply { max = maxHeightDp - minHeightDp; progress = currentHeight - minHeightDp }
+                    val preview = TextView(this@MainActivity).apply { text = "Tinggi: " + currentHeight + " dp"; textSize = 14f; setTextColor(primaryText); setPadding(0, 0, 0, dp(8)) }
+                    seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) { preview.text = "Tinggi: " + (minHeightDp + progress) + " dp" }
+                        override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                        override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+                    })
+                    val content = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)); addView(preview, LinearLayout.LayoutParams(-1, -2)); addView(seek, LinearLayout.LayoutParams(-1, -2)) }
+                    AlertDialog.Builder(this@MainActivity).setTitle("Ukuran widget")
+                        .setMessage("Atur tinggi widget " + key + ". Hanya berlaku di mode portrait.")
+                        .setView(content)
+                        .setPositiveButton("Simpan") { _, _ -> preferences.edit().putInt("portrait_widget_height_" + key, minHeightDp + seek.progress).apply(); buildScreen() }
+                        .setNegativeButton("Batal", null).show()
+                }
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+        }
         val weatherCard = card("☀  CUACA")
         enablePanelDragging(weatherCard, "weather")
         weatherCard.addView(TextView(this).apply {
@@ -505,34 +533,6 @@ class MainActivity : Activity() {
         rightColumn.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         installPortraitResize(shortcuts, "pintasan", 170, 120, 280)
 
-        // Portrait-only resize controls; landscape layout remains unchanged.
-        fun installPortraitResize(panel: LinearLayout, key: String, defaultHeightDp: Int, minHeightDp: Int, maxHeightDp: Int) {
-            if (landscapeLayout) return
-            val savedHeight = preferences.getInt("portrait_widget_height_" + key, defaultHeightDp).coerceIn(minHeightDp, maxHeightDp)
-            panel.minimumHeight = dp(savedHeight)
-            panel.layoutParams = panel.layoutParams?.apply { height = dp(savedHeight) }
-            panel.addView(TextView(this).apply {
-                text = "↕  Ubah ukuran"; textSize = 10f; gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                setTextColor(secondaryText); setPadding(0, dp(5), 0, 0)
-                contentDescription = "Ubah tinggi widget " + key
-                setOnClickListener {
-                    val currentHeight = preferences.getInt("portrait_widget_height_" + key, defaultHeightDp).coerceIn(minHeightDp, maxHeightDp)
-                    val seek = SeekBar(this@MainActivity).apply { max = maxHeightDp - minHeightDp; progress = currentHeight - minHeightDp }
-                    val preview = TextView(this@MainActivity).apply { text = "Tinggi: " + currentHeight + " dp"; textSize = 14f; setTextColor(primaryText); setPadding(0, 0, 0, dp(8)) }
-                    seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) { preview.text = "Tinggi: " + (minHeightDp + progress) + " dp" }
-                        override fun onStartTrackingTouch(bar: SeekBar?) = Unit
-                        override fun onStopTrackingTouch(bar: SeekBar?) = Unit
-                    })
-                    val content = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)); addView(preview, LinearLayout.LayoutParams(-1, -2)); addView(seek, LinearLayout.LayoutParams(-1, -2)) }
-                    AlertDialog.Builder(this@MainActivity).setTitle("Ukuran widget")
-                        .setMessage("Atur tinggi widget " + key + ". Hanya berlaku di mode portrait.")
-                        .setView(content)
-                        .setPositiveButton("Simpan") { _, _ -> preferences.edit().putInt("portrait_widget_height_" + key, minHeightDp + seek.progress).apply(); buildScreen() }
-                        .setNegativeButton("Batal", null).show()
-                }
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
-        }
         val notes = card("🗒  Catatan Cepat")
         val noteField = EditText(this).apply {
             hint = "Tulis catatan di sini..."
