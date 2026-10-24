@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -187,8 +186,7 @@ class SakuKeyboardService : InputMethodService() {
                 gravity = Gravity.CENTER
                 contentDescription = "Emoji $emoji"
                 setOnClickListener {
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
-                    currentInputConnection?.commitText(emoji, 1)
+                            currentInputConnection?.commitText(emoji, 1)
                 }
             }
             grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
@@ -231,8 +229,7 @@ class SakuKeyboardService : InputMethodService() {
                         gravity = Gravity.CENTER
                         contentDescription = "Emoji $emoji"
                         setOnClickListener {
-                            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
-                            currentInputConnection?.commitText(emoji, 1)
+                                            currentInputConnection?.commitText(emoji, 1)
                         }
                     }
                     grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
@@ -282,10 +279,6 @@ class SakuKeyboardService : InputMethodService() {
         isFocusable = true
         isClickable = true
         setOnClickListener {
-            performHapticFeedback(
-                HapticFeedbackConstants.KEYBOARD_TAP,
-                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
-            )
             action()
         }
         setPadding(dp(1), 0, dp(1), 0)
