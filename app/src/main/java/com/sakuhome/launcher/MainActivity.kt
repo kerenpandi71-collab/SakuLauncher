@@ -673,13 +673,6 @@ class MainActivity : Activity() {
             }
             portraitLeftColumn.addView(timeCard, LinearLayout.LayoutParams(-1, dp(156)).apply { bottomMargin = dp(8) })
             installPortraitResize(timeCard, "time", 156, 142, 240)
-            // Portrait app library stays in its own column; landscape panel behavior is unchanged.
-            startPanel = buildStartPanel().apply {
-                elevation = dp(20).toFloat()
-                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-                visibility = View.VISIBLE
-            }
-            portraitLeftColumn.addView(startPanel, LinearLayout.LayoutParams(-1, 0, 1f))
             workspace.addView(portraitLeftColumn, LinearLayout.LayoutParams(0, -1, 1.02f).apply { marginEnd = dp(7) })
             workspace.addView(rightColumn, LinearLayout.LayoutParams(0, -1, 0.98f))
         } else {
@@ -700,6 +693,8 @@ class MainActivity : Activity() {
             })
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
+        bottom.setOnTouchListener(startMenuSwipeListener(openOnSwipeUp = true, closeOnSwipeDown = false))
+        workspace.setOnTouchListener(startMenuSwipeListener(openOnSwipeUp = true, closeOnSwipeDown = false))
         // Add the scrim before the shell so it stays behind the Start Menu.
         // A full-screen scrim above the shell caused a dead, dark strip over the menu.
         startScrim = View(this).apply {
@@ -717,12 +712,10 @@ class MainActivity : Activity() {
         desktopGrid = GridView(this)
         desktopCanvas = FrameLayout(this)
         widgetStrip = LinearLayout(this)
-        if (landscapeLayout) {
-            startPanel = buildStartPanel().apply {
-                elevation = dp(20).toFloat()
-                background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
-                visibility = View.VISIBLE
-            }
+        startPanel = buildStartPanel().apply {
+            elevation = dp(20).toFloat()
+            background = if (liquidGlass) glassSurface(25) else rounded(if (isDarkTheme) Color.rgb(19, 32, 49) else Color.rgb(245, 249, 255), 25)
+            visibility = View.GONE
         }
         if (landscapeLayout) {
             // Preserve the existing landscape App Library placement exactly.
@@ -736,6 +729,10 @@ class MainActivity : Activity() {
                 marginStart = dp(12)
             })
             startPanel.bringToFront()
+        } else {
+            rootFrame.addView(startPanel, FrameLayout.LayoutParams(-1, -1).apply {
+                setMargins(dp(8), dp(8), dp(8), dp(8))
+            })
         }
         setContentView(rootFrame)
         updateClock()
@@ -954,9 +951,10 @@ class MainActivity : Activity() {
             background = if (liquidGlass) glassSurface(25) else rounded(dockSurface, 25)
             elevation = dp(14).toFloat()
         }
-        dock.addView(chipButton("⌘", accent, Color.WHITE, 15).apply {
-            textSize = 20f
-            contentDescription = "Buka App Library"
+        dock.addView(chipButton("⊞", accent, Color.WHITE, 15).apply {
+            textSize = 23f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD))
+            contentDescription = "Buka Start Menu"
             setOnClickListener { toggleStartPanel() }
         }, LinearLayout.LayoutParams(dp(44), -1))
         dock.addView(View(this).apply {
@@ -974,7 +972,13 @@ class MainActivity : Activity() {
         }
         // No fixed six-icon cap: the horizontal scroller keeps every pinned app reachable
         // without allowing icons to be clipped at the dock edges.
-        pinnedApps().forEachIndexed { index, app ->
+        val dockApps = pinnedApps().let { pinned ->
+            if (preferences.getBoolean("drawer_group_apps_by_color", false)) {
+                pinned.sortedWith(compareBy<LaunchableApp> { iconColorGroup(it.icon) }
+                    .thenBy { it.label.lowercase(Locale.getDefault()) })
+            } else pinned
+        }
+        dockApps.forEachIndexed { index, app ->
             icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp.coerceIn(32, 72)), -1))
         }
         scroll.addView(icons)
@@ -1026,6 +1030,7 @@ class MainActivity : Activity() {
         header.addView(chipButton("×", cardSurface, secondaryText, 15).apply {
             setOnClickListener { hideStartPanel() }
         }, LinearLayout.LayoutParams(dp(38), dp(38)))
+        header.setOnTouchListener(startMenuSwipeListener(openOnSwipeUp = false, closeOnSwipeDown = true))
         panel.addView(header)
 
         startSearchField = EditText(this).apply {
@@ -1117,6 +1122,43 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) = Unit
         })
         return panel
+    }
+
+    private fun startMenuSwipeListener(openOnSwipeUp: Boolean, closeOnSwipeDown: Boolean): View.OnTouchListener {
+        var downX = 0f
+        var downY = 0f
+        var consumedGesture = false
+        return View.OnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    consumedGesture = false
+                    false
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    val threshold = dp(64)
+                    if (kotlin.math.abs(dy) > threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.25f) {
+                        if (dy < 0 && openOnSwipeUp && startPanel.visibility != View.VISIBLE) {
+                            showStartPanel()
+                            consumedGesture = true
+                        } else if (dy > 0 && closeOnSwipeDown && startPanel.visibility == View.VISIBLE) {
+                            hideStartPanel()
+                            consumedGesture = true
+                        }
+                    }
+                    consumedGesture
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    val wasConsumed = consumedGesture
+                    consumedGesture = false
+                    wasConsumed
+                }
+                else -> consumedGesture
+            }
+        }
     }
 
     private fun toggleStartPanel() {
