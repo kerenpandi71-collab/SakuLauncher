@@ -2318,8 +2318,8 @@ class MainActivity : Activity() {
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
         if (isDarkTheme) intArrayOf(
-            Color.argb(120, 45, 55, 75),  // Lebih transparan di atas agar wallpaper terlihat
-            Color.argb(80, 20, 30, 45)    // Lebih gelap tipis di bawah
+            Color.argb(120, 45, 55, 75),
+            Color.argb(80, 20, 30, 45)
         )
         else intArrayOf(
             Color.argb(224, 255, 255, 255),
@@ -2330,7 +2330,7 @@ class MainActivity : Activity() {
         setStroke(
             dp(1),
             if (isDarkTheme)
-                Color.argb(90, 255, 255, 255) // Garis tepi putih tipis dan lembut ala pantulan kaca
+                Color.argb(110, 255, 255, 255)
             else
                 Color.argb(185, 255, 255, 255)
         )
@@ -2840,9 +2840,25 @@ class MainActivity : Activity() {
      * translucent layered treatment instead of falling back to flat AOSP blocks.
      * Keep a faint tint from the requested color so selected states remain recognizable.
      */
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(radiusDp).toFloat()
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
+        if (!liquidGlass) return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radiusDp).toFloat()
+        }
+        val baseAlpha = Color.alpha(color)
+        val top = if (isDarkTheme) Color.argb(120, 45, 55, 75)
+            else Color.argb(224, 255, 255, 255)
+        val bottom = if (isDarkTheme) Color.argb(80, 20, 30, 45)
+            else Color.argb(178, 225, 236, 251)
+        return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom)).apply {
+            cornerRadius = dp(radiusDp).toFloat()
+            setStroke(
+                dp(1),
+                if (isDarkTheme) Color.argb(110, 255, 255, 255)
+                else Color.argb(185, 255, 255, 255)
+            )
+            alpha = if (baseAlpha < 255) baseAlpha.coerceAtLeast(100) else 255
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
