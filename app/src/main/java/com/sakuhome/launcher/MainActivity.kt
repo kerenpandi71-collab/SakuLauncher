@@ -1348,8 +1348,17 @@ class MainActivity : Activity() {
         startPanel.translationY = dp(22).toFloat()
         startPanel.scaleX = 0.985f
         startPanel.scaleY = 0.985f
-        startScrim.visibility = View.VISIBLE
-        startScrim.animate().alpha(1f).setDuration(120).setInterpolator(DecelerateInterpolator()).start()
+        val useScrim = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (useScrim) {
+            startScrim.visibility = View.VISIBLE
+            startScrim.animate().alpha(1f).setDuration(120).setInterpolator(DecelerateInterpolator()).start()
+        } else {
+            // The portrait menu lives inside the dashboard column. A full-screen scrim
+            // there only darkens the transparent gaps and can leave a thin black seam.
+            startScrim.animate().cancel()
+            startScrim.alpha = 0f
+            startScrim.visibility = View.GONE
+        }
         startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
             .setDuration(220).setInterpolator(DecelerateInterpolator(1.6f)).start()
     }
@@ -1372,12 +1381,19 @@ class MainActivity : Activity() {
                     startScrim.visibility = View.GONE
                 }
             }.start()
-        startScrim.animate().alpha(0f).setDuration(120).withEndAction {
-            if (token == panelAnimationToken) {
-                startScrim.alpha = 0f
-                startScrim.visibility = View.GONE
-            }
-        }.start()
+        val useScrim = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (useScrim) {
+            startScrim.animate().alpha(0f).setDuration(120).withEndAction {
+                if (token == panelAnimationToken) {
+                    startScrim.alpha = 0f
+                    startScrim.visibility = View.GONE
+                }
+            }.start()
+        } else {
+            startScrim.animate().cancel()
+            startScrim.alpha = 0f
+            startScrim.visibility = View.GONE
+        }
         searchQuery = ""
         if (::startSearchField.isInitialized) startSearchField.setText("")
         if (::startSearchField.isInitialized) startSearchField.hideKeyboard()
