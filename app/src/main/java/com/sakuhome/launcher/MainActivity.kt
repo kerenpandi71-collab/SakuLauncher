@@ -1974,7 +1974,6 @@ class MainActivity : Activity() {
             "▣  Display Extend · Virtual Display",
             "▰  Status bar Android · $hideStatusBarState",
             "↔  Orientasi layar · ${if (preferences.getBoolean(KEY_LANDSCAPE_MODE, false)) "Landscape" else "Ikuti sistem"}",
-            "⌨  Tinggi keyboard · ${preferences.getInt("saku_keyboard_height_dp", 340)} dp"
         )
 
         val backgroundColor = if (isDarkTheme) Color.rgb(22, 25, 34) else Color.rgb(242, 245, 251)
@@ -2130,44 +2129,7 @@ class MainActivity : Activity() {
                     else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 recreate()
             }
-            23 -> chooseKeyboardHeight()
         }
-    }
-
-    private fun chooseKeyboardHeight() {
-        val current = preferences.getInt("saku_keyboard_height_dp", 340).coerceIn(240, 520)
-        val preview = TextView(this).apply {
-            text = "Tinggi keyboard: $current dp"
-            textSize = 16f
-            setTextColor(if (isDarkTheme) Color.WHITE else Color.BLACK)
-            gravity = Gravity.CENTER
-            setPadding(dp(8), dp(10), dp(8), dp(4))
-        }
-        val slider = android.widget.SeekBar(this).apply { max = 280; progress = current - 240 }
-        slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                preview.text = "Tinggi keyboard: ${progress + 240} dp"
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) = Unit
-        })
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), dp(4))
-            addView(preview, LinearLayout.LayoutParams(-1, -2))
-            addView(slider, LinearLayout.LayoutParams(-1, -2))
-            addView(TextView(this@MainActivity).apply {
-                text = "240 dp sampai 520 dp. Untuk DPI 800, coba mulai dari 400 dp lalu sesuaikan."
-                textSize = 12f
-                setTextColor(if (isDarkTheme) Color.LTGRAY else Color.DKGRAY)
-            }, LinearLayout.LayoutParams(-1, -2))
-        }
-        AlertDialog.Builder(this).setTitle("Tinggi Saku Keyboard").setView(content)
-            .setNegativeButton("Batal", null)
-            .setPositiveButton("Simpan") { _, _ ->
-                preferences.edit().putInt("saku_keyboard_height_dp", slider.progress + 240).apply()
-                Toast.makeText(this, "Tinggi keyboard disimpan. Tutup lalu buka kembali keyboard.", Toast.LENGTH_LONG).show()
-            }.show()
     }
 
     private fun chooseFontSettings() {
