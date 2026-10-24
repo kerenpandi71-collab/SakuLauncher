@@ -107,7 +107,7 @@ class SakuKeyboardService : InputMethodService() {
         contentDescription = description
         gravity = Gravity.CENTER
         textSize = if (label == "spasi") 12f else 18f
-        typeface = Typeface.create("sans-serif", if (special) Typeface.MEDIUM else Typeface.NORMAL)
+        typeface = Typeface.create("sans-serif", if (special) Typeface.BOLD else Typeface.NORMAL)
         includeFontPadding = false
         setTextColor(if (special) (if (isDark()) Color.WHITE else Color.rgb(31, 37, 48)) else if (isDark()) Color.WHITE else Color.rgb(26, 30, 37))
         background = GradientDrawable().apply {
@@ -162,8 +162,9 @@ class SakuKeyboardService : InputMethodService() {
 
     private fun refreshKeyboard() {
         if (keyboardRoot != null) {
-            keyboardRoot = buildKeyboard()
-            setInputView(keyboardRoot)
+            val updatedRoot = buildKeyboard()
+            keyboardRoot = updatedRoot
+            setInputView(updatedRoot)
         }
     }
 
