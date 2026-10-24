@@ -2006,7 +2006,7 @@ class MainActivity : Activity() {
             "APLIKASI & WIDGET" to (5..9),
             "GAYA PERSONAL" to (10..14),
             "TATA LETAK" to (15..19),
-            "SISTEM & DISPLAY" to (20..23),
+            "SISTEM & DISPLAY" to (20..22),
             "DIMENSI TAMBAHAN" to (23..23)
         )
         lateinit var dialog: AlertDialog
