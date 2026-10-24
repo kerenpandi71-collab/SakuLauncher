@@ -1732,7 +1732,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(12), dp(14), dp(12))
-                background = rounded(if (index == 8) Color.argb(34, 255, 70, 70) else Color.argb(24, accent), 18)
+                background = rounded(if (index == 8) Color.argb(34, 255, 70, 70) else Color.argb(24, Color.red(accent), Color.green(accent), Color.blue(accent)), 18)
                 isClickable = true
                 isFocusable = true
             }
@@ -1791,7 +1791,7 @@ class MainActivity : Activity() {
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
-            background = rounded(Color.argb(42, accent), 20)
+            background = rounded(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)), 20)
             setPadding(dp(16), dp(13), dp(16), dp(13))
             setOnClickListener { menuDialog?.dismiss() }
         }
@@ -1816,7 +1816,7 @@ class MainActivity : Activity() {
                 window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt().coerceAtMost(dp(420)), ViewGroup.LayoutParams.WRAP_CONTENT)
             }
         }
-        menuDialog.show()
+        menuDialog?.show()
     }
 
     private var menuDialog: android.app.Dialog? = null
@@ -2176,7 +2176,7 @@ class MainActivity : Activity() {
         container.addView(familyLabel)
         val familySpinner = android.widget.Spinner(this).apply {
             background = glassSurface(14)
-            if (android.os.Build.VERSION.SDK_INT >= 16) popupBackground = glassSurface(16)
+            if (android.os.Build.VERSION.SDK_INT >= 16) setPopupBackgroundDrawable(glassSurface(16))
         }
         familySpinner.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, familyNames).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
