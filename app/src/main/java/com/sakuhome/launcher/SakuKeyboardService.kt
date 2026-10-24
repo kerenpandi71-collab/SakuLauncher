@@ -236,7 +236,7 @@ class SakuKeyboardService : InputMethodService() {
                                             currentInputConnection?.commitText(emoji, 1)
                         }
                     }
-                    grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
+                    grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(0, dp(1), 0, dp(1)) })
                 }
             }
             override fun afterTextChanged(s: Editable?) = Unit
@@ -282,6 +282,8 @@ class SakuKeyboardService : InputMethodService() {
         }
         isFocusable = true
         isClickable = true
+        // This keyboard draws its own pressed-state feedback; avoid platform elevation animations.
+        stateListAnimator = null
         setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
