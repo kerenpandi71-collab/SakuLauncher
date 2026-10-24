@@ -386,7 +386,8 @@ class MainActivity : Activity() {
         }
         fun card(title: String, radius: Int = 18): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(15), dp(13), dp(15), dp(13))
+            // Extra bottom room prevents the final text line from touching the glass-card edge.
+            setPadding(dp(15), dp(13), dp(15), dp(18))
             background = if (liquidGlass) glassSurface(radius) else rounded(cardSurface, radius)
             // A subtle outline keeps neighboring glass cards visually distinct.
             foreground = android.graphics.drawable.GradientDrawable().apply {
@@ -405,7 +406,7 @@ class MainActivity : Activity() {
         val timeCard = card("◷  WAKTU")
         enablePanelDragging(timeCard, "time")
         timeCard.addView(TextView(this).apply {
-            text = "14:32"
+            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             textSize = 33f
             includeFontPadding = false
             gravity = Gravity.CENTER_VERTICAL
@@ -414,9 +415,10 @@ class MainActivity : Activity() {
             tag = "saku_big_clock"
         }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(5) })
         timeCard.addView(TextView(this).apply {
-            text = java.text.SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(java.util.Date())
+            text = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(Date())
             textSize = 12f
             setTextColor(secondaryText)
+            tag = "saku_big_date"
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         if (landscapeLayout) {
             topWidgets.addView(timeCard, LinearLayout.LayoutParams(0, dp(142), 1.05f).apply { marginEnd = dp(10) })
@@ -426,8 +428,9 @@ class MainActivity : Activity() {
             timeCard.addView(TextView(this).apply {
                 text = "Langkah kecil hari ini, membawa hasil besar esok."
                 textSize = 11f
-                setTextColor(secondaryText)
-                setPadding(0, dp(7), 0, 0)
+                setTextColor(if (isDarkTheme) Color.rgb(205, 217, 235) else Color.rgb(63, 78, 101))
+                setShadowLayer(dp(1).toFloat(), 0f, dp(1).toFloat(), if (isDarkTheme) 0x66000000 else 0x33FFFFFF)
+                setPadding(0, dp(7), 0, dp(3))
             }, LinearLayout.LayoutParams(-1, -2))
         }
 
@@ -474,7 +477,8 @@ class MainActivity : Activity() {
         if (landscapeLayout) {
             rightColumn.addView(weatherCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         } else {
-            topWidgets.addView(weatherCard, LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
+            // Let the weather card wrap its content; a fixed 76dp height clipped its last line.
+            topWidgets.addView(weatherCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         }
 
         val systemCard = card("▣  Sistem")
@@ -497,7 +501,7 @@ class MainActivity : Activity() {
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, dp(100)).apply { topMargin = dp(8) })
+        topWidgets.addView(systemCard, if (landscapeLayout) LinearLayout.LayoutParams(0, dp(142), 1f) else LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         rightColumn.addView(topWidgets, LinearLayout.LayoutParams(-1, -2))
         installPortraitResize(weatherCard, "cuaca", 100, 76, 220)
@@ -509,6 +513,10 @@ class MainActivity : Activity() {
         fun shortcut(label: String, symbol: String, action: () -> Unit) {
             shortcutGrid.addView(TextView(this).apply {
                 text = "$symbol  $label"
+                contentDescription = label
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                includeFontPadding = true
                 textSize = 14f
                 setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                 gravity = Gravity.CENTER_VERTICAL
@@ -518,9 +526,9 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             }, android.widget.GridLayout.LayoutParams().apply {
                 width = 0
-                height = dp(40)
+                height = dp(44)
                 columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
-                setMargins(dp(3), dp(4), dp(3), dp(2))
+                setMargins(dp(3), dp(4), dp(3), dp(4))
             })
         }
         shortcut("Home", "⌂") { performHome() }
@@ -588,8 +596,9 @@ class MainActivity : Activity() {
         // Home is provided by the movable overlay button; no duplicate fixed Home button here.
         if (!preferences.getBoolean(KEY_HIDE_TASKBAR, false)) {
             bottom.addView(buildDock(), LinearLayout.LayoutParams(0, dp(60), 1f).apply {
-                marginStart = dp(100)
-                marginEnd = dp(100)
+                // Keep the dock wide enough for the horizontal scroller on narrow phones.
+                marginStart = dp(12)
+                marginEnd = dp(12)
             })
         }
         shell.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(8) })
@@ -865,6 +874,8 @@ class MainActivity : Activity() {
             icons.addView(dockIcon(app, index), LinearLayout.LayoutParams(dp(iconSizeDp.coerceIn(32, 72)), -1))
         }
         scroll.addView(icons)
+        scroll.clipChildren = false
+        scroll.clipToPadding = false
         dock.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
         return dock
     }
@@ -2494,8 +2505,13 @@ class MainActivity : Activity() {
     private fun updateClock() {
         if (!::clockText.isInitialized) return
         val now = Date()
-        clockText.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+        clockText.text = time
         dateText.text = SimpleDateFormat("EEE, d MMM", Locale("id", "ID")).format(now)
+        // Keep the large dashboard clock synchronized with the same system Date.
+        rootFrame.findViewWithTag<TextView>("saku_big_clock")?.text = time
+        rootFrame.findViewWithTag<TextView>("saku_big_date")?.text =
+            SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(now)
     }
 
     private fun chipButton(label: String, bgColor: Int, fgColor: Int, radius: Int): TextView = TextView(this).apply {
