@@ -251,7 +251,7 @@ class NewDimensionActivity : Activity() {
         val search = EditText(this).apply {
             hint = "Cari aplikasi"
             textSize = 16f
-            singleLine = true
+            maxLines = 1
             setTextColor(ink)
             setHintTextColor(mutedInk)
             setPadding(dp(18), 0, dp(18), 0)
@@ -268,7 +268,7 @@ class NewDimensionActivity : Activity() {
             useDefaultMargins = false
             alignmentMode = GridLayout.ALIGN_BOUNDS
         }
-        scroll.addView(grid, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(grid, ViewGroup.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val apps = try {
