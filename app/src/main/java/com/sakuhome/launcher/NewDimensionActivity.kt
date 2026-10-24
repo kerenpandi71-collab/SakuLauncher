@@ -224,6 +224,114 @@ class NewDimensionActivity : Activity() {
         setContentView(root)
     }
 
+    private var drawerVisible = false
+
+    private fun showAppDrawer() {
+        drawerVisible = true
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(12))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(235, 241, 255), Color.rgb(207, 222, 255))
+            )
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(text("Semua aplikasi", 25f, ink, true), LinearLayout.LayoutParams(0, dp(52), 1f))
+        header.addView(text("✕", 23f, mutedInk, true).apply {
+            gravity = Gravity.CENTER
+            isClickable = true
+            setOnClickListener { drawerVisible = false; buildDimension() }
+        }, LinearLayout.LayoutParams(dp(44), dp(52)))
+        root.addView(header)
+
+        val search = EditText(this).apply {
+            hint = "Cari aplikasi"
+            textSize = 16f
+            singleLine = true
+            setTextColor(ink)
+            setHintTextColor(mutedInk)
+            setPadding(dp(18), 0, dp(18), 0)
+            background = pill(Color.WHITE, 28)
+        }
+        val searchParams = LinearLayout.LayoutParams(-1, dp(54))
+        searchParams.topMargin = dp(12)
+        searchParams.bottomMargin = dp(12)
+        root.addView(search, searchParams)
+
+        val scroll = ScrollView(this)
+        val grid = GridLayout(this).apply {
+            columnCount = 4
+            useDefaultMargins = false
+            alignmentMode = GridLayout.ALIGN_BOUNDS
+        }
+        scroll.addView(grid, ScrollView.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val apps = try {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+                PackageManager.MATCH_ALL
+            ).mapNotNull { info ->
+                val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
+                Triple(info.loadLabel(packageManager).toString(), pkg, info.loadIcon(packageManager))
+            }.distinctBy { it.second }.sortedBy { it.first.lowercase(Locale.getDefault()) }
+        } catch (_: Exception) { emptyList() }
+
+        fun populate(query: String) {
+            grid.removeAllViews()
+            apps.filter { it.first.contains(query, ignoreCase = true) }.forEach { app ->
+                val cell = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(2), dp(8), dp(2), dp(8))
+                }
+                val icon = ImageView(this).apply {
+                    setImageDrawable(app.third)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    background = pill(Color.WHITE, 21)
+                    setPadding(dp(13), dp(13), dp(13), dp(13))
+                }
+                cell.addView(icon, LinearLayout.LayoutParams(dp(62), dp(62)))
+                cell.addView(text(app.first, 11f, ink, false).apply {
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(-1, dp(34)))
+                cell.setOnClickListener {
+                    try { startActivity(packageManager.getLaunchIntentForPackage(app.second)) } catch (_: Exception) { }
+                }
+                val lp = GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = dp(104)
+                    columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                }
+                grid.addView(cell, lp)
+            }
+        }
+        populate("")
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { populate(s?.toString().orEmpty()) }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        setContentView(root)
+    }
+
+    @Deprecated("Deprecated in Android API")
+    override fun onBackPressed() {
+        if (drawerVisible) {
+            drawerVisible = false
+            buildDimension()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
     private fun showDimensionStyleChooser() {
         val styles = arrayOf("AOSP Material 3 · New Dimension", "SakuLauncher · Gaya utama")
         AlertDialog.Builder(this)
