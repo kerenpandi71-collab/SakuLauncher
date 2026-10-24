@@ -159,7 +159,7 @@ class NewDimensionActivity : Activity() {
                 setPadding(dp(12), dp(12), dp(12), dp(12))
             }
             iconWrap.addView(ImageView(this).apply {
-                setImageDrawable(app.icon)
+                setImageDrawable(app.third)
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 background = pill(Color.WHITE, 15)
                 clipToOutline = true
@@ -332,7 +332,7 @@ class NewDimensionActivity : Activity() {
                     setPadding(dp(2), dp(8), dp(2), dp(8))
                 }
                 val icon = ImageView(this).apply {
-                    setImageDrawable(app.third)
+                    setImageDrawable(app.icon)
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     background = pill(Color.WHITE, 17)
                     clipToOutline = true
