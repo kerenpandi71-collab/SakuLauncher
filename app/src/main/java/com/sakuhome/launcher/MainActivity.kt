@@ -1112,14 +1112,18 @@ class MainActivity : Activity() {
     private fun showStartPanel() {
         if (!::startPanel.isInitialized) return
         if (startPanel.visibility == View.VISIBLE) return
-        panelAnimationToken++
+
+        // Invalidate any pending close callback and normalize every animated property
+        // before reopening. This prevents a stale scrim fade from leaving a dark flash.
+        val token = ++panelAnimationToken
         startPanel.animate().cancel()
         startScrim.animate().cancel()
         startGrid.animate().cancel()
         startGrid.alpha = 1f
         startGrid.translationX = 0f
+        startScrim.visibility = View.GONE
+        startScrim.alpha = 0f
         startPanel.visibility = View.VISIBLE
-        startScrim.visibility = View.VISIBLE
         startPanel.bringToFront()
         startSearchField.setText("")
         refreshStartPanel()
@@ -1127,10 +1131,10 @@ class MainActivity : Activity() {
         startPanel.translationY = dp(22).toFloat()
         startPanel.scaleX = 0.985f
         startPanel.scaleY = 0.985f
-        startScrim.alpha = 0f
-        startScrim.animate().alpha(1f).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
+        startScrim.visibility = View.VISIBLE
+        startScrim.animate().alpha(1f).setDuration(120).setInterpolator(DecelerateInterpolator()).start()
         startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-            .setDuration(250).setInterpolator(DecelerateInterpolator(1.6f)).start()
+            .setDuration(220).setInterpolator(DecelerateInterpolator(1.6f)).start()
     }
 
     private fun hideStartPanel() {
@@ -1139,18 +1143,24 @@ class MainActivity : Activity() {
         startPanel.animate().cancel()
         startScrim.animate().cancel()
         startPanel.animate().alpha(0f).translationY(dp(14).toFloat()).scaleX(0.99f).scaleY(0.99f)
-            .setDuration(170).setInterpolator(DecelerateInterpolator()).withEndAction {
+            .setDuration(150).setInterpolator(DecelerateInterpolator()).withEndAction {
                 if (token == panelAnimationToken) {
                     startPanel.visibility = View.GONE
                     startPanel.alpha = 1f
                     startPanel.translationY = 0f
                     startPanel.scaleX = 1f
                     startPanel.scaleY = 1f
-                    startScrim.visibility = View.GONE
+                    startScrim.animate().cancel()
                     startScrim.alpha = 0f
+                    startScrim.visibility = View.GONE
                 }
             }.start()
-        startScrim.animate().alpha(0f).setDuration(150).start()
+        startScrim.animate().alpha(0f).setDuration(120).withEndAction {
+            if (token == panelAnimationToken) {
+                startScrim.alpha = 0f
+                startScrim.visibility = View.GONE
+            }
+        }.start()
         searchQuery = ""
         if (::startSearchField.isInitialized) startSearchField.setText("")
         if (::startSearchField.isInitialized) startSearchField.hideKeyboard()
