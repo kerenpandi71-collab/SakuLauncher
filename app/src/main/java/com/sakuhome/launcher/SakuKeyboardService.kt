@@ -10,6 +10,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.MotionEvent
 import android.widget.PopupWindow
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
@@ -60,6 +62,7 @@ class SakuKeyboardService : InputMethodService() {
             buildEmojiPicker(root)
             return root
         }
+        addEditingToolbar(root)
         addRow(root, if (symbols) listOf("1","2","3","4","5","6","7","8","9","0") else "qwertyuiop".map { it.toString() })
         addRow(root, if (symbols) listOf("@","#","$","%","&","-","+","(",")","/") else "asdfghjkl".map { it.toString() }, sidePadding = 6)
         val third = LinearLayout(this).apply {
@@ -101,6 +104,60 @@ class SakuKeyboardService : InputMethodService() {
         return root
     }
 
+
+    private fun addEditingToolbar(root: LinearLayout) {
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        fun tool(label: String, description: String, action: () -> Unit) {
+            val button = key(label, special = true, description = description, action = action)
+            button.textSize = 15f
+            button.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(9).toFloat()
+                setColor(if (isDark()) Color.rgb(54, 57, 64) else Color.rgb(195, 201, 211))
+            }
+            toolbar.addView(button, LinearLayout.LayoutParams(0, dp(30), 1f).apply {
+                setMargins(dp(2), 0, dp(2), 0)
+            })
+        }
+        tool("⧉", "Salin teks yang dipilih") { copySelectedText() }
+        tool("▣", "Tempel dari papan klip") { pasteClipboardText() }
+        tool("Pilih", "Pilih semua teks") {
+            currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
+        }
+        tool("←", "Geser kursor ke kiri") { moveCursor(-1) }
+        tool("→", "Geser kursor ke kanan") { moveCursor(1) }
+        root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(34)).apply {
+            bottomMargin = dp(3)
+        })
+    }
+
+    private fun copySelectedText() {
+        val ic = currentInputConnection ?: return
+        val selected = ic.getSelectedText(0)?.toString().orEmpty()
+        if (selected.isNotEmpty()) {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Saku Keyboard", selected))
+        } else {
+            ic.performContextMenuAction(android.R.id.copy)
+        }
+    }
+
+    private fun pasteClipboardText() {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)
+        if (!text.isNullOrEmpty()) currentInputConnection?.commitText(text, 1)
+        else currentInputConnection?.performContextMenuAction(android.R.id.paste)
+    }
+
+    private fun moveCursor(delta: Int) {
+        val ic = currentInputConnection ?: return
+        val keyCode = if (delta < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+    }
 
     private data class EmojiGroup(val title: String, val icon: String, val values: List<String>)
 
@@ -362,11 +419,13 @@ class SakuKeyboardService : InputMethodService() {
     private fun performEditorAction() {
         val ic: InputConnection = currentInputConnection ?: return
         val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: EditorInfo.IME_ACTION_NONE
-        val handled = action != EditorInfo.IME_ACTION_NONE && ic.performEditorAction(action)
-        if (!handled) {
-            ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-            ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-        }
+        if (action != EditorInfo.IME_ACTION_NONE && ic.performEditorAction(action)) return
+
+        // Some WebView/chat editors do not implement the declared IME action.
+        // Fall back to Enter; insert a newline only if both key events are rejected.
+        val down = ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        val up = ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        if (!down && !up) ic.commitText("\n", 1)
     }
 
     private fun refreshKeyboard() {
@@ -381,7 +440,7 @@ class SakuKeyboardService : InputMethodService() {
         getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
             .getInt("saku_keyboard_height_dp", 340).coerceIn(240, 520)
 
-    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(((keyboardHeightDp() - 46) / 4).coerceIn(48, 118))).apply {
+    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(((keyboardHeightDp() - 80) / 4).coerceIn(40, 110))).apply {
         bottomMargin = dp(6)
     }
 
