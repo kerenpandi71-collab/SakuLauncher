@@ -2047,6 +2047,11 @@ class MainActivity : Activity() {
             max = 14
             progress = appFontSizeSp - 10
             contentDescription = "Ukuran font, geser kiri untuk memperkecil dan kanan untuk memperbesar"
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                progressTintList = android.content.res.ColorStateList.valueOf(accent)
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(if (isDarkTheme) Color.argb(90, 210, 225, 250) else Color.argb(100, 75, 95, 125))
+                thumbTintList = android.content.res.ColorStateList.valueOf(primaryText)
+            }
         }
         container.addView(slider, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
         val preview = TextView(this).apply {
@@ -2065,8 +2070,13 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(4))
         }
         container.addView(familyLabel)
-        val familySpinner = android.widget.Spinner(this)
-        familySpinner.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, familyNames)
+        val familySpinner = android.widget.Spinner(this).apply {
+            background = glassSurface(14)
+            if (android.os.Build.VERSION.SDK_INT >= 16) popupBackground = glassSurface(16)
+        }
+        familySpinner.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, familyNames).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
         familySpinner.setSelection(selectedFamily)
         container.addView(familySpinner, LinearLayout.LayoutParams(-1, dp(48)))
         slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -2203,11 +2213,11 @@ class MainActivity : Activity() {
 
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        if (isDarkTheme) intArrayOf(Color.argb(188, 75, 91, 119), Color.argb(145, 27, 38, 57))
-        else intArrayOf(Color.argb(224, 255, 255, 255), Color.argb(178, 225, 236, 251))
+        if (isDarkTheme) intArrayOf(Color.argb(202, 104, 121, 150), Color.argb(156, 25, 36, 55))
+        else intArrayOf(Color.argb(235, 255, 255, 255), Color.argb(190, 218, 232, 250))
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(125, 220, 233, 255) else Color.argb(185, 255, 255, 255))
+        setStroke(dp(1), if (isDarkTheme) Color.argb(145, 229, 240, 255) else Color.argb(215, 255, 255, 255))
     }
 
     private fun hiddenPackages(): MutableSet<String> =
