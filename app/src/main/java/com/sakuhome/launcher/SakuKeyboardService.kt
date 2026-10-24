@@ -48,7 +48,7 @@ class SakuKeyboardService : InputMethodService() {
     private fun buildKeyboard(): LinearLayout {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            minimumHeight = dp(260)
+            minimumHeight = dp(keyboardHeightDp())
             setPadding(dp(4), dp(10), dp(4), dp(12))
             setBackgroundColor(if (isDark()) Color.rgb(34, 36, 41) else Color.rgb(218, 222, 229))
         }
@@ -125,7 +125,7 @@ class SakuKeyboardService : InputMethodService() {
         val search = EditText(this).apply {
             hint = "Cari emoji"
             textSize = 15f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(if (isDark()) Color.WHITE else Color.BLACK)
             setHintTextColor(if (isDark()) Color.LTGRAY else Color.DKGRAY)
             setBackground(GradientDrawable().apply {
@@ -191,16 +191,11 @@ class SakuKeyboardService : InputMethodService() {
                     currentInputConnection?.commitText(emoji, 1)
                 }
             }
-            grid.addView(cell, android.widget.GridLayout.LayoutParams().apply {
-                width = 0
-                height = dp(43)
-                columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
-                setMargins(dp(1), dp(1), dp(1), dp(1))
-            })
+            grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
         }
         val scroller = android.widget.ScrollView(this).apply {
             isFillViewport = true
-            addView(grid, android.widget.ScrollView.LayoutParams(-1, -2))
+            addView(grid, android.view.ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(scroller, LinearLayout.LayoutParams(-1, 0, 1f))
         search.addTextChangedListener(object : TextWatcher {
@@ -240,12 +235,7 @@ class SakuKeyboardService : InputMethodService() {
                             currentInputConnection?.commitText(emoji, 1)
                         }
                     }
-                    grid.addView(cell, android.widget.GridLayout.LayoutParams().apply {
-                        width = 0
-                        height = dp(43)
-                        columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
-                        setMargins(dp(1), dp(1), dp(1), dp(1))
-                    })
+                    grid.addView(cell, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)).apply { height = dp(43); setMargins(dp(1), dp(1), dp(1), dp(1)) })
                 }
             }
             override fun afterTextChanged(s: Editable?) = Unit
@@ -339,8 +329,12 @@ class SakuKeyboardService : InputMethodService() {
         }
     }
 
-    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(56)).apply {
-        bottomMargin = dp(8)
+    private fun keyboardHeightDp(): Int =
+        getSharedPreferences("saku_dock_settings", MODE_PRIVATE)
+            .getInt("saku_keyboard_height_dp", 340).coerceIn(240, 520)
+
+    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(((keyboardHeightDp() - 46) / 4).coerceIn(48, 118))).apply {
+        bottomMargin = dp(6)
     }
 
     private fun weighted(weight: Float) = LinearLayout.LayoutParams(0, -1, weight).apply {
