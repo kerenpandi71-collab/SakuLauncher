@@ -114,6 +114,7 @@ android {
     buildFeatures { aidl = true; buildConfig = true }
     buildFeatures { aidl = true; buildConfig = true }
     buildFeatures { aidl = true; buildConfig = true }
+    buildFeatures { aidl = true; buildConfig = true }
     kotlinOptions {
         jvmTarget = "17"
     }
