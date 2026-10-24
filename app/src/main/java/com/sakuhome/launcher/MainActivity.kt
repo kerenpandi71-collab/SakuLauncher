@@ -102,6 +102,9 @@ class MainActivity : Activity() {
     private var pageTransitionInProgress = false
     private var isDraggingHomeIcon = false
     private var panelAnimationToken = 0
+    // Computing icon hues rasterizes every launcher icon. Cache the result so opening
+    // App Library never has to re-render all icons when color grouping is enabled.
+    private val iconColorGroupCache = mutableMapOf<String, Int>()
 
     private val isDarkTheme: Boolean get() = preferences.getBoolean(KEY_DARK_THEME, true)
     private val backgroundTop: Int get() = if (isDarkTheme) Color.rgb(12, 17, 29) else Color.rgb(235, 241, 250)
@@ -1342,8 +1345,9 @@ class MainActivity : Activity() {
         startScrim.alpha = 0f
         startPanel.visibility = View.VISIBLE
         startPanel.bringToFront()
-        startSearchField.setText("")
-        refreshStartPanel()
+        // Clearing a non-empty query refreshes through the TextWatcher. Avoid a second
+        // synchronous adapter rebuild on every open, especially on low-RAM phones.
+        if (startSearchField.text.isNotEmpty()) startSearchField.setText("")
         startPanel.alpha = 0f
         startPanel.translationY = dp(22).toFloat()
         startPanel.scaleX = 0.985f
@@ -1360,7 +1364,7 @@ class MainActivity : Activity() {
             startScrim.visibility = View.GONE
         }
         startPanel.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-            .setDuration(220).setInterpolator(DecelerateInterpolator(1.6f)).start()
+            .setDuration(110).setInterpolator(DecelerateInterpolator(1.35f)).start()
     }
 
     private fun hideStartPanel() {
@@ -2766,7 +2770,7 @@ class MainActivity : Activity() {
                 val base = apps.filterNot { hidden.contains(it.packageName) }
                 val query = if (windowMode) windowSearchQuery else searchQuery
                 val filtered = if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
-                if (groupAppsByColor && !windowMode) filtered.sortedWith(compareBy<LaunchableApp> { iconColorGroup(it.icon) }.thenBy { it.label.lowercase(Locale.getDefault()) }) else filtered
+                if (groupAppsByColor && !windowMode) filtered.sortedWith(compareBy<LaunchableApp> { app -> iconColorGroupCache.getOrPut(app.packageName) { iconColorGroup(app.icon) } }.thenBy { it.label.lowercase(Locale.getDefault()) }) else filtered
             } else homeApps()
         }
 
