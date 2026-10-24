@@ -480,7 +480,7 @@ class MainActivity : Activity() {
             shortcutGrid.addView(TextView(this).apply {
                 text = "$symbol  $label"
                 textSize = 14f
-                setTypeface(null, android.graphics.Typeface.MEDIUM)
+                setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
                 gravity = Gravity.CENTER_VERTICAL
                 setTextColor(primaryText)
                 setPadding(dp(10), dp(10), dp(8), dp(10))
