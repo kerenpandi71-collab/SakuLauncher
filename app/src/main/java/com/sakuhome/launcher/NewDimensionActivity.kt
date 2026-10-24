@@ -4,6 +4,9 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.LauncherApps
+import android.os.Process
+import android.os.UserHandle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -18,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -155,8 +159,10 @@ class NewDimensionActivity : Activity() {
                 setPadding(dp(12), dp(12), dp(12), dp(12))
             }
             iconWrap.addView(ImageView(this).apply {
-                setImageDrawable(app.third)
+                setImageDrawable(app.icon)
                 scaleType = ImageView.ScaleType.FIT_CENTER
+                background = pill(Color.WHITE, 15)
+                clipToOutline = true
             }, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER))
             cell.addView(iconWrap, LinearLayout.LayoutParams(dp(76), dp(76)))
             cell.addView(text(app.first, 11f, Color.WHITE, false).apply {
@@ -218,6 +224,8 @@ class NewDimensionActivity : Activity() {
                 if (icon != null) item.addView(ImageView(this).apply {
                     setImageDrawable(icon)
                     scaleType = ImageView.ScaleType.FIT_CENTER
+                    background = pill(Color.WHITE, 15)
+                    clipToOutline = true
                 }, FrameLayout.LayoutParams(-1, -1))
                 item.contentDescription = resolvedPackage?.let { candidate ->
                     try { pm.getApplicationLabel(pm.getApplicationInfo(candidate, 0)).toString() } catch (_: Exception) { candidate }
@@ -290,20 +298,34 @@ class NewDimensionActivity : Activity() {
         scroll.addView(grid, ViewGroup.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
+        data class DrawerApp(
+            val label: String,
+            val packageName: String,
+            val icon: android.graphics.drawable.Drawable,
+            val component: android.content.ComponentName,
+            val user: UserHandle
+        )
+        val launcherApps = getSystemService(LauncherApps::class.java)
         val apps = try {
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
-                PackageManager.MATCH_ALL
-            ).mapNotNull { info ->
-                val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
-                Triple(info.loadLabel(packageManager).toString(), pkg, info.loadIcon(packageManager))
-            }.distinctBy { it.second }.sortedBy { it.first.lowercase(Locale.getDefault()) }
-        } catch (_: Exception) { emptyList() }
+            launcherApps.profiles.flatMap { profile ->
+                launcherApps.getActivityList(null, profile).map { info ->
+                    DrawerApp(
+                        info.label?.toString().orEmpty(),
+                        info.applicationInfo.packageName,
+                        info.getIcon(0),
+                        info.componentName,
+                        profile
+                    )
+                }
+            }.distinctBy { "${it.packageName}@${it.user.hashCode()}" }
+                .sortedBy { it.label.lowercase(Locale.getDefault()) }
+        } catch (_: Exception) {
+            emptyList()
+        }
 
         fun populate(query: String) {
             grid.removeAllViews()
-            apps.filter { it.first.contains(query, ignoreCase = true) }.forEach { app ->
+            apps.filter { it.label.contains(query, ignoreCase = true) }.forEach { app ->
                 val cell = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
@@ -312,19 +334,20 @@ class NewDimensionActivity : Activity() {
                 val icon = ImageView(this).apply {
                     setImageDrawable(app.third)
                     scaleType = ImageView.ScaleType.FIT_CENTER
-                    background = pill(Color.WHITE, 21)
-                    setPadding(dp(13), dp(13), dp(13), dp(13))
+                    background = pill(Color.WHITE, 17)
+                    clipToOutline = true
+                    setPadding(dp(11), dp(11), dp(11), dp(11))
                 }
                 cell.addView(icon, LinearLayout.LayoutParams(dp(62), dp(62)))
                 // One-line labels prevent long app names from colliding with neighboring rows.
-                cell.addView(text(app.first, 11f, ink, false).apply {
+                cell.addView(text(app.label, 11f, ink, false).apply {
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     includeFontPadding = false
                 }, LinearLayout.LayoutParams(-1, dp(24)))
                 cell.setOnClickListener {
-                    try { startActivity(packageManager.getLaunchIntentForPackage(app.second)) } catch (_: Exception) { }
+                    try { launcherApps.startMainActivity(app.component, app.user, null, null) } catch (_: Exception) { }
                 }
                 val lp = GridLayout.LayoutParams().apply {
                     width = 0
@@ -354,17 +377,28 @@ class NewDimensionActivity : Activity() {
     }
 
     private fun showDimensionStyleChooser() {
+        val locked = ThemeManager.isAospLocked(this)
         val styles = arrayOf("AOSP Material 3 · New Dimension", "SakuLauncher · Gaya utama")
         AlertDialog.Builder(this)
-            .setTitle("Gaya antarmuka")
+            .setTitle(if (locked) "Gaya antarmuka · AOSP terkunci" else "Gaya antarmuka")
             .setSingleChoiceItems(styles, ThemeManager.getUIStyle(this)) { dialog, which ->
+                if (which == ThemeManager.STYLE_SAKU && ThemeManager.isAospLocked(this)) {
+                    Toast.makeText(this, "Buka kunci AOSP terlebih dahulu untuk berganti ke SakuLauncher.", Toast.LENGTH_LONG).show()
+                    return@setSingleChoiceItems
+                }
                 ThemeManager.setUIStyle(this, which)
                 dialog.dismiss()
-                if (which == ThemeManager.STYLE_SAKU) {
-                    finish()
-                } else {
-                    buildDimension()
-                }
+                if (which == ThemeManager.STYLE_SAKU) finish() else buildDimension()
+            }
+            .setNeutralButton(if (locked) "Buka kunci AOSP" else "Kunci mode AOSP") { _, _ ->
+                val nextLocked = !ThemeManager.isAospLocked(this)
+                ThemeManager.setAospLocked(this, nextLocked)
+                Toast.makeText(
+                    this,
+                    if (nextLocked) "Mode AOSP dikunci. Buka kunci untuk kembali ke SakuLauncher." else "Kunci AOSP dibuka.",
+                    Toast.LENGTH_LONG
+                ).show()
+                buildDimension()
             }
             .setNegativeButton("Batal", null)
             .show()
