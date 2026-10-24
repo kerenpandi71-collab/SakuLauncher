@@ -17,6 +17,7 @@
         </intent>
     </queries>
     <application android:allowBackup="true" android:label="Saku Launcher" android:supportsRtl="true" android:theme="@style/AppTheme" android:name="com.sakuhome.launcher.SakuApplication">
+        <activity android:name=".NewDimensionActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
