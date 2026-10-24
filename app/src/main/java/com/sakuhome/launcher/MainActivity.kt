@@ -91,6 +91,7 @@ class MainActivity : Activity() {
     private var searchQuery = ""
     private var windowSearchQuery = ""
     private var drawerListMode = false
+    private var groupAppsByColor = false
     private var homePage = 0
     private var homePageLabel: TextView? = null
     private var pageTransitionInProgress = false
@@ -1007,8 +1008,22 @@ class MainActivity : Activity() {
             setOnClickListener { setDrawerLayout(listMode = true) }
             contentDescription = "Tampilan daftar aplikasi"
         }
+        val drawerColorGroupButton = chipButton("🎨", if (groupAppsByColor) accent else cardSurface, primaryText, 12).apply {
+            textSize = 18f
+            contentDescription = "Kelompokkan aplikasi berdasarkan warna ikon"
+            setOnClickListener {
+                groupAppsByColor = !groupAppsByColor
+                preferences.edit().putBoolean("drawer_group_apps_by_color", groupAppsByColor).apply()
+                background = rounded(if (groupAppsByColor) accent else cardSurface, 12)
+                refreshStartPanel()
+                Toast.makeText(this@MainActivity, if (groupAppsByColor) "Aplikasi dikelompokkan berdasarkan warna ikon" else "Urutan aplikasi normal", Toast.LENGTH_SHORT).show()
+            }
+        }
+        groupAppsByColor = preferences.getBoolean("drawer_group_apps_by_color", false)
+        drawerColorGroupButton.background = rounded(if (groupAppsByColor) accent else cardSurface, 12)
         filters.addView(drawerGridButton, LinearLayout.LayoutParams(dp(40), dp(38)).apply { marginEnd = dp(4) })
-        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(40), dp(38)))
+        filters.addView(drawerListButton, LinearLayout.LayoutParams(dp(40), dp(38)).apply { marginEnd = dp(4) })
+        filters.addView(drawerColorGroupButton, LinearLayout.LayoutParams(dp(40), dp(38)))
         panel.addView(filters)
 
         startGrid = GridView(this).apply {
@@ -2584,6 +2599,41 @@ class MainActivity : Activity() {
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
+    // Coarse icon-hue buckets keep similarly colored apps together without altering their icons.
+    private fun iconColorGroup(drawable: android.graphics.drawable.Drawable): Int {
+        val size = 24
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val copy = drawable.constantState?.newDrawable()?.mutate() ?: drawable.mutate()
+        copy.setBounds(0, 0, size, size)
+        copy.draw(canvas)
+        val hsv = FloatArray(3)
+        val counts = IntArray(9)
+        for (y in 0 until size step 2) {
+            for (x in 0 until size step 2) {
+                val color = bitmap.getPixel(x, y)
+                if (Color.alpha(color) < 96) continue
+                Color.colorToHSV(color, hsv)
+                val saturation = hsv[1]
+                val value = hsv[2]
+                val bucket = when {
+                    value < 0.20f -> 0 // dark/black
+                    saturation < 0.18f -> 1 // white/gray
+                    hsv[0] < 15f || hsv[0] >= 345f -> 2 // red
+                    hsv[0] < 45f -> 3 // orange/yellow
+                    hsv[0] < 165f -> 4 // green
+                    hsv[0] < 255f -> 5 // cyan/blue
+                    hsv[0] < 290f -> 6 // indigo
+                    hsv[0] < 345f -> 7 // purple/pink
+                    else -> 1
+                }
+                counts[bucket]++
+            }
+        }
+        bitmap.recycle()
+        return counts.indices.maxByOrNull { counts[it] } ?: 1
+    }
+
     private inner class AppGridAdapter(private val isStartMenu: Boolean, private val windowMode: Boolean = false) : BaseAdapter() {
         // Cache the visible rows. GridView calls getCount/getItem repeatedly while scrolling;
         // rebuilding/filtering the whole app list for every recycled cell causes jank on low-RAM devices.
@@ -2598,7 +2648,8 @@ class MainActivity : Activity() {
                 val hidden = preferences.getStringSet(KEY_HIDDEN_APPS, emptySet()) ?: emptySet()
                 val base = apps.filterNot { hidden.contains(it.packageName) }
                 val query = if (windowMode) windowSearchQuery else searchQuery
-                if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
+                val filtered = if (query.isBlank()) base else base.filter { it.label.contains(query, ignoreCase = true) }
+                if (groupAppsByColor && !windowMode) filtered.sortedWith(compareBy<LaunchableApp> { iconColorGroup(it.icon) }.thenBy { it.label.lowercase(Locale.getDefault()) }) else filtered
             } else homeApps()
         }
 
