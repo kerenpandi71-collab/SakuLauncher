@@ -2315,20 +2315,26 @@ class MainActivity : Activity() {
             .setNegativeButton("Batal", null).show()
     }
 
+    /**
+     * A clean, layered glass-like surface. Android's GradientDrawable cannot sample and
+     * blur pixels behind itself, so this deliberately uses restrained translucency,
+     * a cool edge highlight and a soft lower tint rather than pretending to be true
+     * backdrop blur. Text and app icons remain separate, fully opaque foreground views.
+     */
     private fun glassSurface(radius: Int): GradientDrawable = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
+        GradientDrawable.Orientation.TL_BR,
         if (isDarkTheme) intArrayOf(
-            Color.argb(238, 65, 111, 190),
-            Color.argb(224, 28, 58, 112),
-            Color.argb(218, 12, 25, 54)
+            Color.argb(224, 119, 166, 235),
+            Color.argb(210, 54, 91, 157),
+            Color.argb(218, 18, 32, 59)
         ) else intArrayOf(
-            Color.argb(246, 255, 255, 255),
-            Color.argb(232, 224, 242, 255),
-            Color.argb(222, 190, 224, 255)
+            Color.argb(238, 255, 255, 255),
+            Color.argb(220, 242, 249, 255),
+            Color.argb(210, 210, 231, 255)
         )
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), if (isDarkTheme) Color.argb(205, 190, 222, 255) else Color.argb(235, 255, 255, 255))
+        setStroke(dp(1), if (isDarkTheme) Color.argb(175, 222, 238, 255) else Color.argb(225, 255, 255, 255))
     }
 
     private fun hiddenPackages(): MutableSet<String> =
@@ -2841,9 +2847,10 @@ class MainActivity : Activity() {
             setColor(color)
             cornerRadius = radius
         }
-        val tint = Color.argb(if (isDarkTheme) 66 else 48, Color.red(color), Color.green(color), Color.blue(color))
-        val top = if (isDarkTheme) Color.rgb(76, 126, 205) else Color.rgb(255, 255, 255)
-        val bottom = if (isDarkTheme) Color.rgb(17, 34, 75) else Color.rgb(198, 226, 255)
+        // Keep the selected accent as a subtle colored refraction, not a gray opaque slab.
+        val tint = Color.argb(if (isDarkTheme) 48 else 34, Color.red(color), Color.green(color), Color.blue(color))
+        val top = if (isDarkTheme) Color.rgb(105, 151, 220) else Color.rgb(255, 255, 255)
+        val bottom = if (isDarkTheme) Color.rgb(22, 42, 78) else Color.rgb(218, 237, 255)
         fun blend(base: Int, overlay: Int): Int {
             val a = Color.alpha(overlay) / 255f
             return Color.rgb(
@@ -2857,7 +2864,7 @@ class MainActivity : Activity() {
             intArrayOf(blend(top, tint), blend(bottom, tint))
         ).apply {
             cornerRadius = radius
-            setStroke(dp(1), if (isDarkTheme) Color.argb(190, 190, 222, 255) else Color.argb(240, 255, 255, 255))
+            setStroke(dp(1), if (isDarkTheme) Color.argb(165, 215, 234, 255) else Color.argb(225, 255, 255, 255))
         }
     }
 
