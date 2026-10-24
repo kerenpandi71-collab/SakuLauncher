@@ -2131,7 +2131,10 @@ class MainActivity : Activity() {
                     else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 recreate()
             }
-            23 -> startActivity(Intent(this, NewDimensionActivity::class.java))
+            23 -> {
+                ThemeManager.setUIStyle(this, ThemeManager.STYLE_AOSP_MATERIAL3)
+                startActivity(Intent(this, NewDimensionActivity::class.java))
+            }
         }
     }
 
