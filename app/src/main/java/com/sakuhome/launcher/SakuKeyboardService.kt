@@ -39,7 +39,8 @@ class SakuKeyboardService : InputMethodService() {
     private fun buildKeyboard(): LinearLayout {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), dp(7), dp(4), dp(8))
+            minimumHeight = dp(260)
+            setPadding(dp(4), dp(10), dp(4), dp(12))
             setBackgroundColor(if (isDark()) Color.rgb(34, 36, 41) else Color.rgb(218, 222, 229))
         }
         keyboardRoot = root
@@ -124,7 +125,10 @@ class SakuKeyboardService : InputMethodService() {
         isFocusable = true
         isClickable = true
         setOnClickListener {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            performHapticFeedback(
+                HapticFeedbackConstants.KEYBOARD_TAP,
+                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
+            )
             action()
         }
         setPadding(dp(1), 0, dp(1), 0)
@@ -168,8 +172,8 @@ class SakuKeyboardService : InputMethodService() {
         }
     }
 
-    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(47)).apply {
-        bottomMargin = dp(7)
+    private fun rowParams() = LinearLayout.LayoutParams(-1, dp(56)).apply {
+        bottomMargin = dp(8)
     }
 
     private fun weighted(weight: Float) = LinearLayout.LayoutParams(0, -1, weight).apply {
