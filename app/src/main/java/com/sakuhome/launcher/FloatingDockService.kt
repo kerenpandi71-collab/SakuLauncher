@@ -350,6 +350,22 @@ class FloatingDockService : Service() {
             removeSettingsOverlay()
             toggleStartOverlay()
         })
+        shortcut("Saku Keyboard", "Buka atau aktifkan keyboard bergaya iOS", {
+            removeSettingsOverlay()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            val isEnabled = imm.enabledInputMethodList.any { it.packageName == packageName && it.serviceName.endsWith("SakuKeyboardService") }
+            if (isEnabled) {
+                imm.showInputMethodPicker()
+            } else {
+                try {
+                    startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    Toast.makeText(this, "Aktifkan Saku Keyboard, lalu pilih dari pemilih keyboard.", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    android.util.Log.e("SakuDock", "Unable to open keyboard settings", e)
+                    Toast.makeText(this, "Pengaturan keyboard gagal dibuka", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
         val p = WindowManager.LayoutParams(
             dp(280), WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
